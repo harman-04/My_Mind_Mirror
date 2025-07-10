@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc 
+# Large files and ML artifacts
+*.zip
+*.pkl
+# Specific large CSV
+ml-service/training.1600000.processed.noemoticon.csv
+# Ignore the entire models directory if it contains generated or large files
+ml-service/models/
+# Python virtual environment
+venv/
+.env
+
