@@ -11,6 +11,12 @@ import pandas as pd
 import numpy as np
 import re # Make sure re is imported
 
+# --- New Imports for Clustering ---
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.cluster import KMeans
+import joblib
+# --- End New Imports ---
+
 load_dotenv() # Load environment variables from .env file
 
 logging.basicConfig(level=logging.INFO)
@@ -29,9 +35,14 @@ if not GEMINI_API_KEY:
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 HEADERS = {'Content-Type': 'application/json'}
 
+# --- Model Storage Directories ---
+MODEL_DIR = 'models'
+USER_MODELS_DIR = os.path.join(MODEL_DIR, 'user_specific_models')
+os.makedirs(USER_MODELS_DIR, exist_ok=True) # Ensure directory exists
+
 logger.info("Loading Hugging Face NLP Models...")
 
-# Hugging Face Sentiment Analyzer
+# Hugging Face Sentiment Analyzer (still loaded, but not primary for emotion analysis)
 try:
     sentiment_analyzer = pipeline("sentiment-analysis", model="cardiffnlp/twitter-roberta-base-sentiment-latest")
     logger.info("✓ Sentiment Analyzer Loaded")
@@ -42,7 +53,7 @@ except Exception as e:
 logger.info("Hugging Face models loaded. Ready for Gemini integration.")
 
 
-# --- Gemini API Helper Function (UPDATED FOR MORE LOGGING) ---
+# --- Gemini API Helper Function ---
 def call_gemini_api(prompt_text, response_schema=None):
     chat_history = [{"role": "user", "parts": [{"text": prompt_text}]}]
     payload = {"contents": chat_history}
@@ -55,9 +66,6 @@ def call_gemini_api(prompt_text, response_schema=None):
 
     try:
         logger.info("Calling Gemini API...")
-        # logger.debug("Gemini API Request Payload: %s", json.dumps(payload, indent=2)) # Log full payload
-        # logger.debug("Gemini API URL: %s?key=%s", GEMINI_API_URL, GEMINI_API_KEY) # Log URL and key
-
         response = requests.post(
             f"{GEMINI_API_URL}?key={GEMINI_API_KEY}",
             headers=HEADERS,
@@ -67,13 +75,11 @@ def call_gemini_api(prompt_text, response_schema=None):
         response.raise_for_status() # Raise HTTPError for bad responses (4xx or 5xx)
         result = response.json()
         logger.info("Gemini API call successful.")
-        # logger.debug("Gemini API Response: %s", json.dumps(result, indent=2)) # Log full response
 
         if result.get("candidates") and result["candidates"][0].get("content") and result["candidates"][0]["content"].get("parts"):
             response_text = result["candidates"][0]["content"]["parts"][0]["text"]
             if response_schema:
                 try:
-                    # If responseMimeType is set, the 'text' part *should* already be valid JSON string.
                     return json.loads(response_text)
                 except json.JSONDecodeError as e:
                     logger.error("Failed to decode JSON from Gemini response text: %s. Response text: %s", e, response_text)
@@ -131,7 +137,6 @@ def get_gemini_emotions(journal_text):
             "gratitude": {"type": "NUMBER"},
             "hope": {"type": "NUMBER"}
         },
-        # ⭐ FIX: Removed "additionalProperties": True as it causes an error with Gemini API schema validation ⭐
     }
 
     emotions = call_gemini_api(prompt, response_schema)
@@ -142,7 +147,6 @@ def get_gemini_emotions(journal_text):
     processed_emotions = {}
     for emotion, score in emotions.items():
         try:
-            # Ensure scores are numbers, convert if necessary
             processed_emotions[emotion] = float(score)
         except (ValueError, TypeError):
             logger.warning(f"Invalid score for emotion '{emotion}': {score}. Skipping.")
@@ -200,7 +204,7 @@ def get_gemini_growth_tips(journal_text, emotions, core_concerns):
     }
 
     tips = call_gemini_api(prompt, response_schema)
-    if tips is None: # Use 'is None' for consistency, though '== None' works for singletons
+    if tips is None:
         logger.warning("Gemini failed to generate growth tips. Returning empty list.")
         return ["Keep reflecting on your thoughts and feelings. You're doing great by journaling!"]
     return tips
@@ -335,7 +339,136 @@ def anomaly_detection_endpoint():
         return jsonify({"error": "Failed to perform anomaly detection."}), 500
 
 
-# --- API Endpoint for Journal Analysis ---
+# --- Text Preprocessing Function for Sentiment & Clustering ---
+def preprocess_text(text): # Renamed to be general purpose
+    if not isinstance(text, str):
+        return ""
+    text = text.lower()
+    # Keep alphanumeric characters (a-z, 0-9) and spaces
+    text = re.sub(r'[^a-z0-9\s]', '', text) 
+    words = [word for word in text.split() if word]
+    return " ".join(words)
+
+
+# --- Journal Clustering Module Functions ---
+
+def train_and_save_clustering_model(user_id, journal_texts, n_clusters=5):
+    """
+    Trains a TF-IDF vectorizer and K-Means clustering model for a given user.
+    Saves the trained models to user-specific files.
+    """
+    if not journal_texts:
+        logger.warning(f"No journal texts provided for user {user_id} to train clustering model.")
+        return None, None
+
+    logger.info(f"Training clustering model for user {user_id} with {len(journal_texts)} entries.")
+    
+    # Preprocess texts for clustering
+    processed_texts = [preprocess_text(text) for text in journal_texts]
+    
+    # 1. TF-IDF Vectorization
+    # max_features can be adjusted, min_df/max_df too.
+    # These parameters make the TF-IDF unique to the user's data.
+    tfidf_vectorizer = TfidfVectorizer(max_features=5000, min_df=5, max_df=0.8) 
+    tfidf_matrix = tfidf_vectorizer.fit_transform(processed_texts)
+    
+    # 2. K-Means Clustering
+    # Ensure n_clusters is not greater than the number of samples
+    actual_n_clusters = min(n_clusters, tfidf_matrix.shape[0])
+    if actual_n_clusters == 0:
+        logger.warning(f"Not enough data to form clusters for user {user_id}. Need at least 1 entry.")
+        return None, None
+
+    kmeans_model = KMeans(n_clusters=actual_n_clusters, random_state=42, n_init=10) # n_init for robustness
+    kmeans_model.fit(tfidf_matrix)
+
+    # Save models
+    user_model_path = os.path.join(USER_MODELS_DIR, str(user_id))
+    os.makedirs(user_model_path, exist_ok=True)
+    
+    tfidf_path = os.path.join(user_model_path, 'tfidf_vectorizer.pkl')
+    kmeans_path = os.path.join(user_model_path, 'kmeans_model.pkl')
+
+    joblib.dump(tfidf_vectorizer, tfidf_path)
+    joblib.dump(kmeans_model, kmeans_path)
+    logger.info(f"Clustering models saved for user {user_id} at {user_model_path}")
+    
+    return tfidf_vectorizer, kmeans_model
+
+def load_clustering_model(user_id):
+    """
+    Loads a user's trained TF-IDF vectorizer and K-Means clustering model.
+    """
+    user_model_path = os.path.join(USER_MODELS_DIR, str(user_id))
+    tfidf_path = os.path.join(user_model_path, 'tfidf_vectorizer.pkl')
+    kmeans_path = os.path.join(user_model_path, 'kmeans_model.pkl')
+
+    if os.path.exists(tfidf_path) and os.path.exists(kmeans_path):
+        logger.info(f"Loading clustering models for user {user_id}.")
+        tfidf_vectorizer = joblib.load(tfidf_path)
+        kmeans_model = joblib.load(kmeans_path)
+        return tfidf_vectorizer, kmeans_model
+    else:
+        logger.info(f"No clustering models found for user {user_id}.")
+        return None, None
+
+def get_cluster_keywords(tfidf_vectorizer, kmeans_model, num_keywords=5):
+    """
+    Extracts top keywords for each cluster to represent its theme.
+    """
+    if tfidf_vectorizer is None or kmeans_model is None:
+        return {}
+
+    order_centroids = kmeans_model.cluster_centers_.argsort()[:, ::-1]
+    terms = tfidf_vectorizer.get_feature_names_out()
+    
+    cluster_themes = {}
+    for i in range(kmeans_model.n_clusters):
+        top_terms = [terms[ind] for ind in order_centroids[i, :num_keywords]]
+        cluster_themes[f"Cluster {i+1}"] = top_terms
+    return cluster_themes
+
+# --- NEW ENDPOINT for Journal Clustering ---
+@app.route('/cluster_journal_entries', methods=['POST'])
+def cluster_journal_entries_endpoint():
+    data = request.json
+    user_id = data.get('userId')
+    journal_texts = data.get('journalTexts', [])
+    n_clusters = data.get('nClusters', 5) # Default to 5 clusters
+
+    if not user_id or not journal_texts:
+        return jsonify({"error": "User ID and journal texts are required for clustering."}), 400
+
+    try:
+        # Train and save the model (or load if already trained)
+        tfidf_vectorizer, kmeans_model = train_and_save_clustering_model(user_id, journal_texts, n_clusters)
+        
+        if tfidf_vectorizer is None or kmeans_model is None:
+            return jsonify({"error": "Not enough data to perform clustering.", "clusters": [], "entry_clusters": []}), 200
+
+        # Predict clusters for each entry
+        processed_texts = [preprocess_text(text) for text in journal_texts]
+        tfidf_matrix = tfidf_vectorizer.transform(processed_texts)
+        entry_clusters = kmeans_model.predict(tfidf_matrix).tolist() # Convert numpy array to list
+
+        # Get top keywords for each cluster
+        cluster_themes = get_cluster_keywords(tfidf_vectorizer, kmeans_model)
+
+        # Prepare response
+        response = {
+            "numClusters": kmeans_model.n_clusters,
+            "clusterThemes": cluster_themes,
+            "entryClusters": entry_clusters # List of cluster IDs for each entry (in order of input texts)
+        }
+        logger.info(f"Clustering completed for user {user_id}. Found {kmeans_model.n_clusters} clusters.")
+        return jsonify(response)
+
+    except Exception as e:
+        logger.error(f"Error during journal clustering: {e}", exc_info=True)
+        return jsonify({"error": "Failed to perform journal clustering."}), 500
+
+
+# --- API Endpoint for Journal Analysis (Main endpoint) ---
 @app.route('/analyze_journal', methods=['POST'])
 def analyze_journal():
     data = request.json
@@ -352,21 +485,6 @@ def analyze_journal():
         "growthTips": []
     }
 
-    # ⭐ Text Preprocessing Function for Sentiment (retained from train_sentiment_model.py, keeps numbers) ⭐
-    def preprocess_text_for_sentiment(text):
-        if not isinstance(text, str):
-            return ""
-        text = text.lower()
-        # Keep alphanumeric characters (a-z, 0-9) and spaces
-        text = re.sub(r'[^a-z0-9\s]', '', text) 
-        words = [word for word in text.split() if word]
-        return " ".join(words)
-
-    # Note: Hugging Face sentiment is not explicitly used for `moodScore` or `emotions` in this flow,
-    # as Gemini is now the primary source for these.
-    # The `sentiment_analyzer` pipeline is still loaded, but its output is not used here.
-    # The `analysis_text` truncation logic is also not strictly needed if HF is not used.
-
     # 1. Emotion Recognition (Gemini AI)
     response_data["emotions"] = get_gemini_emotions(journal_text) 
     
@@ -376,10 +494,10 @@ def analyze_journal():
         'sadness': -1.0, 'anger': -0.8, 'fear': -0.7, 'disappointment': -0.6, 'grief': -1.0,
         'neutral': 0.0, 'optimism': 0.7, 'relief': 0.4, 'caring': 0.6, 'curiosity': 0.3,
         'embarrassment': -0.4, 'pride': 0.5, 'remorse': -0.5, 'annoyance': -0.3, 'disgust': -0.6,
-        'stress': -0.7, # Added stress
-        'frustration': -0.5, # Added frustration
-        'gratitude': 0.9, # Added gratitude
-        'hope': 0.8 # Added hope
+        'stress': -0.7,
+        'frustration': -0.5,
+        'gratitude': 0.9,
+        'hope': 0.8
     }
     
     calculated_mood_score = 0.0
@@ -387,7 +505,7 @@ def analyze_journal():
     
     if response_data["emotions"]:
         for emotion, score in response_data["emotions"].items():
-            weight = emotion_weights.get(emotion.lower(), 0.0) # Ensure lower case for key lookup
+            weight = emotion_weights.get(emotion.lower(), 0.0)
             calculated_mood_score += score * weight
             total_emotion_score += score
 
@@ -415,4 +533,5 @@ if __name__ == '__main__':
     logger.info("\nAPI Ready! Access at http://127.0.0.1:5000/analyze_journal")
     logger.info("Anomaly Detection available at http://127.0.0.1:5000/anomaly_detection")
     logger.info("Reflection Generation available at http://127.0.0.1:5000/generate_reflection")
+    logger.info("Journal Clustering available at http://127.0.0.1:5000/cluster_journal_entries")
     app.run(debug=True, port=5000)

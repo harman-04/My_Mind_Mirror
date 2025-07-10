@@ -1,3 +1,5 @@
+// In src/main/java/com/mymindmirror/backend/controller/JournalController.java
+
 package com.mymindmirror.backend.controller;
 
 import com.mymindmirror.backend.model.JournalEntry;
@@ -5,6 +7,7 @@ import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.payload.JournalEntryRequest;
 import com.mymindmirror.backend.payload.JournalEntryResponse;
 import com.mymindmirror.backend.payload.MoodDataResponse;
+import com.mymindmirror.backend.payload.ClusterResult; // ⭐ NEW IMPORT ⭐
 import com.mymindmirror.backend.service.JournalService;
 import com.mymindmirror.backend.service.UserService;
 import org.slf4j.Logger;
@@ -17,7 +20,9 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -198,5 +203,78 @@ public class JournalController {
                     logger.warn("Journal entry with ID {} not found or not owned by user {}.", id, currentUser.getUsername());
                     return ResponseEntity.notFound().build();
                 });
+    }
+
+    /**
+     * Retrieves recurring themes/keyword trends for the authenticated user.
+     * This endpoint aggregates key phrases from all entries within a date range.
+     */
+    @GetMapping("/trends")
+    public ResponseEntity<Map<String, Long>> getJournalTrends(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @RequestParam(defaultValue = "10") int limit) { // Limit for top N themes
+        logger.info("Received request for journal trends.");
+        User currentUser = getCurrentUser();
+        LocalDate start = LocalDate.now().minusDays(90); // Default to last 90 days for trends
+        LocalDate end = LocalDate.now();
+
+        try {
+            if (startDate != null) {
+                start = LocalDate.parse(startDate);
+            }
+            if (endDate != null) {
+                end = LocalDate.parse(endDate);
+            }
+        } catch (DateTimeParseException e) {
+            logger.error("Invalid date format provided for trends: {}. Using default date range.", e.getMessage());
+            return ResponseEntity.badRequest().body(null);
+        }
+
+        // Fetch all journal entries for the user within the date range
+        List<JournalEntry> entries = journalService.getJournalEntriesForUser(currentUser, start, end);
+
+        // Aggregate key phrases from all entries
+        Map<String, Long> trendCounts = entries.stream()
+                .filter(entry -> entry.getKeyPhrases() != null)
+                .flatMap(entry -> entry.getKeyPhrases().stream())
+                .collect(Collectors.groupingBy(phrase -> phrase, Collectors.counting()));
+
+        // Sort by count in descending order and limit to top N
+        Map<String, Long> topTrends = trendCounts.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .limit(limit)
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        Map.Entry::getValue,
+                        (e1, e2) -> e1, // Merge function for toMap, not strictly needed here
+                        java.util.LinkedHashMap::new // Preserve order
+                ));
+
+        logger.info("Found {} top trends for user {} in range {} to {}.", topTrends.size(), currentUser.getUsername(), start, end);
+        return ResponseEntity.ok(topTrends);
+    }
+
+    /**
+     * ⭐ NEW ENDPOINT: Triggers journal entry clustering for the authenticated user. ⭐
+     * This will train/update a personalized clustering model and assign cluster IDs to entries.
+     *
+     * @param nClusters The desired number of clusters.
+     * @return A ClusterResult object containing cluster themes and entry-to-cluster mappings.
+     */
+    @PostMapping("/cluster-entries")
+    public ResponseEntity<ClusterResult> clusterJournalEntries(
+            @RequestParam(defaultValue = "5") int nClusters) { // Default to 5 clusters
+        logger.info("Received request to cluster journal entries for current user.");
+        User currentUser = getCurrentUser();
+        try {
+            ClusterResult result = journalService.triggerJournalClustering(currentUser, nClusters);
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            logger.error("Error triggering journal clustering: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    new ClusterResult(0, Collections.emptyMap(), Collections.emptyList()) // Return empty result on error
+            );
+        }
     }
 }

@@ -1,63 +1,83 @@
-// JournalEntryResponse.java
+// In src/main/java/com/mymindmirror/backend/payload/JournalEntryResponse.java
+
 package com.mymindmirror.backend.payload;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mymindmirror.backend.model.JournalEntry;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
 import java.time.LocalDate;
-import java.util.Map;
+import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-/**
- * DTO for outgoing journal entry responses to the frontend.
- * Includes parsed AI analysis results.
- */
 @Data
-@NoArgsConstructor // Lombok generates no-arg constructor
+@NoArgsConstructor
 public class JournalEntryResponse {
-
-    private static final Logger logger = LoggerFactory.getLogger(JournalEntryResponse.class);
-    private static final ObjectMapper objectMapper = new ObjectMapper(); // Re-use ObjectMapper
-
     private UUID id;
+    private UserResponse user; // Nested UserResponse
+
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate entryDate;
+
+    @JsonFormat(pattern = "yyyy-MM-dd'T'HH:mm:ss")
+    private LocalDateTime creationTimestamp;
+
     private String rawText;
+
+    // AI Analysis Fields
     private Double moodScore;
     private Map<String, Double> emotions; // Parsed from JSON string
     private List<String> coreConcerns; // Parsed from JSON string
     private String summary;
     private List<String> growthTips; // Parsed from JSON string
+    private List<String> keyPhrases;
 
-    // Constructor to convert JournalEntry entity to JournalEntryResponse DTO
-    public JournalEntryResponse(JournalEntry entry) {
-        this.id = entry.getId();
-        this.entryDate = entry.getEntryDate();
-        this.rawText = entry.getRawText();
-        this.moodScore = entry.getMoodScore();
-        this.summary = entry.getSummary();
+    // ⭐ NEW FIELD ⭐
+    private Integer clusterId; // Expose the cluster ID
 
-        // Parse JSON strings back into Java objects for the frontend
+    public JournalEntryResponse(JournalEntry journalEntry) {
+        this.id = journalEntry.getId();
+        this.user = new UserResponse(journalEntry.getUser()); // Convert User to UserResponse
+        this.entryDate = journalEntry.getEntryDate();
+        this.creationTimestamp = journalEntry.getCreationTimestamp();
+        this.rawText = journalEntry.getRawText();
+        this.moodScore = journalEntry.getMoodScore();
+        this.summary = journalEntry.getSummary();
+        this.keyPhrases = journalEntry.getKeyPhrases() != null ? journalEntry.getKeyPhrases() : Collections.emptyList();
+        // ⭐ NEW: Map clusterId directly ⭐
+        this.clusterId = journalEntry.getClusterId();
+
+        ObjectMapper objectMapper = new ObjectMapper(); // Or inject, but for DTOs often done inline
         try {
-            if (entry.getEmotions() != null) {
-                this.emotions = objectMapper.readValue(entry.getEmotions(), Map.class);
+            if (journalEntry.getEmotions() != null && !journalEntry.getEmotions().isEmpty()) {
+                this.emotions = objectMapper.readValue(journalEntry.getEmotions(), new TypeReference<Map<String, Double>>() {});
+            } else {
+                this.emotions = Collections.emptyMap();
             }
-            if (entry.getCoreConcerns() != null) {
-                this.coreConcerns = objectMapper.readValue(entry.getCoreConcerns(), List.class);
+            if (journalEntry.getCoreConcerns() != null && !journalEntry.getCoreConcerns().isEmpty()) {
+                this.coreConcerns = objectMapper.readValue(journalEntry.getCoreConcerns(), new TypeReference<List<String>>() {});
+            } else {
+                this.coreConcerns = Collections.emptyList();
             }
-            if (entry.getGrowthTips() != null) {
-                this.growthTips = objectMapper.readValue(entry.getGrowthTips(), List.class);
+            if (journalEntry.getGrowthTips() != null && !journalEntry.getGrowthTips().isEmpty()) {
+                this.growthTips = objectMapper.readValue(journalEntry.getGrowthTips(), new TypeReference<List<String>>() {});
+            } else {
+                this.growthTips = Collections.emptyList();
             }
+
         } catch (JsonProcessingException e) {
-            logger.error("Error parsing JSON from JournalEntry entity: {}", e.getMessage(), e);
-            // Set to null or empty defaults if parsing fails
-            this.emotions = null;
-            this.coreConcerns = null;
-            this.growthTips = null;
+            // Log the error and set fields to default empty values
+            System.err.println("Error parsing JSON from JournalEntry: " + e.getMessage());
+            this.emotions = Collections.emptyMap();
+            this.coreConcerns = Collections.emptyList();
+            this.growthTips = Collections.emptyList();
         }
     }
 }

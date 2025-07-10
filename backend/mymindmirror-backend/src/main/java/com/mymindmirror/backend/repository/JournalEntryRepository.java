@@ -1,3 +1,5 @@
+// In src/main/java/com/mymindmirror/backend/repository/JournalEntryRepository.java
+
 package com.mymindmirror.backend.repository;
 
 import com.mymindmirror.backend.model.JournalEntry;
@@ -41,4 +43,7 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate
     );
+
+    // ⭐ NEW METHOD: Fetch all journal entries for a specific user ⭐
+    List<JournalEntry> findByUser(User user);
 }

@@ -1,6 +1,9 @@
+// In src/main/java/com/mymindmirror/backend/controller/AuthController.java
+
 package com.mymindmirror.backend.controller;
 
-import com.mymindmirror.backend.payload.AuthRequest; // DTO for login/register request
+import com.mymindmirror.backend.model.User;
+import com.mymindmirror.backend.payload.AuthRequest; // Your DTO for login/register request
 import com.mymindmirror.backend.payload.AuthResponse; // DTO for login/register response
 import com.mymindmirror.backend.service.UserService;
 import com.mymindmirror.backend.security.JwtUtil;
@@ -11,6 +14,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.Authentication; // Import Authentication
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,21 +22,22 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Optional; // Import Optional
+
 /**
  * REST Controller for user authentication (registration and login).
  */
-@RestController // Marks this class as a REST controller
-@RequestMapping("/api/auth") // Base path for authentication endpoints
+@RestController
+@RequestMapping("/api/auth")
 public class AuthController {
 
     private static final Logger logger = LoggerFactory.getLogger(AuthController.class);
 
-    private final AuthenticationManager authenticationManager; // Used to authenticate users
-    private final UserDetailsService userDetailsService; // To load user details after authentication
-    private final JwtUtil jwtUtil; // To generate JWT tokens
-    private final UserService userService; // To register new users
+    private final AuthenticationManager authenticationManager;
+    private final UserDetailsService userDetailsService;
+    private final JwtUtil jwtUtil;
+    private final UserService userService;
 
-    // Constructor injection for all required dependencies
     public AuthController(AuthenticationManager authenticationManager, UserDetailsService userDetailsService, JwtUtil jwtUtil, UserService userService) {
         this.authenticationManager = authenticationManager;
         this.userDetailsService = userDetailsService;
@@ -49,7 +54,6 @@ public class AuthController {
     public ResponseEntity<?> registerUser(@RequestBody AuthRequest request) {
         logger.info("Received registration request for username: {}", request.getUsername());
         try {
-            // Call UserService to register the new user (password will be hashed inside service)
             userService.registerNewUser(request.getUsername(), request.getEmail(), request.getPassword());
             logger.info("User '{}' registered successfully.", request.getUsername());
             return ResponseEntity.status(HttpStatus.CREATED).body(new AuthResponse("User registered successfully."));
@@ -71,15 +75,23 @@ public class AuthController {
     public ResponseEntity<?> createAuthenticationToken(@RequestBody AuthRequest request) {
         logger.info("Received login request for username: {}", request.getUsername());
         try {
-            // Authenticate the user using Spring Security's AuthenticationManager
-            authenticationManager.authenticate(
+            Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(request.getUsername(), request.getPassword())
             );
             logger.info("User '{}' authenticated successfully.", request.getUsername());
 
-            // If authentication is successful, load UserDetails and generate JWT
             final UserDetails userDetails = userDetailsService.loadUserByUsername(request.getUsername());
-            final String jwt = jwtUtil.generateToken(userDetails);
+
+            // ⭐ IMPORTANT: Retrieve the User entity to get the UUID ⭐
+            Optional<User> optionalUser = userService.findByUsername(userDetails.getUsername());
+            if (optionalUser.isEmpty()) {
+                logger.error("Authenticated user '{}' not found in database. This indicates a security misconfiguration.", userDetails.getUsername());
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new AuthResponse(null, "Authenticated user not found."));
+            }
+            User user = optionalUser.get();
+
+            // ⭐ MODIFIED: Pass the user's UUID to generateToken ⭐
+            final String jwt = jwtUtil.generateToken(userDetails, user.getId());
             logger.info("JWT generated for user '{}'.", request.getUsername());
 
             return ResponseEntity.ok(new AuthResponse(jwt, "Login successful."));

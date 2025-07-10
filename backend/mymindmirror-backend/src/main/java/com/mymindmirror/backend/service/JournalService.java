@@ -1,3 +1,5 @@
+// In src/main/java/com/mymindmirror/backend/service/JournalService.java
+
 package com.mymindmirror.backend.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -7,15 +9,18 @@ import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.repository.JournalEntryRepository;
 import com.mymindmirror.backend.payload.MoodDataResponse;
 import com.mymindmirror.backend.payload.DailyAggregatedDataResponse;
+import com.mymindmirror.backend.payload.ClusterResult;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
+import org.hibernate.Hibernate; // ⭐ NEW IMPORT ⭐
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -60,8 +65,14 @@ public class JournalService {
         newEntry.setEntryDate(LocalDate.now());
         newEntry.setCreationTimestamp(LocalDateTime.now());
         newEntry.setRawText(rawText);
+        newEntry.setClusterId(null); // Initialize cluster ID to null
 
         processAiAnalysis(rawText, newEntry);
+        // Key phrase extraction will happen as part of AI analysis or can be a separate call
+        // For now, let's assume it's part of the main analysis or handled by the ML service.
+        // If you had a separate endpoint for key phrases, you'd call it here.
+        // For now, let's remove the direct call as it's not in the provided Flask app.py
+        // newEntry.setKeyPhrases(extractKeyPhrases(rawText));
 
         JournalEntry savedEntry = journalEntryRepository.save(newEntry);
         logger.info("New journal entry with ID {} for user {} saved successfully.", savedEntry.getId(), user.getUsername());
@@ -91,6 +102,7 @@ public class JournalService {
         // Do NOT update creationTimestamp here, as it's the original creation time.
 
         processAiAnalysis(updatedText, existingEntry);
+        // newEntry.setKeyPhrases(extractKeyPhrases(updatedText)); // Remove for now
 
         JournalEntry savedEntry = journalEntryRepository.save(existingEntry);
         logger.info("Journal entry with ID {} for user {} updated successfully.", savedEntry.getId(), user.getUsername());
@@ -140,17 +152,33 @@ public class JournalService {
 
         if (mlResponse != null) {
             try {
-                entryToUpdate.setMoodScore(((Number) mlResponse.get("moodScore")).doubleValue());
+                // Ensure type safety when casting from Map<String, Object>
+                Object moodScoreObj = mlResponse.get("moodScore");
+                if (moodScoreObj instanceof Number) {
+                    entryToUpdate.setMoodScore(((Number) moodScoreObj).doubleValue());
+                } else {
+                    entryToUpdate.setMoodScore(null); // Or default value
+                    logger.warn("MoodScore from ML service was not a Number. Value: {}", moodScoreObj);
+                }
+
+                // For JSON strings, ensure the values are correctly cast
                 entryToUpdate.setEmotions(objectMapper.writeValueAsString(mlResponse.get("emotions")));
                 entryToUpdate.setCoreConcerns(objectMapper.writeValueAsString(mlResponse.get("coreConcerns")));
                 entryToUpdate.setSummary((String) mlResponse.get("summary"));
                 entryToUpdate.setGrowthTips(objectMapper.writeValueAsString(mlResponse.get("growthTips")));
+
+                // ⭐ Assuming keyPhrases are now part of the main /analyze_journal response if needed ⭐
+                // If not, you'd need a separate ML endpoint for them.
+                // For now, let's set it to an empty list if not provided by /analyze_journal
+                List<String> keyPhrasesFromMl = (List<String>) mlResponse.getOrDefault("keyPhrases", Collections.emptyList());
+                entryToUpdate.setKeyPhrases(keyPhrasesFromMl);
+
                 logger.info("Journal entry AI analysis results processed.");
             } catch (JsonProcessingException e) {
                 logger.error("Error serializing ML response to JSON string for DB storage: {}", e.getMessage(), e);
                 resetAiFields(entryToUpdate);
             } catch (ClassCastException e) {
-                logger.error("Type casting error from ML response: {}", e.getMessage(), e);
+                logger.error("Type casting error from ML response: {}. This might indicate unexpected data types from Flask.", e.getMessage(), e);
                 resetAiFields(entryToUpdate);
             }
         } else {
@@ -168,25 +196,47 @@ public class JournalService {
         entry.setCoreConcerns(null);
         entry.setSummary(null);
         entry.setGrowthTips(null);
+        entry.setKeyPhrases(Collections.emptyList());
+        entry.setClusterId(null); // Reset new field too
     }
 
     /**
      * Fetches journal entries for a user within a date range, ordered by creation timestamp.
+     * ⭐ FIX: Explicitly initialize keyPhrases to prevent LazyInitializationException ⭐
      */
     public List<JournalEntry> getJournalEntriesForUser(User user, LocalDate startDate, LocalDate endDate) {
         logger.info("Fetching journal entries for user: {} from {} to {}", user.getUsername(), startDate, endDate);
-        // Ensure this method uses findByUserAndEntryDateBetweenOrderByCreationTimestampDesc if you want latest first
-        return journalEntryRepository.findByUserAndEntryDateBetweenOrderByCreationTimestampDesc(user, startDate, endDate);
+        List<JournalEntry> entries = journalEntryRepository.findByUserAndEntryDateBetweenOrderByCreationTimestampDesc(user, startDate, endDate);
+
+        // ⭐ Initialize the lazy-loaded collection within the session ⭐
+        for (JournalEntry entry : entries) {
+            if (entry.getKeyPhrases() != null) { // Check if it's not null before initializing
+                Hibernate.initialize(entry.getKeyPhrases());
+            }
+        }
+        return entries;
     }
 
     public Optional<JournalEntry> getJournalEntryById(UUID entryId) {
         logger.info("Fetching journal entry by ID: {}", entryId);
-        return journalEntryRepository.findById(entryId);
+        Optional<JournalEntry> entryOptional = journalEntryRepository.findById(entryId);
+        entryOptional.ifPresent(entry -> {
+            if (entry.getKeyPhrases() != null) {
+                Hibernate.initialize(entry.getKeyPhrases()); // Initialize if found
+            }
+        });
+        return entryOptional;
     }
 
     public List<MoodDataResponse> getMoodDataForChart(User user, LocalDate startDate, LocalDate endDate) {
         logger.info("Fetching mood data for chart for user: {} from {} to {}", user.getUsername(), startDate, endDate);
         List<JournalEntry> entries = journalEntryRepository.findByUserAndEntryDateBetween(user, startDate, endDate);
+        // Initialize key phrases here too if they are part of MoodDataResponse or any subsequent processing
+        for (JournalEntry entry : entries) {
+            if (entry.getKeyPhrases() != null) {
+                Hibernate.initialize(entry.getKeyPhrases());
+            }
+        }
         return entries.stream()
                 .filter(entry -> entry.getMoodScore() != null)
                 .map(entry -> new MoodDataResponse(entry.getEntryDate(), entry.getMoodScore()))
@@ -246,5 +296,81 @@ public class JournalService {
             logger.error("Failed to call ML service for anomaly detection or received error: {}", e.getMessage(), e);
             return Map.of("error", "Failed to run anomaly detection: " + e.getMessage());
         }
+    }
+
+    /**
+     * ⭐ NEW METHOD: Triggers the journal entry clustering process in the Flask ML service. ⭐
+     * This method collects all journal entries for a user and sends them to Flask for clustering.
+     * After clustering, it updates the journal entries in the database with their assigned cluster IDs.
+     *
+     * @param user The user whose journal entries are to be clustered.
+     * @param nClusters The desired number of clusters.
+     * @return A ClusterResult object containing cluster themes and entry-to-cluster mappings.
+     */
+    public ClusterResult triggerJournalClustering(User user, int nClusters) {
+        logger.info("Triggering journal clustering for user: {} with {} clusters.", user.getUsername(), nClusters);
+
+        List<JournalEntry> allUserEntries = journalEntryRepository.findByUser(user); // Fetch all entries for the user
+
+        if (allUserEntries.isEmpty()) {
+            logger.warn("No journal entries found for user {}. Cannot perform clustering.", user.getUsername());
+            return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList());
+        }
+
+        // Prepare data for Flask: list of raw texts and their original IDs
+        List<String> rawTexts = allUserEntries.stream().map(JournalEntry::getRawText).collect(Collectors.toList());
+        // No need to send entry IDs to Flask for clustering, as Flask returns cluster IDs in order of input texts.
+        // We'll map them back using the original allUserEntries list.
+
+        Map<String, Object> requestBody = new HashMap<>();
+        requestBody.put("userId", user.getId().toString()); // Send user ID to Flask for model saving
+        requestBody.put("journalTexts", rawTexts);
+        requestBody.put("nClusters", nClusters);
+
+        ClusterResult clusterResult = null;
+        try {
+            logger.info("Calling ML service for journal clustering at {}/cluster_journal_entries", mlServiceBaseUrl);
+            clusterResult = webClient.post()
+                    .uri("/cluster_journal_entries")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(ClusterResult.class) // Expect ClusterResult DTO
+                    .block();
+            logger.info("ML service for journal clustering responded successfully.");
+
+            // ⭐ Update journal entries with their assigned cluster IDs ⭐
+            if (clusterResult != null && clusterResult.getEntryClusters() != null && !clusterResult.getEntryClusters().isEmpty()) {
+                for (int i = 0; i < allUserEntries.size(); i++) {
+                    JournalEntry entry = allUserEntries.get(i);
+                    // Ensure the order matches: Flask returns cluster IDs in the same order as texts were sent
+                    entry.setClusterId(clusterResult.getEntryClusters().get(i));
+                    journalEntryRepository.save(entry); // Save updated entry
+                }
+                logger.info("Updated {} journal entries with cluster IDs.", allUserEntries.size());
+            } else {
+                logger.warn("Clustering result from ML service was empty or malformed. No entries updated with cluster IDs.");
+            }
+
+        } catch (Exception e) {
+            logger.error("Failed to call ML service for journal clustering or received error: {}", e.getMessage(), e);
+            return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList()); // Return empty result on error
+        }
+        return clusterResult;
+    }
+
+    /**
+     * Fetches all journal entries for a user (used by clustering).
+     * This is a new method needed because findByUserAndEntryDateBetweenOrderByCreationTimestampDesc
+     * might not fetch *all* entries if date range isn't wide enough.
+     * ⭐ Initialize keyPhrases here too. ⭐
+     */
+    public List<JournalEntry> findByUser(User user) {
+        List<JournalEntry> entries = journalEntryRepository.findByUser(user);
+        for (JournalEntry entry : entries) {
+            if (entry.getKeyPhrases() != null) {
+                Hibernate.initialize(entry.getKeyPhrases());
+            }
+        }
+        return entries;
     }
 }

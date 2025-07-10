@@ -1,5 +1,8 @@
+// In src/main/java/com/mymindmirror/backend/security/WebSecurityConfig.java
+
 package com.mymindmirror.backend.security;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -7,7 +10,7 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder; // Industry standard password encoder
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -19,13 +22,12 @@ import org.springframework.web.filter.CorsFilter;
  * Main Spring Security configuration class.
  * Defines security rules, password encoder, and JWT filter integration.
  */
-@Configuration // Marks this as a Spring configuration class
-@EnableWebSecurity // Enables Spring Security's web security features
-public class WebSecurityConfig {
+@Configuration
+@EnableWebSecurity
+public class WebSecurityConfig { // Renamed from SecurityConfig in previous response to match your provided code
 
-    private final JwtRequestFilter jwtRequestFilter; // Our custom JWT filter
+    private final JwtRequestFilter jwtRequestFilter;
 
-    // Constructor injection for JwtRequestFilter
     public WebSecurityConfig(JwtRequestFilter jwtRequestFilter) {
         this.jwtRequestFilter = jwtRequestFilter;
     }
@@ -39,12 +41,11 @@ public class WebSecurityConfig {
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
                 .csrf(csrf -> csrf.disable()) // Disable CSRF for stateless REST APIs (JWT handles security)
-                .cors(cors -> {}) // Enable CORS configured by the corsFilter bean
+                .cors(cors -> cors.configurationSource(corsConfigurationSource())) // Enable CORS configured by the corsFilter bean
                 .authorizeHttpRequests(auth -> auth
-                        // Public endpoints: registration and login
-                        .requestMatchers("/api/auth/**").permitAll()
-                        // All other requests require authentication
-                        .anyRequest().authenticated()
+                        .requestMatchers("/api/auth/**").permitAll() // Allow unauthenticated access to auth endpoints
+                        .requestMatchers("/api/journal/**").authenticated() // ⭐ NEW: Allow authenticated access to all journal endpoints ⭐
+                        .anyRequest().authenticated() // All other requests require authentication
                 )
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS) // Use stateless sessions (no HttpSession)
@@ -80,7 +81,7 @@ public class WebSecurityConfig {
      * Configuration values are read from application.properties.
      */
     @Bean
-    public CorsFilter corsFilter(@org.springframework.beans.factory.annotation.Value("${spring.web.cors.allowed-origins}") String allowedOrigins) {
+    public CorsFilter corsFilter(@Value("${spring.web.cors.allowed-origins}") String allowedOrigins) {
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         CorsConfiguration config = new CorsConfiguration();
         config.setAllowCredentials(true); // Allow credentials (cookies, auth headers)
@@ -89,5 +90,18 @@ public class WebSecurityConfig {
         config.addAllowedMethod("*"); // Allow all HTTP methods (GET, POST, PUT, DELETE, OPTIONS)
         source.registerCorsConfiguration("/**", config); // Apply this CORS config to all paths
         return new CorsFilter(source);
+    }
+
+    // Helper method for cors configuration source
+    private UrlBasedCorsConfigurationSource corsConfigurationSource() {
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowCredentials(true);
+        // Ensure this matches your frontend URL in application.properties
+        config.addAllowedOrigin("http://localhost:5173");
+        config.addAllowedHeader("*");
+        config.addAllowedMethod("*");
+        source.registerCorsConfiguration("/**", config);
+        return source;
     }
 }
