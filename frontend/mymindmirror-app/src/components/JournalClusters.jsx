@@ -1,4 +1,4 @@
-// In src/main/java/com/mymindmirror.backend/components/JournalClusters.js
+// In src/components/JournalClusters.js
 
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
@@ -6,28 +6,26 @@ import axios from 'axios';
 function JournalClusters({ userId, onClusteringComplete, journalEntries, currentClusterResults }) {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [numClusters, setNumClusters] = useState(5);
+    const [numClusters, setNumClusters] = useState(5); // Default number of clusters
 
     useEffect(() => {
         console.log("JournalClusters prop 'currentClusterResults' changed:", currentClusterResults);
     }, [currentClusterResults]);
 
-    // ⭐ NEW: Add a useEffect to inspect currentClusterResults when it updates ⭐
     useEffect(() => {
         if (currentClusterResults) {
             console.log("Cluster results are present:");
-            console.log("  numClusters:", currentClusterResults.numClusters);
-            console.log("  clusterThemes:", currentClusterResults.clusterThemes);
-            console.log("  entryClusters:", currentClusterResults.entryClusters);
+            console.log("   numClusters:", currentClusterResults.numClusters);
+            console.log("   clusterThemes:", currentClusterResults.clusterThemes);
+            console.log("   entryClusters:", currentClusterResults.entryClusters);
             if (currentClusterResults.clusterThemes) {
-                console.log("  Keys in clusterThemes:", Object.keys(currentClusterResults.clusterThemes));
-                console.log("  Length of clusterThemes keys:", Object.keys(currentClusterResults.clusterThemes).length);
+                console.log("   Keys in clusterThemes:", Object.keys(currentClusterResults.clusterThemes));
+                console.log("   Length of clusterThemes keys:", Object.keys(currentClusterResults.clusterThemes).length);
             }
         } else {
             console.log("Cluster results are NULL or UNDEFINED.");
         }
     }, [currentClusterResults]);
-
 
     const handleCluster = async () => {
         setLoading(true);
@@ -35,9 +33,7 @@ function JournalClusters({ userId, onClusteringComplete, journalEntries, current
 
         const token = localStorage.getItem('jwtToken');
         if (!token) {
-            setError('Authentication token not found. Please log in.');
-            setLoading(false);
-            return;
+            console.warn("No JWT token found. Proceeding with clustering request.");
         }
 
         if (!userId) {
@@ -53,10 +49,24 @@ function JournalClusters({ userId, onClusteringComplete, journalEntries, current
             return;
         }
 
+        const rawJournalTexts = journalEntries.map(entry => entry.rawText || entry.content);
+
+        // ⭐ ADDED DEBUGGING LOGS HERE ⭐
+        console.log("--- Debugging Clustering Request ---");
+        console.log("Sending userId:", userId);
+        console.log("Sending numClusters:", effectiveNumClusters);
+        console.log("Sending rawJournalTexts (length):", rawJournalTexts.length);
+        console.log("Sending rawJournalTexts (first 3 entries):", rawJournalTexts.slice(0, 3));
+        console.log("--- End Debugging Clustering Request ---");
+
+
         try {
             const response = await axios.post(
                 `http://localhost:8080/api/journal/cluster-entries?nClusters=${effectiveNumClusters}`,
-                {},
+                {
+                    userId: userId,
+                    journalTexts: rawJournalTexts 
+                },
                 {
                     headers: { Authorization: `Bearer ${token}` }
                 }
@@ -72,7 +82,7 @@ function JournalClusters({ userId, onClusteringComplete, journalEntries, current
             }
         } catch (err) {
             console.error('Error during journal clustering:', err.response ? err.response.data : err.message);
-            setError('Failed to perform clustering. Ensure backend services are running and you have enough entries.');
+            setError(`Failed to perform clustering. Error: ${err.response?.data?.error || err.message}. Ensure backend services are running and you have enough entries.`);
         } finally {
             setLoading(false);
         }
@@ -96,34 +106,24 @@ function JournalClusters({ userId, onClusteringComplete, journalEntries, current
                     min="2"
                     max={Math.max(2, journalEntries.length)}
                     className="w-20 p-2 rounded-md border border-gray-300 dark:border-gray-600
-                               bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200
-                               focus:outline-none focus:ring-2 focus:ring-[#B399D4] dark:focus:ring-[#5CC8C2]
-                               font-inter text-center"
+                                bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200
+                                focus:outline-none focus:ring-2 focus:ring-[#B399D4] dark:focus:ring-[#5CC8C2]
+                                font-inter text-center"
                 />
                 <button
                     onClick={handleCluster}
                     disabled={loading || journalEntries.length < 2 || numClusters > journalEntries.length}
                     className="py-2 px-6 rounded-full font-poppins font-semibold text-white
-                               bg-[#FF8A7A] hover:bg-[#FF6C5A] active:bg-[#D45E4D]
-                               shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#FF8A7A] focus:ring-opacity-75
-                               transition-all duration-300
-                               disabled:opacity-50 disabled:cursor-not-allowed"
+                                bg-[#FF8A7A] hover:bg-[#FF6C5A] active:bg-[#D45E4D]
+                                shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#FF8A7A] focus:ring-opacity-75
+                                transition-all duration-300
+                                disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {loading ? 'Clustering...' : 'Find My Themes'}
                 </button>
             </div>
 
             {error && <p className="text-[#FF8A7A] font-inter text-center mb-4">{error}</p>}
-
-            {/* ⭐ Debugging the rendering conditions directly in the render method ⭐ */}
-            {console.log("--- JournalClusters Render Check ---")}
-            {console.log("currentClusterResults:", currentClusterResults)}
-            {console.log("currentClusterResults exists:", !!currentClusterResults)}
-            {console.log("currentClusterResults.clusterThemes exists:", !!(currentClusterResults && currentClusterResults.clusterThemes))}
-            {console.log("Object.keys(currentClusterResults.clusterThemes).length:", currentClusterResults && currentClusterResults.clusterThemes ? Object.keys(currentClusterResults.clusterThemes).length : 'N/A')}
-            {console.log("Condition for displaying themes:", currentClusterResults && currentClusterResults.clusterThemes && Object.keys(currentClusterResults.clusterThemes).length > 0)}
-            {console.log("--- End Render Check ---")}
-
 
             {currentClusterResults && currentClusterResults.clusterThemes && Object.keys(currentClusterResults.clusterThemes).length > 0 ? (
                 <div className="space-y-4 mt-6 p-4 bg-white/70 dark:bg-black/50 rounded-lg shadow-inner">

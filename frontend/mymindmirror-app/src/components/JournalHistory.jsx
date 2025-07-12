@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO } from 'date-fns'; // For date formatting
 import { Doughnut } from 'react-chartjs-2';
 import {
     Chart as ChartJS,
@@ -14,26 +14,26 @@ ChartJS.register(ArcElement, Tooltip, Legend);
 
 // Define a consistent color palette for emotions (expanded for more variety)
 const EMOTION_CHART_COLORS = {
-    'joy': '#5CC8C2',         // Serene Teal
-    'sadness': '#B399D4',     // Gentle Lavender
-    'anger': '#FF8A7A',       // Warm Coral
-    'fear': '#A93226',        // Darker Red
-    'surprise': '#85C1E9',    // Light Blue
-    'neutral': '#E0E0E0',     // Soft Gray (Light Mode)
-    'love': '#E74C3C',        // Red
-    'disgust': '#6C3483',     // Purple
-    'anxiety': '#F7DC6F',     // Yellow
-    'optimism': '#F1C40F',    // Golden Yellow
-    'relief': '#58D68D',      // Light Green
-    'caring': '#2ECC71',      // Green
-    'curiosity': '#AF7AC5',   // Light Purple
+    'joy': '#5CC8C2',       // Serene Teal
+    'sadness': '#B399D4',   // Gentle Lavender
+    'anger': '#FF8A7A',     // Warm Coral
+    'fear': '#A93226',      // Darker Red
+    'surprise': '#85C1E9',  // Light Blue
+    'neutral': '#E0E0E0',   // Soft Gray (Light Mode)
+    'love': '#E74C3C',      // Red
+    'disgust': '#6C3483',   // Purple
+    'anxiety': '#F7DC6F',   // Yellow
+    'optimism': '#F1C40F',  // Golden Yellow
+    'relief': '#58D68D',    // Light Green
+    'caring': '#2ECC71',    // Green
+    'curiosity': '#AF7AC5', // Light Purple
     'embarrassment': '#D35400', // Dark Orange
-    'pride': '#F39C12',       // Orange
-    'remorse': '#7F8C8D',     // Gray
-    'annoyance': '#E67E22',   // Orange-Brown
+    'pride': '#F39C12',     // Orange
+    'remorse': '#7F8C8D',   // Gray
+    'annoyance': '#E67E22', // Orange-Brown
     'disappointment': '#283747', // Dark Blue-Gray
-    'grief': '#17202A',       // Very Dark Blue-Gray
-    'excitement': '#FFD700',  // Gold
+    'grief': '#17202A',     // Very Dark Blue-Gray
+    'excitement': '#FFD700',   // Gold
     'contentment': '#90EE90', // Light Green
     'frustration': '#FF4500', // Orange-Red
     'gratitude': '#ADFF2F',   // Green-Yellow
@@ -68,6 +68,8 @@ const EMOTION_CHART_COLORS_DARK = {
     'hope': '#C0E0FF',
 };
 
+// Import JournalInput for editing functionality
+import JournalInput from './JournalInput'; 
 
 function JournalHistory({ entries, onEntryChange }) {
     const [expandedEntryId, setExpandedEntryId] = useState(null);
@@ -79,12 +81,21 @@ function JournalHistory({ entries, onEntryChange }) {
     const [feedbackMessage, setFeedbackMessage] = useState(''); // For success/error messages
     const [feedbackType, setFeedbackType] = useState(''); // 'success' or 'error'
 
+    // Sort entries by creationTimestamp in descending order (most recent first)
+    const sortedEntries = [...entries].sort((a, b) => {
+        // Parse ISO strings to Date objects for comparison
+        const dateA = a.creationTimestamp ? parseISO(a.creationTimestamp) : new Date(0); // Fallback for null/undefined
+        const dateB = b.creationTimestamp ? parseISO(b.creationTimestamp) : new Date(0);
+        return dateB.getTime() - dateA.getTime();
+    });
+
     const toggleExpand = (id) => {
         setExpandedEntryId(expandedEntryId === id ? null : id);
-        // When collapsing, ensure editing mode is off for that entry
+        // When collapsing, ensure editing mode is off for that entry if it's the one being edited
         if (expandedEntryId === id && isEditing && editEntryId === id) {
             handleCancelEdit();
         }
+        setFeedbackMessage(''); // Clear feedback when expanding/collapsing
     };
 
     const handleEditClick = (entry) => {
@@ -110,8 +121,7 @@ function JournalHistory({ entries, onEntryChange }) {
         }
 
         try {
-            // ⭐ FIX: Correct Spring Boot PUT endpoint URL ⭐
-            await axios.put(`http://localhost:8080/api/journal/${editEntryId}`, { text: currentEditText }, {
+            await axios.put(`http://localhost:8080/api/journal/${editEntryId}`, { rawText: currentEditText }, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             setFeedbackMessage('Entry updated successfully!');
@@ -150,7 +160,6 @@ function JournalHistory({ entries, onEntryChange }) {
         }
 
         try {
-            // ⭐ FIX: Correct Spring Boot DELETE endpoint URL ⭐
             await axios.delete(`http://localhost:8080/api/journal/${deleteEntryId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
@@ -191,25 +200,14 @@ function JournalHistory({ entries, onEntryChange }) {
         return 'Negative';
     };
 
-    // Function to prepare data for the emotion Doughnut chart (Embedded)
+    // Function to prepare data for the emotion Doughnut chart
     const getEmotionChartData = (emotionsData) => {
-        if (!emotionsData) {
+        if (!emotionsData || Object.keys(emotionsData).length === 0) {
             return null;
         }
 
-        let emotions;
-        try {
-            // Emotions are already parsed to an object in JournalEntryResponse
-            emotions = emotionsData; 
-            // Ensure 'emotions' is an object after parsing/checking
-            if (typeof emotions !== 'object' || emotions === null) {
-                console.warn("Emotions data is not a valid object for chart:", emotions);
-                return null;
-            }
-        } catch (e) {
-            console.error("Error parsing emotions for JournalHistory chart:", e);
-            return null;
-        }
+        // Emotions are expected to be an object directly from the backend (already parsed)
+        const emotions = emotionsData; 
         
         const labels = Object.keys(emotions);
         const data = Object.values(emotions);
@@ -224,7 +222,9 @@ function JournalHistory({ entries, onEntryChange }) {
             }
         });
 
-        // ⭐ FIX: Dynamically select colors based on theme ⭐
+        if (filteredLabels.length === 0) return null; // If no emotions with significant scores
+
+        // Dynamically select colors based on theme
         const rootElement = document.documentElement;
         const isDarkMode = rootElement.classList.contains('dark');
         const selectedColorPalette = isDarkMode ? EMOTION_CHART_COLORS_DARK : EMOTION_CHART_COLORS;
@@ -244,7 +244,7 @@ function JournalHistory({ entries, onEntryChange }) {
         };
     };
 
-    // Options for the emotion Doughnut chart (Embedded)
+    // Options for the emotion Doughnut chart
     const emotionChartOptions = {
         responsive: true,
         maintainAspectRatio: false,
@@ -253,7 +253,7 @@ function JournalHistory({ entries, onEntryChange }) {
                 position: 'right', // Place legend on the right
                 labels: {
                     font: { family: 'Inter', size: 12 },
-                    color: 'rgb(75, 85, 99)', // Default text color
+                    color: 'rgb(75, 85, 99)', // Default text color for legend
                 },
             },
             tooltip: {
@@ -264,7 +264,7 @@ function JournalHistory({ entries, onEntryChange }) {
                             label += ': ';
                         }
                         if (context.parsed !== null) {
-                            label += (context.parsed * 100).toFixed(1) + '%';
+                            label += (context.parsed * 100).toFixed(1) + '%'; // Display as percentage
                         }
                         return label;
                     }
@@ -274,7 +274,7 @@ function JournalHistory({ entries, onEntryChange }) {
         cutout: '60%', // Makes it a doughnut chart
     };
 
-    // Adjust emotion chart colors for dark mode dynamically (Embedded)
+    // Adjust emotion chart colors for dark mode dynamically
     const rootElement = document.documentElement;
     if (rootElement.classList.contains('dark')) {
         emotionChartOptions.plugins.legend.labels.color = '#E0E0E0';
@@ -300,24 +300,14 @@ function JournalHistory({ entries, onEntryChange }) {
                 <p className="text-center text-gray-600 dark:text-gray-400 font-inter">No journal entries yet. Start by writing one above!</p>
             ) : (
                 <div className="space-y-6">
-                    {entries.map((entry) => {
-                        // Defensive parsing for display (these should already be parsed by JournalEntryResponse)
-                        let parsedEmotions = entry.emotions || {};
-                        let parsedCoreConcerns = entry.coreConcerns || [];
-                        let parsedGrowthTips = entry.growthTips || [];
-                        
-                        // Ensure they are correct types if not parsed by Spring Boot for some reason
-                        if (typeof parsedEmotions === 'string') {
-                            try { parsedEmotions = JSON.parse(parsedEmotions); } catch (e) { parsedEmotions = {}; }
-                        }
-                        if (typeof parsedCoreConcerns === 'string') {
-                            try { parsedCoreConcerns = JSON.parse(parsedCoreConcerns); } catch (e) { parsedCoreConcerns = []; }
-                        }
-                        if (typeof parsedGrowthTips === 'string') {
-                            try { parsedGrowthTips = JSON.parse(parsedGrowthTips); } catch (e) { parsedGrowthTips = []; }
-                        }
+                    {sortedEntries.map((entry) => {
+                        // Ensure data is in correct format (should be handled by backend, but defensive check)
+                        const parsedEmotions = entry.emotions && typeof entry.emotions === 'object' ? entry.emotions : {};
+                        const parsedCoreConcerns = Array.isArray(entry.coreConcerns) ? entry.coreConcerns : [];
+                        const parsedGrowthTips = Array.isArray(entry.growthTips) ? entry.growthTips : [];
+                        const parsedKeyPhrases = Array.isArray(entry.keyPhrases) ? entry.keyPhrases : [];
 
-                        const chartDataForEntry = getEmotionChartData(entry.emotions);
+                        const chartDataForEntry = getEmotionChartData(parsedEmotions);
 
                         return (
                             <div key={entry.id} className="bg-white/70 dark:bg-black/50 p-4 rounded-lg shadow-md border border-white/30 dark:border-white/10 transition-all duration-300">
@@ -325,20 +315,28 @@ function JournalHistory({ entries, onEntryChange }) {
                                     <h3 className="text-lg font-poppins font-semibold text-gray-800 dark:text-gray-200">
                                         {format(parseISO(entry.entryDate), 'yyyy-MM-dd')}
                                     </h3>
-                                    <span className={`${getMoodColorClass(entry.moodScore)} font-semibold text-sm`}>
-                                        {getMoodLabel(entry.moodScore)} ({entry.moodScore !== null ? entry.moodScore.toFixed(2) : 'N/A'})
-                                    </span>
-                                    <svg
-                                        className={`w-5 h-5 text-gray-600 dark:text-gray-400 transform transition-transform duration-300 ${
-                                            expandedEntryId === entry.id ? 'rotate-180' : ''
-                                        }`}
-                                        fill="none"
-                                        stroke="currentColor"
-                                        viewBox="0 0 24 24"
-                                        xmlns="http://www.w3.org/2000/svg"
-                                    >
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
-                                    </svg>
+                                    <div className="flex items-center space-x-2">
+                                        <span className={`${getMoodColorClass(entry.moodScore)} font-semibold text-sm`}>
+                                            {getMoodLabel(entry.moodScore)} ({entry.moodScore !== null ? entry.moodScore.toFixed(2) : 'N/A'})
+                                        </span>
+                                        {/* ⭐ NEW: Display Cluster ID ⭐ */}
+                                        {entry.clusterId !== null && entry.clusterId !== undefined && (
+                                            <span className="font-inter text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full">
+                                                Theme: {entry.clusterId + 1}
+                                            </span>
+                                        )}
+                                        <svg
+                                            className={`w-5 h-5 text-gray-600 dark:text-gray-400 transform transition-transform duration-300 ${
+                                                expandedEntryId === entry.id ? 'rotate-180' : ''
+                                            }`}
+                                            fill="none"
+                                            stroke="currentColor"
+                                            viewBox="0 0 24 24"
+                                            xmlns="http://www.w3.org/2000/svg"
+                                        >
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path>
+                                        </svg>
+                                    </div>
                                 </div>
 
                                 {expandedEntryId === entry.id && (
@@ -374,9 +372,9 @@ function JournalHistory({ entries, onEntryChange }) {
                                                 <p className="font-inter text-gray-700 dark:text-gray-300 mb-2">
                                                     <span className="font-semibold">Emotions:</span>{' '}
                                                     {Object.entries(parsedEmotions)
-                                                            .filter(([, score]) => score > 0.01) // Filter out very low scores
-                                                            .map(([label, score]) => `${label.charAt(0).toUpperCase() + label.slice(1)} (${(score * 100).toFixed(1)}%)`)
-                                                            .join(', ') || 'N/A'}
+                                                        .filter(([, score]) => score > 0.01) // Filter out very low scores
+                                                        .map(([label, score]) => `${label.charAt(0).toUpperCase() + label.slice(1)} (${(score * 100).toFixed(1)}%)`)
+                                                        .join(', ') || 'N/A'}
                                                 </p>
                                                 <p className="font-inter text-gray-700 dark:text-gray-300 mb-2">
                                                     <span className="font-semibold">Core Concerns:</span>{' '}
@@ -390,8 +388,15 @@ function JournalHistory({ entries, onEntryChange }) {
                                                         ? parsedGrowthTips.map((tip, idx) => `• ${tip}`).join(' ')
                                                         : 'No specific growth tips generated.'}
                                                 </p>
+                                                {/* ⭐ NEW: Display Key Phrases ⭐ */}
+                                                {parsedKeyPhrases.length > 0 && (
+                                                    <p className="font-inter text-gray-700 dark:text-gray-300 mb-4">
+                                                        <span className="font-semibold">Key Phrases:</span>{' '}
+                                                        {parsedKeyPhrases.join(', ')}
+                                                    </p>
+                                                )}
 
-                                                {/* Emotion Distribution Chart for this entry (Embedded) */}
+                                                {/* Emotion Distribution Chart for this entry */}
                                                 {chartDataForEntry && chartDataForEntry.datasets[0].data.length > 0 ? (
                                                     <div className="mt-4 p-3 rounded-lg bg-white/50 dark:bg-black/30 border border-gray-200 dark:border-gray-700">
                                                         <h4 className="text-lg font-poppins font-semibold mb-2 text-[#1E1A3E] dark:text-[#E0E0E0]">Emotion Breakdown</h4>
@@ -400,22 +405,21 @@ function JournalHistory({ entries, onEntryChange }) {
                                                         </div>
                                                     </div>
                                                 ) : (
-                                                        <p className="text-gray-600 dark:text-gray-400 text-sm italic mt-2">
-                                                            No detailed emotion data for this entry.
-                                                        </p>
+                                                    <p className="text-gray-600 dark:text-gray-400 text-sm italic mt-2">
+                                                        No detailed emotion data for this entry.
+                                                    </p>
                                                 )}
 
-
-                                                <div className="flex justify-end space-x-2">
+                                                <div className="flex justify-end space-x-2 mt-4">
                                                     <button
                                                         onClick={() => handleEditClick(entry)}
-                                                        className="py-2 px-4 rounded-full font-poppins font-semibold text-white bg-[#4CAF50] hover:bg-[#45a049] transition-all duration-300 shadow-md"
+                                                        className="py-2 px-4 rounded-full font-poppins font-semibold text-white bg-[#5CC8C2] hover:bg-[#4AB8B2] active:bg-[#3A9B95] shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#5CC8C2] focus:ring-opacity-75 transition-all duration-300"
                                                     >
                                                         Edit
                                                     </button>
                                                     <button
                                                         onClick={() => handleDeleteClick(entry.id)}
-                                                        className="py-2 px-4 rounded-full font-poppins font-semibold text-white bg-[#FF8A7A] hover:bg-[#FF6C5A] transition-all duration-300 shadow-md"
+                                                        className="py-2 px-4 rounded-full font-poppins font-semibold text-white bg-[#FF8A7A] hover:bg-[#FF6C5A] active:bg-[#D45E4D] shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#FF8A7A] focus:ring-opacity-75 transition-all duration-300"
                                                     >
                                                         Delete
                                                     </button>
