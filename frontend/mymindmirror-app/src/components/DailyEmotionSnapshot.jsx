@@ -45,8 +45,8 @@ function DailyEmotionSnapshot({ latestEntry }) {
         if (latestEntry && latestEntry.emotions) {
             try {
                 // Defensive parsing: emotions should already be an object from Spring Boot's JournalEntryResponse
-                const emotions = typeof latestEntry.emotions === 'string' 
-                                 ? JSON.parse(latestEntry.emotions) 
+                const emotions = typeof latestEntry.emotions === 'string'
+                                 ? JSON.parse(latestEntry.emotions)
                                  : latestEntry.emotions;
 
                 // Ensure 'emotions' is an object before proceeding
@@ -121,7 +121,7 @@ function DailyEmotionSnapshot({ latestEntry }) {
             },
             title: {
                 display: true,
-                text: "Today's Emotion Breakdown",
+                text: "Today's Emotion Breakdown", // This is the Chart.js title
                 font: { family: 'Poppins', size: 18, weight: '600' },
                 color: '#1E1A3E', // Default dark text for light mode
             },
@@ -140,22 +140,22 @@ function DailyEmotionSnapshot({ latestEntry }) {
 
     return (
         <div className="p-6 rounded-lg bg-white/60 dark:bg-black/40 shadow-inner flex flex-col items-center justify-center transition-all duration-500 min-h-[250px] md:min-h-[300px]">
-            <h2 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">
+            {/* Removed the redundant h2 tag */}
+            {/* <h2 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">
                 Today's Emotion Breakdown
-            </h2>
-            {/* ⭐ FIX: Show chart if there's any data, regardless of it being today's entry ⭐ */}
-            {hasData ? ( 
+            </h2> */}
+            {hasData ? (
                 <div className="relative w-full h-[200px] md:h-[250px]"> {/* Fixed height for chart container */}
                     <Doughnut ref={chartRef} data={chartData} options={options} />
                 </div>
             ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center text-gray-600 dark:text-gray-400">
                     <p className="font-inter text-lg">No emotion data available for display.</p>
-                    {latestEntry && latestEntry.entryDate !== format(new Date(), 'yyyy-MM-dd') && (
-                        <p className="font-inter text-sm mt-2">Last entry was on {format(parseISO(latestEntry.entryDate), 'MMMM d,yyyy')}.</p>
+                    {latestEntry && latestEntry.entryDate && latestEntry.entryDate !== format(new Date(), 'yyyy-MM-dd') && ( // Added check for latestEntry.entryDate existence
+                        <p className="font-inter text-sm mt-2">Last entry was on {format(parseISO(latestEntry.entryDate), 'MMMM d d, yyyy')}.</p>
                     )}
                     {!latestEntry && (
-                         <p className="font-inter text-sm mt-2">Journal an entry to see your emotion breakdown!</p>
+                           <p className="font-inter text-sm mt-2">Journal an entry to see your emotion breakdown!</p>
                     )}
                 </div>
             )}

@@ -85,6 +85,8 @@ function ConcernFrequencyChart({ entries }) {
                             borderColor: borderColor,
                             borderWidth: 1,
                             borderRadius: 5,
+                            barPercentage: 0.8, // ⭐ ADDED: Control bar width relative to category axis ⭐
+                            categoryPercentage: 0.8, // ⭐ ADDED: Control space between categories ⭐
                         },
                     ],
                 });
@@ -148,7 +150,13 @@ function ConcernFrequencyChart({ entries }) {
         scales: {
             x: {
                 title: { display: true, text: 'Concern Category', font: { family: 'Inter', size: 14 }, color: 'rgb(75, 85, 99)' },
-                ticks: { color: 'rgb(75, 85, 99)', font: { family: 'Inter' } },
+                ticks: { 
+                    color: 'rgb(75, 85, 99)', 
+                    font: { family: 'Inter' },
+                    maxRotation: 45, // ⭐ ADDED: Rotate labels by 45 degrees ⭐
+                    minRotation: 45, // ⭐ ADDED: Ensure labels are always rotated ⭐
+                    autoSkip: false, // ⭐ ADDED: Prevent Chart.js from skipping labels ⭐
+                },
                 grid: { display: false },
             },
             y: {

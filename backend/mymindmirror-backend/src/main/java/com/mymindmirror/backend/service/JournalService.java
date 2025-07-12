@@ -1,4 +1,4 @@
-// In src/main/java/com/mymindmirror/backend/service/JournalService.java
+// In src/main/java/com/mymindmirror.backend/service/JournalService.java
 
 package com.mymindmirror.backend.service;
 
@@ -10,13 +10,14 @@ import com.mymindmirror.backend.repository.JournalEntryRepository;
 import com.mymindmirror.backend.payload.MoodDataResponse;
 import com.mymindmirror.backend.payload.DailyAggregatedDataResponse;
 import com.mymindmirror.backend.payload.ClusterResult;
+import com.mymindmirror.backend.util.EncryptionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
-import org.hibernate.Hibernate; // ⭐ NEW IMPORT ⭐
+import org.hibernate.Hibernate;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -40,14 +41,16 @@ public class JournalService {
     private final JournalEntryRepository journalEntryRepository;
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
+    private final UserService userService;
 
     @Value("${app.ml-service.url}")
     private String mlServiceBaseUrl;
 
-    public JournalService(JournalEntryRepository journalEntryRepository, WebClient mlServiceWebClient, ObjectMapper objectMapper) {
+    public JournalService(JournalEntryRepository journalEntryRepository, WebClient mlServiceWebClient, ObjectMapper objectMapper, UserService userService) {
         this.journalEntryRepository = journalEntryRepository;
         this.webClient = mlServiceWebClient;
         this.objectMapper = objectMapper;
+        this.userService = userService;
     }
 
     /**
@@ -60,19 +63,34 @@ public class JournalService {
     public JournalEntry saveJournalEntry(User user, String rawText) {
         logger.info("Attempting to save new journal entry for user: {}", user.getUsername());
 
+        String userSecret = user.getPasswordHash();
+        if (userSecret == null || userSecret.isEmpty()) {
+            logger.error("User {} has no password hash. Cannot encrypt journal entry.", user.getUsername());
+            throw new IllegalStateException("User secret (password hash) not available for encryption.");
+        }
+
         JournalEntry newEntry = new JournalEntry();
         newEntry.setUser(user);
         newEntry.setEntryDate(LocalDate.now());
         newEntry.setCreationTimestamp(LocalDateTime.now());
-        newEntry.setRawText(rawText);
-        newEntry.setClusterId(null); // Initialize cluster ID to null
 
-        processAiAnalysis(rawText, newEntry);
-        // Key phrase extraction will happen as part of AI analysis or can be a separate call
-        // For now, let's assume it's part of the main analysis or handled by the ML service.
-        // If you had a separate endpoint for key phrases, you'd call it here.
-        // For now, let's remove the direct call as it's not in the provided Flask app.py
-        // newEntry.setKeyPhrases(extractKeyPhrases(rawText));
+        String encryptedText = EncryptionUtil.encrypt(rawText, userSecret);
+        if (encryptedText == null) {
+            logger.error("Failed to encrypt journal entry for user {}. Saving raw text unencrypted.", user.getUsername());
+            newEntry.setRawText(rawText);
+        } else {
+            newEntry.setRawText(encryptedText);
+        }
+
+        newEntry.setClusterId(null);
+
+        // ⭐ MODIFIED: Only process AI analysis if rawText is not empty ⭐
+        if (rawText != null && !rawText.trim().isEmpty()) {
+            processAiAnalysis(rawText, newEntry);
+        } else {
+            logger.warn("Raw text is empty for new entry. Skipping AI analysis.");
+            resetAiFields(newEntry); // Reset AI fields if no analysis is done
+        }
 
         JournalEntry savedEntry = journalEntryRepository.save(newEntry);
         logger.info("New journal entry with ID {} for user {} saved successfully.", savedEntry.getId(), user.getUsername());
@@ -98,11 +116,29 @@ public class JournalService {
             throw new IllegalArgumentException("You are not authorized to update this journal entry.");
         }
 
-        existingEntry.setRawText(updatedText);
-        // Do NOT update creationTimestamp here, as it's the original creation time.
+        String userSecret = user.getPasswordHash();
+        if (userSecret == null || userSecret.isEmpty()) {
+            logger.error("User {} has no password hash. Cannot encrypt journal entry.", user.getUsername());
+            throw new IllegalStateException("User secret (password hash) not available for encryption.");
+        }
 
-        processAiAnalysis(updatedText, existingEntry);
-        // newEntry.setKeyPhrases(extractKeyPhrases(updatedText)); // Remove for now
+        String textToEncrypt = (updatedText != null) ? updatedText : "";
+        String encryptedText = EncryptionUtil.encrypt(textToEncrypt, userSecret);
+
+        if (encryptedText == null) {
+            logger.error("Failed to encrypt updated journal entry for user {}. Saving raw text unencrypted.", user.getUsername());
+            existingEntry.setRawText(textToEncrypt);
+        } else {
+            existingEntry.setRawText(encryptedText);
+        }
+
+        // ⭐ MODIFIED: Only process AI analysis if updatedText is not empty ⭐
+        if (textToEncrypt != null && !textToEncrypt.trim().isEmpty()) {
+            processAiAnalysis(textToEncrypt, existingEntry);
+        } else {
+            logger.warn("Updated text is empty for entry {}. Skipping AI analysis.", entryId);
+            resetAiFields(existingEntry); // Reset AI fields if no analysis is done
+        }
 
         JournalEntry savedEntry = journalEntryRepository.save(existingEntry);
         logger.info("Journal entry with ID {} for user {} updated successfully.", savedEntry.getId(), user.getUsername());
@@ -133,6 +169,8 @@ public class JournalService {
      * Helper method to call ML service for general journal analysis and update JournalEntry fields.
      */
     private void processAiAnalysis(String textForAnalysis, JournalEntry entryToUpdate) {
+        // This method receives the plain text for analysis, so no decryption needed here.
+        // It is assumed that textForAnalysis is not null or empty when this method is called.
         Map<String, String> requestBody = new HashMap<>();
         requestBody.put("text", textForAnalysis);
 
@@ -152,24 +190,19 @@ public class JournalService {
 
         if (mlResponse != null) {
             try {
-                // Ensure type safety when casting from Map<String, Object>
                 Object moodScoreObj = mlResponse.get("moodScore");
                 if (moodScoreObj instanceof Number) {
                     entryToUpdate.setMoodScore(((Number) moodScoreObj).doubleValue());
                 } else {
-                    entryToUpdate.setMoodScore(null); // Or default value
+                    entryToUpdate.setMoodScore(null);
                     logger.warn("MoodScore from ML service was not a Number. Value: {}", moodScoreObj);
                 }
 
-                // For JSON strings, ensure the values are correctly cast
                 entryToUpdate.setEmotions(objectMapper.writeValueAsString(mlResponse.get("emotions")));
                 entryToUpdate.setCoreConcerns(objectMapper.writeValueAsString(mlResponse.get("coreConcerns")));
                 entryToUpdate.setSummary((String) mlResponse.get("summary"));
                 entryToUpdate.setGrowthTips(objectMapper.writeValueAsString(mlResponse.get("growthTips")));
 
-                // ⭐ Assuming keyPhrases are now part of the main /analyze_journal response if needed ⭐
-                // If not, you'd need a separate ML endpoint for them.
-                // For now, let's set it to an empty list if not provided by /analyze_journal
                 List<String> keyPhrasesFromMl = (List<String>) mlResponse.getOrDefault("keyPhrases", Collections.emptyList());
                 entryToUpdate.setKeyPhrases(keyPhrasesFromMl);
 
@@ -197,32 +230,50 @@ public class JournalService {
         entry.setSummary(null);
         entry.setGrowthTips(null);
         entry.setKeyPhrases(Collections.emptyList());
-        entry.setClusterId(null); // Reset new field too
+        entry.setClusterId(null);
     }
 
     /**
      * Fetches journal entries for a user within a date range, ordered by creation timestamp.
-     * ⭐ FIX: Explicitly initialize keyPhrases to prevent LazyInitializationException ⭐
+     * Decrypts rawText after fetching.
      */
     public List<JournalEntry> getJournalEntriesForUser(User user, LocalDate startDate, LocalDate endDate) {
         logger.info("Fetching journal entries for user: {} from {} to {}", user.getUsername(), startDate, endDate);
         List<JournalEntry> entries = journalEntryRepository.findByUserAndEntryDateBetweenOrderByCreationTimestampDesc(user, startDate, endDate);
 
-        // ⭐ Initialize the lazy-loaded collection within the session ⭐
+        String userSecret = user.getPasswordHash();
+        if (userSecret == null || userSecret.isEmpty()) {
+            logger.error("User {} has no password hash. Cannot decrypt journal entries.", user.getUsername());
+        }
+
         for (JournalEntry entry : entries) {
-            if (entry.getKeyPhrases() != null) { // Check if it's not null before initializing
+            if (userSecret != null && !userSecret.isEmpty()) {
+                entry.setRawText(EncryptionUtil.decrypt(entry.getRawText(), userSecret));
+            }
+            if (entry.getKeyPhrases() != null) {
                 Hibernate.initialize(entry.getKeyPhrases());
             }
         }
         return entries;
     }
 
+    /**
+     * Decrypts rawText after fetching.
+     */
     public Optional<JournalEntry> getJournalEntryById(UUID entryId) {
         logger.info("Fetching journal entry by ID: {}", entryId);
         Optional<JournalEntry> entryOptional = journalEntryRepository.findById(entryId);
         entryOptional.ifPresent(entry -> {
+            User user = userService.findByUsername(entry.getUser().getUsername())
+                    .orElseThrow(() -> new IllegalStateException("User not found for entry ID: " + entryId));
+            String userSecret = user.getPasswordHash();
+            if (userSecret == null || userSecret.isEmpty()) {
+                logger.error("User {} has no password hash. Cannot decrypt journal entry with ID {}.", user.getUsername(), entryId);
+            } else {
+                entry.setRawText(EncryptionUtil.decrypt(entry.getRawText(), userSecret));
+            }
             if (entry.getKeyPhrases() != null) {
-                Hibernate.initialize(entry.getKeyPhrases()); // Initialize if found
+                Hibernate.initialize(entry.getKeyPhrases());
             }
         });
         return entryOptional;
@@ -231,8 +282,16 @@ public class JournalService {
     public List<MoodDataResponse> getMoodDataForChart(User user, LocalDate startDate, LocalDate endDate) {
         logger.info("Fetching mood data for chart for user: {} from {} to {}", user.getUsername(), startDate, endDate);
         List<JournalEntry> entries = journalEntryRepository.findByUserAndEntryDateBetween(user, startDate, endDate);
-        // Initialize key phrases here too if they are part of MoodDataResponse or any subsequent processing
+
+        String userSecret = user.getPasswordHash();
+        if (userSecret == null || userSecret.isEmpty()) {
+            logger.error("User {} has no password hash. Cannot decrypt journal entries for mood chart.", user.getUsername());
+        }
+
         for (JournalEntry entry : entries) {
+            if (userSecret != null && !userSecret.isEmpty()) {
+                entry.setRawText(EncryptionUtil.decrypt(entry.getRawText(), userSecret));
+            }
             if (entry.getKeyPhrases() != null) {
                 Hibernate.initialize(entry.getKeyPhrases());
             }
@@ -273,11 +332,10 @@ public class JournalService {
     public Map<String, Object> runAnomalyDetection(List<DailyAggregatedDataResponse> aggregatedData) {
         try {
             logger.info("Calling ML service for anomaly detection at {}/anomaly_detection with {} data points.", mlServiceBaseUrl, aggregatedData.size());
-            // Convert list of DTOs to a list of maps for Flask
             List<Map<String, Object>> requestBody = aggregatedData.stream()
                     .map(data -> {
                         Map<String, Object> map = new HashMap<>();
-                        map.put("date", data.getDate().toString()); // Convert LocalDate to String
+                        map.put("date", data.getDate().toString());
                         map.put("averageMood", data.getAverageMood());
                         map.put("totalWords", data.getTotalWords());
                         return map;
@@ -285,7 +343,7 @@ public class JournalService {
                     .collect(Collectors.toList());
 
             Map<String, Object> mlResponse = webClient.post()
-                    .uri("/anomaly_detection") // New endpoint in Flask
+                    .uri("/anomaly_detection")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
@@ -299,7 +357,7 @@ public class JournalService {
     }
 
     /**
-     * ⭐ NEW METHOD: Triggers the journal entry clustering process in the Flask ML service. ⭐
+     * Triggers the journal entry clustering process in the Flask ML service.
      * This method collects all journal entries for a user and sends them to Flask for clustering.
      * After clustering, it updates the journal entries in the database with their assigned cluster IDs.
      *
@@ -310,20 +368,26 @@ public class JournalService {
     public ClusterResult triggerJournalClustering(User user, int nClusters) {
         logger.info("Triggering journal clustering for user: {} with {} clusters.", user.getUsername(), nClusters);
 
-        List<JournalEntry> allUserEntries = journalEntryRepository.findByUser(user); // Fetch all entries for the user
+        List<JournalEntry> allUserEntries = journalEntryRepository.findByUser(user);
 
         if (allUserEntries.isEmpty()) {
             logger.warn("No journal entries found for user {}. Cannot perform clustering.", user.getUsername());
             return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList());
         }
 
-        // Prepare data for Flask: list of raw texts and their original IDs
-        List<String> rawTexts = allUserEntries.stream().map(JournalEntry::getRawText).collect(Collectors.toList());
-        // No need to send entry IDs to Flask for clustering, as Flask returns cluster IDs in order of input texts.
-        // We'll map them back using the original allUserEntries list.
+        String userSecret = user.getPasswordHash();
+        if (userSecret == null || userSecret.isEmpty()) {
+            logger.error("User {} has no password hash. Cannot decrypt journal entries for clustering.", user.getUsername());
+            throw new IllegalStateException("User secret (password hash) not available for decryption for clustering.");
+        }
+
+        // Decrypt raw texts before sending to Flask for clustering
+        List<String> rawTexts = allUserEntries.stream()
+                .map(entry -> EncryptionUtil.decrypt(entry.getRawText(), userSecret))
+                .collect(Collectors.toList());
 
         Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("userId", user.getId().toString()); // Send user ID to Flask for model saving
+        requestBody.put("userId", user.getId().toString());
         requestBody.put("journalTexts", rawTexts);
         requestBody.put("nClusters", nClusters);
 
@@ -334,17 +398,15 @@ public class JournalService {
                     .uri("/cluster_journal_entries")
                     .bodyValue(requestBody)
                     .retrieve()
-                    .bodyToMono(ClusterResult.class) // Expect ClusterResult DTO
+                    .bodyToMono(ClusterResult.class)
                     .block();
             logger.info("ML service for journal clustering responded successfully.");
 
-            // ⭐ Update journal entries with their assigned cluster IDs ⭐
             if (clusterResult != null && clusterResult.getEntryClusters() != null && !clusterResult.getEntryClusters().isEmpty()) {
                 for (int i = 0; i < allUserEntries.size(); i++) {
                     JournalEntry entry = allUserEntries.get(i);
-                    // Ensure the order matches: Flask returns cluster IDs in the same order as texts were sent
                     entry.setClusterId(clusterResult.getEntryClusters().get(i));
-                    journalEntryRepository.save(entry); // Save updated entry
+                    journalEntryRepository.save(entry);
                 }
                 logger.info("Updated {} journal entries with cluster IDs.", allUserEntries.size());
             } else {
@@ -353,20 +415,27 @@ public class JournalService {
 
         } catch (Exception e) {
             logger.error("Failed to call ML service for journal clustering or received error: {}", e.getMessage(), e);
-            return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList()); // Return empty result on error
+            return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList());
         }
         return clusterResult;
     }
 
     /**
      * Fetches all journal entries for a user (used by clustering).
-     * This is a new method needed because findByUserAndEntryDateBetweenOrderByCreationTimestampDesc
-     * might not fetch *all* entries if date range isn't wide enough.
-     * ⭐ Initialize keyPhrases here too. ⭐
+     * Decrypts rawText after fetching.
      */
     public List<JournalEntry> findByUser(User user) {
         List<JournalEntry> entries = journalEntryRepository.findByUser(user);
+
+        String userSecret = user.getPasswordHash();
+        if (userSecret == null || userSecret.isEmpty()) {
+            logger.error("User {} has no password hash. Cannot decrypt journal entries for findByUser.", user.getUsername());
+        }
+
         for (JournalEntry entry : entries) {
+            if (userSecret != null && !userSecret.isEmpty()) {
+                entry.setRawText(EncryptionUtil.decrypt(entry.getRawText(), userSecret));
+            }
             if (entry.getKeyPhrases() != null) {
                 Hibernate.initialize(entry.getKeyPhrases());
             }

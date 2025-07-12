@@ -40,7 +40,7 @@ if not GEMINI_API_KEY:
     logger.error("GEMINI_API_KEY environment variable is not set. Gemini API calls will fail.")
 
 # Using gemini-2.0-flash-lite as requested
-GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent"
+GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 HEADERS = {'Content-Type': 'application/json'}
 
 # --- Model Storage Directories ---
@@ -265,37 +265,52 @@ def generate_reflection():
 def detect_anomalies(daily_data_list):
     if len(daily_data_list) < 7:
         return {"anomalies": [], "message": "Not enough data for anomaly detection (need at least 7 days)."}
+    
     df = pd.DataFrame(daily_data_list)
     df['date'] = pd.to_datetime(df['date'])
     df = df.sort_values(by='date').set_index('date')
-    window_size = 7
+    
+    window_size = 7 # Rolling window for mean and std dev
+    
+    # Calculate rolling mean and standard deviation, ensuring min_periods for early data points
     df['mood_mean'] = df['averageMood'].rolling(window=window_size, min_periods=1).mean()
     df['mood_std'] = df['averageMood'].rolling(window=window_size, min_periods=1).std()
     df['words_mean'] = df['totalWords'].rolling(window=window_size, min_periods=1).mean()
     df['words_std'] = df['totalWords'].rolling(window=window_size, min_periods=1).std()
-    mood_threshold_std = 1.5
-    words_threshold_std = 2.0
+    
+    # ⭐ ADJUSTED THRESHOLDS for more sensitivity ⭐
+    mood_threshold_std = 1.0 # Lowered from 1.5
+    words_threshold_std = 1.5 # Lowered from 2.0
+    
     anomalies = []
     for i in range(len(df)):
         current_day = df.iloc[i]
+        
+        # Skip if essential data or rolling stats are NaN
         if pd.isna(current_day['averageMood']) or pd.isna(current_day['totalWords']) or \
            pd.isna(current_day['mood_mean']) or pd.isna(current_day['mood_std']) or \
            pd.isna(current_day['words_mean']) or pd.isna(current_day['words_std']):
+            logger.debug(f"Skipping anomaly check for {current_day.name.strftime('%Y-%m-%d')} due to NaN values.")
             continue
+        
         is_mood_anomaly = False
         mood_deviation = None
-        if current_day['mood_std'] > 0:
+        if current_day['mood_std'] > 0: # Avoid division by zero
             z_score_mood = (current_day['averageMood'] - current_day['mood_mean']) / current_day['mood_std']
             if abs(z_score_mood) > mood_threshold_std:
                 is_mood_anomaly = True
                 mood_deviation = "significantly " + ("lower" if z_score_mood < 0 else "higher")
+            logger.debug(f"Mood for {current_day.name.strftime('%Y-%m-%d')}: Avg={current_day['averageMood']:.2f}, Mean={current_day['mood_mean']:.2f}, Std={current_day['mood_std']:.2f}, Z-score={z_score_mood:.2f}")
+
         is_words_anomaly = False
         words_deviation = None
-        if current_day['words_std'] > 0:
+        if current_day['words_std'] > 0: # Avoid division by zero
             z_score_words = (current_day['totalWords'] - current_day['words_mean']) / current_day['words_std']
             if abs(z_score_words) > words_threshold_std:
                 is_words_anomaly = True
                 words_deviation = "much " + ("less" if z_score_words < 0 else "more")
+            logger.debug(f"Words for {current_day.name.strftime('%Y-%m-%d')}: Total={current_day['totalWords']}, Mean={current_day['words_mean']:.2f}, Std={current_day['words_std']:.2f}, Z-score={z_score_words:.2f}")
+
         if is_mood_anomaly or is_words_anomaly:
             anomaly_details = {
                 "date": current_day.name.strftime('%Y-%m-%d'),
@@ -310,6 +325,7 @@ def detect_anomalies(daily_data_list):
                 anomaly_details["message"] += f"You wrote {words_deviation} than usual. "
             anomalies.append(anomaly_details)
             logger.info(f"Anomaly detected for {anomaly_details['date']}: {anomaly_details['message']}")
+    
     if anomalies:
         return {"anomalies": anomalies, "message": f"Detected {len(anomalies)} unusual journaling patterns."}
     else:
