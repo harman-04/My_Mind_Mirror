@@ -1,4 +1,4 @@
-// In src/main/java/com/mymindmirror.backend/service/JournalService.java
+// src/main/java/com/mymindmirror.backend/service/JournalService.java
 
 package com.mymindmirror.backend.service;
 
@@ -84,12 +84,11 @@ public class JournalService {
 
         newEntry.setClusterId(null);
 
-        // ⭐ MODIFIED: Only process AI analysis if rawText is not empty ⭐
         if (rawText != null && !rawText.trim().isEmpty()) {
             processAiAnalysis(rawText, newEntry);
         } else {
             logger.warn("Raw text is empty for new entry. Skipping AI analysis.");
-            resetAiFields(newEntry); // Reset AI fields if no analysis is done
+            resetAiFields(newEntry);
         }
 
         JournalEntry savedEntry = journalEntryRepository.save(newEntry);
@@ -132,12 +131,11 @@ public class JournalService {
             existingEntry.setRawText(encryptedText);
         }
 
-        // ⭐ MODIFIED: Only process AI analysis if updatedText is not empty ⭐
         if (textToEncrypt != null && !textToEncrypt.trim().isEmpty()) {
             processAiAnalysis(textToEncrypt, existingEntry);
         } else {
             logger.warn("Updated text is empty for entry {}. Skipping AI analysis.", entryId);
-            resetAiFields(existingEntry); // Reset AI fields if no analysis is done
+            resetAiFields(existingEntry);
         }
 
         JournalEntry savedEntry = journalEntryRepository.save(existingEntry);
@@ -169,8 +167,6 @@ public class JournalService {
      * Helper method to call ML service for general journal analysis and update JournalEntry fields.
      */
     private void processAiAnalysis(String textForAnalysis, JournalEntry entryToUpdate) {
-        // This method receives the plain text for analysis, so no decryption needed here.
-        // It is assumed that textForAnalysis is not null or empty when this method is called.
         Map<String, String> requestBody = new HashMap<>();
         requestBody.put("text", textForAnalysis);
 
@@ -430,6 +426,48 @@ public class JournalService {
         String userSecret = user.getPasswordHash();
         if (userSecret == null || userSecret.isEmpty()) {
             logger.error("User {} has no password hash. Cannot decrypt journal entries for findByUser.", user.getUsername());
+        }
+
+        for (JournalEntry entry : entries) {
+            if (userSecret != null && !userSecret.isEmpty()) {
+                entry.setRawText(EncryptionUtil.decrypt(entry.getRawText(), userSecret));
+            }
+            if (entry.getKeyPhrases() != null) {
+                Hibernate.initialize(entry.getKeyPhrases());
+            }
+        }
+        return entries;
+    }
+
+    // ⭐ NEW METHOD FOR KEYWORD SEARCH ⭐
+    public List<JournalEntry> searchJournalEntriesByKeyword(User user, String keyword) {
+        logger.info("Searching journal entries for user: {} with keyword: '{}'", user.getUsername(), keyword);
+        List<JournalEntry> entries = journalEntryRepository.findByUserAndRawTextContainingKeyword(user, keyword);
+
+        String userSecret = user.getPasswordHash();
+        if (userSecret == null || userSecret.isEmpty()) {
+            logger.error("User {} has no password hash. Cannot decrypt journal entries for keyword search.", user.getUsername());
+        }
+
+        for (JournalEntry entry : entries) {
+            if (userSecret != null && !userSecret.isEmpty()) {
+                entry.setRawText(EncryptionUtil.decrypt(entry.getRawText(), userSecret));
+            }
+            if (entry.getKeyPhrases() != null) {
+                Hibernate.initialize(entry.getKeyPhrases());
+            }
+        }
+        return entries;
+    }
+
+    // ⭐ NEW METHOD FOR MOOD SCORE RANGE SEARCH ⭐
+    public List<JournalEntry> searchJournalEntriesByMoodScore(User user, Double minMood, Double maxMood) {
+        logger.info("Searching journal entries for user: {} with mood score between {} and {}", user.getUsername(), minMood, maxMood);
+        List<JournalEntry> entries = journalEntryRepository.findByUserAndMoodScoreBetweenOrderByCreationTimestampDesc(user, minMood, maxMood);
+
+        String userSecret = user.getPasswordHash();
+        if (userSecret == null || userSecret.isEmpty()) {
+            logger.error("User {} has no password hash. Cannot decrypt journal entries for mood search.", user.getUsername());
         }
 
         for (JournalEntry entry : entries) {

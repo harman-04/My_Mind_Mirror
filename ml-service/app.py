@@ -10,6 +10,7 @@ from collections import defaultdict, Counter
 import pandas as pd
 import numpy as np
 import re
+import time # For simulating timestamps
 
 # --- NEW: Sentence Transformers for Semantic Embeddings ---
 from sentence_transformers import SentenceTransformer
@@ -19,7 +20,7 @@ from sentence_transformers import SentenceTransformer
 import nltk
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
-from sklearn.feature_extraction.text import TfidfVectorizer # Still useful for keyword extraction within clusters
+from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.cluster import KMeans
 import joblib
 # --- End NLTK and Clustering ---
@@ -64,7 +65,7 @@ logger.info("Hugging Face models loaded. Ready for Gemini integration.")
 # This model is good for general purpose sentence embeddings
 try:
     # Using a smaller, faster model for efficiency
-    sentence_model = SentenceTransformer('all-MiniLM-L6-v2') 
+    sentence_model = SentenceTransformer('all-MiniLM-L6-v2')
     logger.info("✓ Sentence Transformer Model Loaded: all-MiniLM-L6-v2")
 except Exception as e:
     logger.error(f"Failed to load Sentence Transformer model: {e}")
@@ -72,16 +73,20 @@ except Exception as e:
 
 
 # --- NLTK Data Download and Initialization ---
+# ⭐ CRITICAL FIX: Ensure NLTK data is downloaded unconditionally on startup ⭐
+# This block will run when the Flask app starts, ensuring resources are available.
 try:
-    nltk.data.find('corpora/stopwords')
+    logger.info("Checking and downloading NLTK data...")
+    nltk.download('stopwords', quiet=True)
+    nltk.download('wordnet', quiet=True)
+    nltk.download('punkt', quiet=True) # Added punkt, often a dependency
+    nltk.download('averaged_perceptron_tagger', quiet=True)
+    nltk.download('averaged_perceptron_tagger_eng', quiet=True) # Explicitly download this one
+    logger.info("NLTK essential data checked/downloaded successfully.")
 except Exception as e:
-    logger.warning(f"NLTK stopwords not found, attempting download. Error: {e}")
-    nltk.download('stopwords')
-try:
-    nltk.data.find('corpora/wordnet')
-except Exception as e:
-    logger.warning(f"NLTK wordnet not found, attempting download. Error: {e}")
-    nltk.download('wordnet')
+    logger.error(f"Failed to download NLTK data on startup. Please check your network and permissions. Error: {e}")
+    # Consider exiting or raising if NLTK is critical for app function
+    # For now, we'll let the app continue, but keyword extraction might fail.
 
 # Initialize NLTK components after ensuring data is downloaded
 stop_words = set(stopwords.words('english'))
@@ -99,7 +104,6 @@ def preprocess_text_nltk(text):
     text = re.sub(r'[^a-z\s]', '', text)
     words = [lemmatizer.lemmatize(word) for word in text.split() if word and word not in stop_words]
     return ' '.join(words)
-
 
 # --- Gemini API Helper Function ---
 def call_gemini_api(prompt_text, response_schema=None):
@@ -398,7 +402,7 @@ def load_clustering_model(user_id):
         logger.info(f"No K-Means model found for user {user_id}.")
         return None
 
-# ⭐ MODIFIED: get_cluster_keywords_semantic now takes a list of raw texts ⭐
+# ⭐ MODIFIED: get_cluster_keywords_semantic for improved theme naming ⭐
 def get_cluster_keywords_semantic(kmeans_model, journal_texts, num_keywords=5):
     """
     Extracts more meaningful keywords for each cluster based on semantic similarity.
@@ -419,7 +423,6 @@ def get_cluster_keywords_semantic(kmeans_model, journal_texts, num_keywords=5):
             clusters_data[cluster_id].append(text)
         else:
             logger.warning(f"Text index {i} out of bounds for kmeans_model.labels_ (length {len(kmeans_model.labels_)}). Skipping text for keyword extraction.")
-
 
     for cluster_id, texts_in_cluster in clusters_data.items():
         # Initialize top_keywords for this cluster
@@ -455,56 +458,64 @@ def get_cluster_keywords_semantic(kmeans_model, journal_texts, num_keywords=5):
             
             # ⭐ CRITICAL FIX: Ensure cluster_tfidf_sum is a 1D array for argsort ⭐
             # Use .A.flatten() for sparse matrices to ensure it's a 1D numpy array
-            cluster_tfidf_sum_flat = tfidf_matrix_cluster.sum(axis=0).A.flatten()
-            
+            cluster_tfidf_sum_flat = tfidf_matrix_cluster.sum(axis=0).A.flatten() # Corrected line
+
             # Get top N keywords, ensuring they are actual words and not stopwords
             if feature_names.size > 0:
                 top_feature_indices = cluster_tfidf_sum_flat.argsort()[::-1] 
-                top_keywords = [feature_names[idx] for idx in top_feature_indices.tolist() if feature_names[idx] and feature_names[idx] not in stop_words][:num_keywords]
-            else:
-                top_keywords = [] # No features to extract keywords from
-            
-            if not top_keywords:
-                # Fallback if TF-IDF didn't produce keywords but there were non-empty preprocessed texts
-                all_words_in_cluster = ' '.join(texts_in_cluster).lower()
-                all_words_in_cluster = re.sub(r'[^a-z\s]', '', all_words_in_cluster)
-                words_freq = [word for word in all_words_in_cluster.split() if word not in stop_words]
-                if words_freq:
-                    top_keywords = [word for word, count in Counter(words_freq).most_common(num_keywords)]
-                else:
-                    top_keywords = ["general"] # Default if absolutely no words are found
+                # Filter for nouns and adjectives for more descriptive names
+                pos_tagged_keywords = nltk.pos_tag(feature_names[top_feature_indices].tolist())
+                descriptive_keywords = [
+                    word for word, tag in pos_tagged_keywords 
+                    if tag.startswith('N') or tag.startswith('J') # Nouns (NN, NNS, NNP, NNPS) or Adjectives (JJ, JJR, JJS)
+                    and word not in stop_words
+                ][:num_keywords]
+                
+                if not descriptive_keywords:
+                    # Fallback to general keywords if no descriptive ones found
+                    descriptive_keywords = [feature_names[idx] for idx in top_feature_indices.tolist() if feature_names[idx] and feature_names[idx] not in stop_words][:num_keywords]
 
-            cluster_themes[f"Theme {cluster_id+1}"] = top_keywords
+                if descriptive_keywords:
+                    # Form a more descriptive theme name
+                    theme_name = ", ".join(descriptive_keywords[:2]) # Take top 2 for conciseness
+                    if len(descriptive_keywords) > 2:
+                        theme_name += "..." # Indicate more keywords if available
+                    
+                    if not theme_name: # Fallback if theme_name is empty after processing
+                        theme_name = f"General Theme {cluster_id+1}"
+                else:
+                    theme_name = f"General Theme {cluster_id+1}" # Final fallback
+
+                cluster_themes[f"Theme {cluster_id+1}"] = theme_name # Store as a single string
+            else:
+                cluster_themes[f"Theme {cluster_id+1}"] = f"General Theme {cluster_id+1}" # No features, use generic
+
 
         except Exception as e: # Catch any other unexpected errors during TF-IDF or keyword extraction
-            cluster_themes[f"Theme {cluster_id+1}"] = ["Error extracting keywords"]
+            cluster_themes[f"Theme {cluster_id+1}"] = f"Error Theme {cluster_id+1}" # Fallback on error
             logger.error(f"An unexpected error occurred during keyword extraction for cluster {cluster_id+1}: {e}", exc_info=True)
-
-
+            
     return cluster_themes
-
 
 # --- NEW ENDPOINT for Journal Clustering ---
 @app.route('/cluster_journal_entries', methods=['POST'])
 def cluster_journal_entries_endpoint():
     data = request.json
     user_id = data.get('userId')
-    # ⭐ CORRECTED: Expect 'journalTexts' (list of strings) instead of 'journalEntries' ⭐
     journal_texts = data.get('journalTexts', []) 
     n_clusters = data.get('nClusters', 5)
 
-    if not user_id or not journal_texts: # Check against journal_texts
+    if not user_id or not journal_texts: 
         return jsonify({"error": "User ID and journal texts are required for clustering."}), 400
 
     # Check if enough entries for clustering
-    if len(journal_texts) < n_clusters: # Check against journal_texts
-        # Adjust n_clusters if it's greater than the number of available texts
+    if len(journal_texts) < n_clusters: 
         n_clusters = len(journal_texts) 
-        if n_clusters < 2: # Ensure at least 2 clusters if possible
+        if n_clusters < 2: 
             return jsonify({"error": "You need at least 2 journal entries to perform clustering."}), 400
         logger.warning(f"Adjusting n_clusters to {n_clusters} as it was greater than the number of entries.")
 
-    if len(journal_texts) < 2: # Check against journal_texts
+    if len(journal_texts) < 2: 
         return jsonify({"error": "You need at least 2 journal entries to perform clustering."}), 400
     
     if sentence_model is None:
@@ -527,7 +538,7 @@ def cluster_journal_entries_endpoint():
 
         response = {
             "numClusters": kmeans_model.n_clusters,
-            "clusterThemes": cluster_themes,
+            "clusterThemes": cluster_themes, # This will now be a dict of cluster_id -> descriptive name string
             "entryClusters": entry_clusters
         }
         logger.info(f"Clustering completed for user {user_id}. Found {kmeans_model.n_clusters} clusters.")
@@ -606,8 +617,15 @@ def analyze_journal():
 
 
 if __name__ == '__main__':
-    logger.info("\nAPI Ready! Access at http://127.0.0.1:5000/analyze_journal")
-    logger.info("Anomaly Detection available at http://127.0.0.1:5000/anomaly_detection")
-    logger.info("Reflection Generation available at http://127.0.0.1:5000/generate_reflection")
-    logger.info("Journal Clustering available at http://127.0.0.1:5000/cluster_journal_entries")
+    # Ensure NLTK data is downloaded on startup
+    try:
+        nltk.download('stopwords')
+        nltk.download('wordnet')
+        nltk.download('punkt') # Added punkt
+        nltk.download('averaged_perceptron_tagger')
+        nltk.download('averaged_perceptron_tagger_eng') # Explicitly download this one
+        logger.info("NLTK essential data downloaded successfully on startup.")
+    except Exception as e:
+        logger.error(f"Failed to download NLTK data on startup: {e}")
+
     app.run(debug=True, port=5000)

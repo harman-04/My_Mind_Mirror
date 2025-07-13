@@ -1,153 +1,156 @@
-// In src/components/JournalClusters.js
+// src/components/JournalClusters.js
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import axios from 'axios';
+import { useTheme } from '../contexts/ThemeContext';
 
-function JournalClusters({ userId, onClusteringComplete, journalEntries, currentClusterResults }) {
+function JournalClusters({ userId, onClusteringComplete, journalEntries, currentClusterResults, onFilterCluster }) {
+    const [numClusters, setNumClusters] = useState(3); // Default to 3 clusters
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
-    const [numClusters, setNumClusters] = useState(5); // Default number of clusters
+    const [successMessage, setSuccessMessage] = useState('');
+    const { theme } = useTheme();
 
-    useEffect(() => {
-        console.log("JournalClusters prop 'currentClusterResults' changed:", currentClusterResults);
-    }, [currentClusterResults]);
-
-    useEffect(() => {
-        if (currentClusterResults) {
-            console.log("Cluster results are present:");
-            console.log("   numClusters:", currentClusterResults.numClusters);
-            console.log("   clusterThemes:", currentClusterResults.clusterThemes);
-            console.log("   entryClusters:", currentClusterResults.entryClusters);
-            if (currentClusterResults.clusterThemes) {
-                console.log("   Keys in clusterThemes:", Object.keys(currentClusterResults.clusterThemes));
-                console.log("   Length of clusterThemes keys:", Object.keys(currentClusterResults.clusterThemes).length);
-            }
-        } else {
-            console.log("Cluster results are NULL or UNDEFINED.");
-        }
-    }, [currentClusterResults]);
-
-    const handleCluster = async () => {
+    const handleFindMyTheme = async () => {
         setLoading(true);
         setError('');
+        setSuccessMessage('');
+
+        if (!userId) {
+            setError('User ID is not available. Please log in again.');
+            setLoading(false);
+            return;
+        }
+
+        if (!journalEntries || journalEntries.length < 2) {
+            setError('You need at least 2 journal entries to perform clustering.');
+            setLoading(false);
+            return;
+        }
 
         const token = localStorage.getItem('jwtToken');
         if (!token) {
-            console.warn("No JWT token found. Proceeding with clustering request.");
-        }
-
-        if (!userId) {
-            setError('User ID not available for clustering.');
+            setError('Authentication token missing. Please log in again.');
             setLoading(false);
             return;
         }
 
-        const effectiveNumClusters = Math.min(numClusters, journalEntries.length);
-        if (journalEntries.length < 2 || effectiveNumClusters < 2) {
-            setError('You need at least 2 journal entries to find themes. Keep writing!');
-            setLoading(false);
-            return;
-        }
-
-        const rawJournalTexts = journalEntries.map(entry => entry.rawText || entry.content);
-
-        // ⭐ ADDED DEBUGGING LOGS HERE ⭐
-        console.log("--- Debugging Clustering Request ---");
-        console.log("Sending userId:", userId);
-        console.log("Sending numClusters:", effectiveNumClusters);
-        console.log("Sending rawJournalTexts (length):", rawJournalTexts.length);
-        console.log("Sending rawJournalTexts (first 3 entries):", rawJournalTexts.slice(0, 3));
-        console.log("--- End Debugging Clustering Request ---");
-
+        // Extract raw texts from journal entries for the ML service
+        const rawTexts = journalEntries.map(entry => entry.rawText);
 
         try {
             const response = await axios.post(
-                `http://localhost:8080/api/journal/cluster-entries?nClusters=${effectiveNumClusters}`,
+                'http://localhost:5000/cluster_journal_entries', // Flask ML Service URL
+                { userId: userId, journalTexts: rawTexts, nClusters: numClusters },
                 {
-                    userId: userId,
-                    journalTexts: rawJournalTexts 
-                },
-                {
-                    headers: { Authorization: `Bearer ${token}` }
+                    headers: {
+                        Authorization: `Bearer ${token}`,
+                        'Content-Type': 'application/json'
+                    }
                 }
             );
-
-            if (response.data) {
-                if (onClusteringComplete) {
-                    onClusteringComplete(response.data);
-                }
-                console.log("Clustering results received by JournalClusters from API call (response.data):", response.data);
-            } else {
-                setError('Clustering response was empty.');
-            }
+            console.log("Clustering response:", response.data);
+            onClusteringComplete(response.data); // Pass full response including themes and entry clusters
+            setSuccessMessage('Journal themes generated successfully!');
         } catch (err) {
-            console.error('Error during journal clustering:', err.response ? err.response.data : err.message);
-            setError(`Failed to perform clustering. Error: ${err.response?.data?.error || err.message}. Ensure backend services are running and you have enough entries.`);
+            console.error('Error during clustering:', err.response ? err.response.data : err.message);
+            setError(`Failed to generate themes: ${err.response?.data?.error || err.message}. Please ensure the ML service is running.`);
         } finally {
             setLoading(false);
+            setTimeout(() => setSuccessMessage(''), 3000); // Clear success message after 3 seconds
         }
     };
 
-    return (
-        <div className="p-6 rounded-lg bg-white/60 dark:bg-black/40 shadow-inner transition-all duration-500">
-            <h2 className="text-2xl font-poppins font-semibold text-[#B399D4] dark:text-[#5CC8C2] mb-4 text-center">
-                Journal Themes & Clusters
-            </h2>
+    const handleClearFilter = () => {
+        onFilterCluster(null); // Pass null to clear the filter
+    };
 
-            <div className="flex flex-col sm:flex-row items-center justify-center space-y-3 sm:space-y-0 sm:space-x-4 mb-6">
-                <label htmlFor="numClusters" className="font-inter text-gray-700 dark:text-gray-300">
+    return (
+        <div className={`p-6 rounded-lg shadow-md transition-all duration-500 w-full
+                         ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
+            <h3 className="text-2xl font-poppins font-semibold text-[#B399D4] dark:text-[#5CC8C2] mb-4 text-center">
+                Discover Your Journal Themes
+            </h3>
+            <p className="text-gray-700 dark:text-gray-300 mb-4 text-center font-inter">
+                Group your entries into meaningful themes to understand recurring patterns in your thoughts and feelings.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4 mb-6">
+                <label htmlFor="num-clusters" className="text-gray-700 dark:text-gray-300 font-medium font-inter">
                     Number of Themes:
                 </label>
                 <input
                     type="number"
-                    id="numClusters"
+                    id="num-clusters"
                     value={numClusters}
-                    onChange={(e) => setNumClusters(Math.max(2, parseInt(e.target.value) || 2))}
+                    onChange={(e) => setNumClusters(Math.max(2, parseInt(e.target.value) || 2))} // Min 2 clusters
                     min="2"
-                    max={Math.max(2, journalEntries.length)}
-                    className="w-20 p-2 rounded-md border border-gray-300 dark:border-gray-600
-                                bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200
-                                focus:outline-none focus:ring-2 focus:ring-[#B399D4] dark:focus:ring-[#5CC8C2]
-                                font-inter text-center"
+                    max={journalEntries.length > 0 ? journalEntries.length : 10} // Max clusters = num entries or 10
+                    className={`p-2 rounded-lg border focus:outline-none focus:ring-2 w-24 text-center
+                                ${theme === 'dark' ? 'bg-gray-700 text-gray-200 border-gray-600 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
+                    aria-label="Number of clusters"
                 />
                 <button
-                    onClick={handleCluster}
-                    disabled={loading || journalEntries.length < 2 || numClusters > journalEntries.length}
+                    onClick={handleFindMyTheme}
+                    disabled={loading || journalEntries.length < 2}
                     className="py-2 px-6 rounded-full font-poppins font-semibold text-white
-                                bg-[#FF8A7A] hover:bg-[#FF6C5A] active:bg-[#D45E4D]
-                                shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#FF8A7A] focus:ring-opacity-75
-                                transition-all duration-300
-                                disabled:opacity-50 disabled:cursor-not-allowed"
+                               bg-[#B399D4] hover:bg-[#9B7BBF] active:bg-[#7F66A0]
+                               shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#B399D4] focus:ring-opacity-75
+                               transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    {loading ? 'Clustering...' : 'Find My Themes'}
+                    {loading ? 'Generating Themes...' : 'Find My Themes'}
                 </button>
             </div>
 
-            {error && <p className="text-[#FF8A7A] font-inter text-center mb-4">{error}</p>}
-
-            {currentClusterResults && currentClusterResults.clusterThemes && Object.keys(currentClusterResults.clusterThemes).length > 0 ? (
-                <div className="space-y-4 mt-6 p-4 bg-white/70 dark:bg-black/50 rounded-lg shadow-inner">
-                    <p className="font-inter text-gray-700 dark:text-gray-300 text-center text-lg font-medium mb-4">
-                        Your entries are grouped into {currentClusterResults.numClusters} themes:
-                    </p>
-                    {Object.entries(currentClusterResults.clusterThemes).map(([clusterName, keywords], index) => (
-                        <div key={index} className="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md border border-gray-200 dark:border-gray-700 mb-3">
-                            <h3 className="text-lg font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-2">
-                                Theme {index + 1}: <span className="text-[#B399D4] dark:text-[#5CC8C2]">{clusterName}</span>
-                            </h3>
-                            <p className="font-inter text-gray-700 dark:text-gray-300 text-sm">
-                                **Keywords:** {keywords.join(', ')}
-                            </p>
-                        </div>
-                    ))}
+            {error && (
+                <div className="bg-red-100 dark:bg-red-900/40 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded relative mb-4 font-inter" role="alert">
+                    <strong className="font-bold">Error!</strong>
+                    <span className="block sm:inline"> {error}</span>
                 </div>
-            ) : (
-                !loading && !error && journalEntries.length > 0 && (
-                    <p className="font-inter text-gray-700 dark:text-gray-300 text-center mt-6">
-                        Click "Find My Themes" to analyze your journal entries and discover recurring themes.
-                        {journalEntries.length < 2 && <span className="block mt-2"> (You need at least 2 entries for clustering!)</span>}
-                    </p>
-                )
+            )}
+
+            {successMessage && (
+                <div className="bg-green-100 dark:bg-green-900/40 border border-green-400 dark:border-green-700 text-green-700 dark:text-green-300 px-4 py-3 rounded relative mb-4 font-inter" role="alert">
+                    <strong className="font-bold">Success!</strong>
+                    <span className="block sm:inline"> {successMessage}</span>
+                </div>
+            )}
+
+            {currentClusterResults && currentClusterResults.clusterThemes && Object.keys(currentClusterResults.clusterThemes).length > 0 && (
+                <div className="mt-6">
+                    <h4 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">
+                        Your Journal Themes:
+                    </h4>
+                    <div className="flex flex-wrap justify-center gap-3">
+                        {Object.entries(currentClusterResults.clusterThemes).map(([themeKey, themeName]) => {
+                            // Extract cluster ID from "Theme X" key (e.g., "Theme 1" -> 0)
+                            const clusterId = parseInt(themeKey.replace('Theme ', '')) - 1;
+                            return (
+                                <button
+                                    key={clusterId}
+                                    onClick={() => onFilterCluster(clusterId)}
+                                    className={`px-4 py-2 rounded-full font-poppins font-semibold text-sm
+                                                transition-all duration-300 shadow-md
+                                                bg-[#B399D4] text-white hover:bg-[#9B7BBF] active:bg-[#7F66A0]
+                                                dark:bg-[#5CC8C2] dark:text-gray-800 dark:hover:bg-[#47A8A3] dark:active:bg-[#3A8D89]`}
+                                >
+                                    {themeName} {/* Display the descriptive name */}
+                                </button>
+                            );
+                        })}
+                        {currentClusterResults && currentClusterResults.numClusters > 0 && (
+                            <button
+                                onClick={handleClearFilter}
+                                className={`px-4 py-2 rounded-full font-poppins font-semibold text-sm
+                                            transition-all duration-300 shadow-md
+                                            bg-gray-300 text-gray-800 hover:bg-gray-400 active:bg-gray-500
+                                            dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:active:bg-gray-500`}
+                            >
+                                Clear Theme Filter
+                            </button>
+                        )}
+                    </div>
+                </div>
             )}
         </div>
     );

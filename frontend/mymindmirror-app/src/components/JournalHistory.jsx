@@ -36,7 +36,7 @@ const EMOTION_CHART_COLORS = {
     'annoyance': '#E67E22', // Orange-Brown
     'disappointment': '#283747', // Dark Blue-Gray
     'grief': '#17202A',     // Very Dark Blue-Gray
-    'excitement': '#FFD700',      // Gold
+    'excitement': '#FFD700',    // Gold
     'contentment': '#90EE90', // Light Green
     'frustration': '#FF4500', // Orange-Red
     'gratitude': '#ADFF2F',   // Green-Yellow
@@ -71,21 +71,23 @@ const EMOTION_CHART_COLORS_DARK = {
     'hope': '#C0E0FF',
 };
 
-// ⭐ MODIFIED: onEditEntry prop is REMOVED as editing is now local ⭐
-function JournalHistory({ entries, onEntryChange }) {
+function JournalHistory({ entries, onEntryChange, clusterThemes, filterClusterId }) { // ⭐ NEW PROPS ⭐
     const [expandedEntryId, setExpandedEntryId] = useState(null);
-    // ⭐ REINTRODUCED: Local state for editing an entry ⭐
     const [editingEntryId, setEditingEntryId] = useState(null);
     const [editedText, setEditedText] = useState('');
     const [editError, setEditError] = useState('');
-    const [editLoading, setEditLoading] = useState(false); // New loading state for edit
-    // End of reintroduction
+    const [editLoading, setEditLoading] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteEntryId, setDeleteEntryId] = useState(null);
     const { theme } = useTheme();
 
-    // Group entries by date
-    const groupedEntries = entries.reduce((acc, entry) => {
+    // Filter entries based on selected cluster ID
+    const filteredEntries = filterClusterId !== null && filterClusterId !== undefined
+        ? entries.filter(entry => entry.clusterId === filterClusterId)
+        : entries;
+
+    // Group filtered entries by date
+    const groupedEntries = filteredEntries.reduce((acc, entry) => {
         const dateKey = format(parseISO(entry.entryDate), 'EEEE, MMMM dd, yyyy');
         if (!acc[dateKey]) {
             acc[dateKey] = [];
@@ -105,22 +107,19 @@ function JournalHistory({ entries, onEntryChange }) {
 
     const toggleExpand = (id) => {
         setExpandedEntryId(expandedEntryId === id ? null : id);
-        // If collapsing an entry that was being edited, cancel the edit
         if (expandedEntryId === id && editingEntryId === id) {
             handleCancelEdit();
         }
     };
 
-    // ⭐ REIMPLEMENTED: handleEditClick to manage local editing state ⭐
     const handleEditClick = (entry) => {
         console.log("JournalHistory: Initiating edit for entry:", entry);
         setEditingEntryId(entry.id);
-        setEditedText(entry.rawText); // Load the rawText into the textarea
+        setEditedText(entry.rawText);
         setEditError('');
-        setExpandedEntryId(entry.id); // Ensure the entry is expanded for editing
+        setExpandedEntryId(entry.id);
     };
 
-    // ⭐ REIMPLEMENTED: handleSaveEdit to perform PUT request locally ⭐
     const handleSaveEdit = async (entryId) => {
         setEditLoading(true);
         setEditError('');
@@ -131,7 +130,6 @@ function JournalHistory({ entries, onEntryChange }) {
             return;
         }
 
-        // Frontend validation to prevent empty text submission
         if (!editedText.trim()) {
             setEditError('Journal entry cannot be empty. Please enter some text.');
             setEditLoading(false);
@@ -140,15 +138,15 @@ function JournalHistory({ entries, onEntryChange }) {
 
         try {
             console.log(`JournalHistory: Sending UPDATE request for ID: ${entryId} with text: "${editedText}"`);
-            await axios.put(`http://localhost:8080/api/journal/${entryId}`,
-                { text: editedText }, // ⭐ IMPORTANT: Send as 'text' to match backend DTO ⭐
+            await axios.put(`http://localhost:8080/api/journal/${entryId}`, 
+                { text: editedText },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             console.log('JournalHistory: Entry updated successfully.');
-            setEditingEntryId(null); // Exit editing mode
-            setEditedText(''); // Clear editedText state on successful save
+            setEditingEntryId(null);
+            setEditedText('');
             setEditError('');
-            onEntryChange(); // Re-fetch entries to update the list and analysis
+            onEntryChange();
         } catch (err) {
             console.error('JournalHistory: Error updating journal entry:', err.response ? err.response.data : err.message);
             setEditError('Failed to update entry. Please try again.');
@@ -157,7 +155,6 @@ function JournalHistory({ entries, onEntryChange }) {
         }
     };
 
-    // ⭐ REIMPLEMENTED: handleCancelEdit to clear local editing state ⭐
     const handleCancelEdit = () => {
         console.log("JournalHistory: Cancelling edit.");
         setEditingEntryId(null);
@@ -183,7 +180,7 @@ function JournalHistory({ entries, onEntryChange }) {
             await axios.delete(`http://localhost:8080/api/journal/${deleteEntryId}`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            onEntryChange(); // Re-fetch entries to update the list
+            onEntryChange();
         } catch (err) {
             console.error('Error deleting journal entry:', err.response ? err.response.data : err.message);
             console.error('Failed to delete entry. Please try again.');
@@ -222,7 +219,7 @@ function JournalHistory({ entries, onEntryChange }) {
             emotions = typeof emotionsData === 'string' ? JSON.parse(emotionsData) : emotionsData;
         } catch (e) {
             console.error("Error parsing emotions data in JournalHistory:", e);
-            return null; // Return null if parsing fails
+            return null;
         }
 
         if (!emotions || Object.keys(emotions).length === 0) {
@@ -288,10 +285,12 @@ function JournalHistory({ entries, onEntryChange }) {
         cutout: '60%',
     };
 
-    if (entries.length === 0) {
+    if (filteredEntries.length === 0) { // Check filteredEntries
         return (
-            <div className="text-center py-8 text-gray-700 dark:text-gray-300 font-inter">
-                No journal entries yet. Start writing your first reflection!
+            <div className="text-center py-8 text-gray-700 dark:text-gray-300 font-inter w-full">
+                {filterClusterId !== null && filterClusterId !== undefined
+                    ? `No entries found for the selected theme: "${clusterThemes?.[`Theme ${filterClusterId + 1}`] || `Theme ${filterClusterId + 1}`}".`
+                    : "No journal entries yet. Start writing your first reflection!"}
             </div>
         );
     }
@@ -310,24 +309,29 @@ function JournalHistory({ entries, onEntryChange }) {
     };
 
     return (
-        <div className="font-inter">
+        <div className="font-inter w-full">
             {sortedDates.map(dateKey => (
-                <div key={dateKey} className="mb-8 last:mb-0">
+                <div key={dateKey} className="mb-8 last:mb-0 w-full">
                     <h3 className="text-xl font-poppins font-semibold text-gray-700 dark:text-gray-300 mb-4 pb-2 border-b border-gray-300 dark:border-gray-600">
                         {dateKey}
                     </h3>
                     {groupedEntries[dateKey].map(entry => {
-                        const parsedEmotions = entry.emotions && typeof entry.emotions === 'string' ? JSON.parse(entry.emotions) : entry.emotions;
-                        const parsedCoreConcerns = entry.coreConcerns && typeof entry.coreConcerns === 'string' ? JSON.parse(entry.coreConcerns) : entry.coreConcerns;
-                        const parsedGrowthTips = entry.growthTips && typeof entry.growthTips === 'string' ? JSON.parse(entry.growthTips) : entry.growthTips;
+                        const parsedEmotions = entry.emotions && typeof entry.emotions === 'string' ? JSON.parse(entry.emotions) : (entry.emotions || {});
+                        const parsedCoreConcerns = entry.coreConcerns && typeof entry.coreConcerns === 'string' ? JSON.parse(entry.coreConcerns) : (entry.coreConcerns || []);
+                        const parsedGrowthTips = entry.growthTips && typeof entry.growthTips === 'string' ? JSON.parse(entry.growthTips) : (entry.growthTips || []);
                         const parsedKeyPhrases = Array.isArray(entry.keyPhrases) ? entry.keyPhrases : [];
 
                         const chartDataForEntry = getEmotionChartData(parsedEmotions);
 
-                        return (
-                            <div key={entry.id} className={`p-4 rounded-lg shadow-md mb-4
-                                ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
+                        // ⭐ Get descriptive theme name ⭐
+                        const themeName = entry.clusterId !== null && entry.clusterId !== undefined && clusterThemes
+                            ? clusterThemes[`Theme ${entry.clusterId + 1}`] || `Theme ${entry.clusterId + 1}`
+                            : 'Unassigned';
 
+                        return (
+                            <div key={entry.id} className={`p-4 rounded-lg shadow-md mb-4 w-full
+                                ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
+                                
                                 <div className="flex justify-between items-center cursor-pointer" onClick={() => toggleExpand(entry.id)}>
                                     <h4 className="text-lg font-poppins font-semibold text-gray-800 dark:text-gray-200">
                                         {entry.creationTimestamp ? format(parseISO(entry.creationTimestamp), 'p') : 'N/A'}
@@ -338,7 +342,7 @@ function JournalHistory({ entries, onEntryChange }) {
                                         </span>
                                         {entry.clusterId !== null && entry.clusterId !== undefined && (
                                             <span className="font-inter text-xs text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-full">
-                                                Theme: {entry.clusterId + 1}
+                                                Theme: {themeName} {/* Display descriptive theme name */}
                                             </span>
                                         )}
                                         <svg
@@ -358,12 +362,11 @@ function JournalHistory({ entries, onEntryChange }) {
                                 {expandedEntryId === entry.id && (
                                     <div className="mt-4 border-t border-white/20 dark:border-white/10 pt-4">
                                         {editingEntryId === entry.id ? (
-                                            // ⭐ In-place editing form ⭐
                                             <div>
                                                 <textarea
                                                     value={editedText}
                                                     onChange={(e) => setEditedText(e.target.value)}
-                                                    className={`w-full p-2 rounded border resize-y min-h-[100px]
+                                                    className={`w-full p-2 rounded border resize-y min-h-[100px] 
                                                                 ${theme === 'dark' ? 'bg-gray-700 text-gray-200 border-gray-600' : 'bg-gray-50 text-gray-800 border-gray-300'}`}
                                                     aria-label="Edit Journal Entry"
                                                 ></textarea>
@@ -387,7 +390,6 @@ function JournalHistory({ entries, onEntryChange }) {
                                                 </div>
                                             </div>
                                         ) : (
-                                            // ⭐ Display mode ⭐
                                             <>
                                                 <p className="text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap mb-3">
                                                     {entry.rawText}
@@ -395,7 +397,7 @@ function JournalHistory({ entries, onEntryChange }) {
 
                                                 <div className="mt-2 text-sm text-gray-700 dark:text-gray-300">
                                                     <p><strong>Mood Score:</strong> <span className="font-semibold text-[#B399D4] dark:text-[#5CC8C2]">{entry.moodScore ? entry.moodScore.toFixed(2) : 'N/A'}</span></p>
-
+                                                    
                                                     {parsedEmotions && Object.keys(parsedEmotions).length > 0 && (
                                                         <div className="mt-2">
                                                             <strong>Emotions:</strong>
@@ -488,8 +490,9 @@ function JournalHistory({ entries, onEntryChange }) {
             ))}
 
             {showDeleteConfirm && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl text-center">
+                <div className="fixed inset-0 flex items-center justify-center z-50 overflow-hidden">
+                    <div className="absolute inset-0 bg-gray-900 bg-opacity-70 backdrop-blur-sm"></div>
+                    <div className="relative bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl text-center max-w-sm w-full mx-auto my-auto">
                         <p className="text-lg font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4">
                             Are you sure you want to delete this entry? This action cannot be undone.
                         </p>

@@ -7,6 +7,7 @@ import AnomalyAlerts from '../components/AnomalyAlerts';
 import TodayDashboard from '../components/TodayDashboard';
 import WeeklyDashboard from '../components/WeeklyDashboard';
 import OverallDashboard from '../components/OverallDashboard';
+import JournalSearch from '../components/JournalSearch';
 import { useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 import { format, subDays, startOfWeek, endOfWeek, isSameDay, parseISO } from 'date-fns';
@@ -19,7 +20,6 @@ function JournalPage() {
     const [userId, setUserId] = useState(null);
     const [currentClusterResults, setCurrentClusterResults] = useState(null);
     const [activeTab, setActiveTab] = useState('today');
-    // ⭐ REMOVED: editingEntry state is no longer managed here ⭐
     const navigate = useNavigate();
 
     // Function to fetch journal entries and mood data
@@ -33,7 +33,7 @@ function JournalPage() {
         try {
             const decodedToken = jwtDecode(token);
             setUsername(decodedToken.sub);
-            setUserId(decodedToken.userId);
+            setUserId(decodedToken.userId); 
         } catch (decodeError) {
             console.error("Error decoding JWT:", decodeError);
             localStorage.removeItem('jwtToken');
@@ -73,20 +73,17 @@ function JournalPage() {
     const handleClusteringComplete = (results) => {
         console.log("handleClusteringComplete called with results:", results);
         setCurrentClusterResults(results);
-        // Refresh entries after clustering to show updated cluster IDs
         setTimeout(() => {
-            fetchJournalData();
+            fetchJournalData(); 
         }, 0);
     };
-
-    // ⭐ REMOVED: handleEditEntry and handleCancelEdit are no longer needed here ⭐
 
     // The most recent entry overall (for TodaysReflection and DailyEmotionSnapshot)
     const latestEntryForDashboard = journalEntries.length > 0 ? journalEntries[0] : null;
 
     // Filter entries for "Today" tab
     const today = new Date();
-    const todayEntries = journalEntries.filter(entry =>
+    const todayEntries = journalEntries.filter(entry => 
         isSameDay(parseISO(entry.entryDate), today)
     );
 
@@ -101,8 +98,8 @@ function JournalPage() {
     if (loading) {
         return (
             <div className="w-full max-w-4xl flex-grow p-6 rounded-xl
-                                bg-white/70 dark:bg-black/30 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/10
-                                transition-all duration-500 flex items-center justify-center font-inter text-lg">
+                            bg-white/70 dark:bg-black/30 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/10
+                            transition-all duration-500 flex items-center justify-center font-inter text-lg">
                 Loading your journal...
             </div>
         );
@@ -111,15 +108,15 @@ function JournalPage() {
     if (error) {
         return (
             <div className="w-full max-w-4xl flex-grow p-6 rounded-xl
-                                bg-white/70 dark:bg-black/30 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/10
-                                transition-all duration-500 flex flex-col items-center justify-center font-inter text-lg text-[#FF8A7A]">
+                            bg-white/70 dark:bg-black/30 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/10
+                            transition-all duration-500 flex flex-col items-center justify-center font-inter text-lg text-[#FF8A7A]">
                 <p>{error}</p>
-                <button
-                    onClick={handleLogout}
+                <button 
+                    onClick={handleLogout} 
                     className="mt-4 py-2 px-4 rounded-full font-poppins font-semibold text-white
-                                 bg-[#FF8A7A] hover:bg-[#FF6C5A] active:bg-[#D45E4D]
-                                 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#FF8A7A] focus:ring-opacity-75
-                                 transition-all duration-300"
+                               bg-[#FF8A7A] hover:bg-[#FF6C5A] active:bg-[#D45E4D]
+                               shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#FF8A7A] focus:ring-opacity-75
+                               transition-all duration-300"
                 >
                     Logout
                 </button>
@@ -129,63 +126,72 @@ function JournalPage() {
 
     return (
         <div className="min-h-screen flex flex-col items-center p-2 sm:p-4
-                             bg-gradient-to-br from-[#F8F9FA] to-[#E0E0E0]
-                             dark:from-[#1E1A3E] dark:to-[#3A355C]
-                             text-gray-800 dark:text-gray-200">
-
+                         bg-gradient-to-br from-[#F8F9FA] to-[#E0E0E0]
+                         dark:from-[#1E1A3E] dark:to-[#3A355C]
+                         text-gray-800 dark:text-gray-200">
+            
             <main className="w-full max-w-4xl flex-grow p-4 sm:p-6 rounded-xl
-                                     bg-white/70 dark:bg-black/30 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/10
-                                     transition-all duration-500 flex flex-col space-y-6 sm:space-y-8">
-
-                {/* JournalInput is now ONLY for new entries */}
+                                 bg-white/70 dark:bg-black/30 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/10
+                                 transition-all duration-500 flex flex-col space-y-6 sm:space-y-8">
+                
                 <JournalInput onNewEntry={fetchJournalData} />
 
-                <AnomalyAlerts />
+                <AnomalyAlerts /> 
 
                 {/* Tab Navigation */}
-                <div className="flex justify-center space-x-2 sm:space-x-4 mb-6">
+                <div className="flex justify-center space-x-2 sm:space-x-4 mb-6 flex-wrap">
                     <button
                         onClick={() => setActiveTab('today')}
                         className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
-                                         transition-all duration-300 shadow-md
-                                         ${activeTab === 'today'
-                                             ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
-                                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                                         }`}
+                                    transition-all duration-300 shadow-md mb-2 sm:mb-0
+                                    ${activeTab === 'today' 
+                                        ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800' 
+                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                    }`}
                     >
                         Today
                     </button>
                     <button
                         onClick={() => setActiveTab('weekly')}
                         className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
-                                         transition-all duration-300 shadow-md
-                                         ${activeTab === 'weekly'
-                                             ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
-                                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                                         }`}
+                                    transition-all duration-300 shadow-md mb-2 sm:mb-0
+                                    ${activeTab === 'weekly' 
+                                        ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800' 
+                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                    }`}
                     >
                         Weekly Overview
                     </button>
                     <button
                         onClick={() => setActiveTab('all')}
                         className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
-                                         transition-all duration-300 shadow-md
-                                         ${activeTab === 'all'
-                                             ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
-                                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                                         }`}
+                                    transition-all duration-300 shadow-md mb-2 sm:mb-0
+                                    ${activeTab === 'all' 
+                                        ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800' 
+                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                    }`}
                     >
                         All Entries
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('search')}
+                        className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
+                                    transition-all duration-300 shadow-md mb-2 sm:mb-0
+                                    ${activeTab === 'search' 
+                                        ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800' 
+                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                    }`}
+                    >
+                        Search
                     </button>
                 </div>
 
                 {/* Conditional Rendering based on activeTab */}
                 {activeTab === 'today' && (
-                    <TodayDashboard
+                    <TodayDashboard 
                         latestEntry={latestEntryForDashboard}
                         todayEntries={todayEntries}
                         onEntryChange={fetchJournalData}
-                        // ⭐ REMOVED: onEditEntry prop is no longer passed from here ⭐
                     />
                 )}
 
@@ -198,7 +204,6 @@ function JournalPage() {
                         onEntryChange={fetchJournalData}
                         startOfCurrentWeek={startOfCurrentWeek}
                         endOfCurrentWeek={endOfCurrentWeek}
-                        // ⭐ REMOVED: onEditEntry prop is no longer passed from here ⭐
                     />
                 )}
 
@@ -209,7 +214,13 @@ function JournalPage() {
                         onClusteringComplete={handleClusteringComplete}
                         currentClusterResults={currentClusterResults}
                         onEntryChange={fetchJournalData}
-                        // ⭐ REMOVED: onEditEntry prop is no longer passed from here ⭐
+                    />
+                )}
+
+                {activeTab === 'search' && (
+                    <JournalSearch 
+                        userId={userId} 
+                        onEntryChange={fetchJournalData}
                     />
                 )}
             </main>
