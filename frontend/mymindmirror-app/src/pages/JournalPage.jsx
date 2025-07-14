@@ -1,6 +1,6 @@
-// In src/main/java/com/mymindmirror.backend/pages/JournalPage.js
+// src/pages/JournalPage.js
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import JournalInput from '../components/JournalInput';
 import AnomalyAlerts from '../components/AnomalyAlerts';
@@ -8,22 +8,25 @@ import TodayDashboard from '../components/TodayDashboard';
 import WeeklyDashboard from '../components/WeeklyDashboard';
 import OverallDashboard from '../components/OverallDashboard';
 import JournalSearch from '../components/JournalSearch';
+import MilestoneTracker from '../components/MilestoneTracker'; // ⭐ NEW IMPORT ⭐
 import { useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 import { format, subDays, startOfWeek, endOfWeek, isSameDay, parseISO } from 'date-fns';
+import { useTheme } from '../contexts/ThemeContext'; // Assuming you have ThemeContext
 
 function JournalPage() {
     const [journalEntries, setJournalEntries] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [username, setUsername] = useState('');
-    const [userId, setUserId] = useState(null);
+    const [userId, setUserId] = useState(null); // This will hold the UUID string
     const [currentClusterResults, setCurrentClusterResults] = useState(null);
-    const [activeTab, setActiveTab] = useState('today');
+    const [activeTab, setActiveTab] = useState('today'); // 'today', 'weekly', 'all', 'search', 'milestones' ⭐ ADDED 'milestones' ⭐
     const navigate = useNavigate();
+    const { theme } = useTheme(); // Access the theme context
 
     // Function to fetch journal entries and mood data
-    const fetchJournalData = async () => {
+    const fetchJournalData = useCallback(async () => {
         const token = localStorage.getItem('jwtToken');
         if (!token) {
             navigate('/login');
@@ -33,7 +36,7 @@ function JournalPage() {
         try {
             const decodedToken = jwtDecode(token);
             setUsername(decodedToken.sub);
-            setUserId(decodedToken.userId); 
+            setUserId(decodedToken.userId); // Ensure this is the UUID string
         } catch (decodeError) {
             console.error("Error decoding JWT:", decodeError);
             localStorage.removeItem('jwtToken');
@@ -47,7 +50,11 @@ function JournalPage() {
             const response = await axios.get('http://localhost:8080/api/journal/history', {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            setJournalEntries(response.data);
+            // Ensure entries are sorted by creationTimestamp descending for consistency
+            const sortedEntries = response.data.sort((a, b) => 
+                new Date(b.creationTimestamp).getTime() - new Date(a.creationTimestamp).getTime()
+            );
+            setJournalEntries(sortedEntries);
             console.log("Fetched journal entries:", response.data);
         } catch (err) {
             console.error('Error fetching journal data:', err.response ? err.response.data : err.message);
@@ -59,11 +66,11 @@ function JournalPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [navigate]); // Added navigate to useCallback dependencies
 
     useEffect(() => {
         fetchJournalData();
-    }, []);
+    }, [fetchJournalData]);
 
     const handleLogout = () => {
         localStorage.removeItem('jwtToken');
@@ -73,6 +80,9 @@ function JournalPage() {
     const handleClusteringComplete = (results) => {
         console.log("handleClusteringComplete called with results:", results);
         setCurrentClusterResults(results);
+        // This setTimeout with 0ms ensures the fetchJournalData runs after the current render cycle
+        // and allows the cluster results to be set first.
+        // It's a common pattern to ensure state updates are processed before triggering side effects.
         setTimeout(() => {
             fetchJournalData(); 
         }, 0);
@@ -82,14 +92,14 @@ function JournalPage() {
     const latestEntryForDashboard = journalEntries.length > 0 ? journalEntries[0] : null;
 
     // Filter entries for "Today" tab
-    const today = new Date();
+    const todayDate = new Date(); // Renamed to avoid conflict with 'today' tab name
     const todayEntries = journalEntries.filter(entry => 
-        isSameDay(parseISO(entry.entryDate), today)
+        isSameDay(parseISO(entry.entryDate), todayDate)
     );
 
     // Filter entries for "Weekly Overview" tab
-    const startOfCurrentWeek = startOfWeek(today, { weekStartsOn: 0 }); // Sunday as start of week
-    const endOfCurrentWeek = endOfWeek(today, { weekStartsOn: 0 }); // Saturday as end of week
+    const startOfCurrentWeek = startOfWeek(todayDate, { weekStartsOn: 0 }); // Sunday as start of week
+    const endOfCurrentWeek = endOfWeek(todayDate, { weekStartsOn: 0 }); // Saturday as end of week
     const weeklyEntries = journalEntries.filter(entry => {
         const entryDate = parseISO(entry.entryDate);
         return entryDate >= startOfCurrentWeek && entryDate <= endOfCurrentWeek;
@@ -97,9 +107,9 @@ function JournalPage() {
 
     if (loading) {
         return (
-            <div className="w-full max-w-4xl flex-grow p-6 rounded-xl
-                            bg-white/70 dark:bg-black/30 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/10
-                            transition-all duration-500 flex items-center justify-center font-inter text-lg">
+            <div className={`w-full max-w-4xl flex-grow p-6 rounded-xl
+                            ${theme === 'dark' ? 'bg-black/30 text-gray-200 border-white/10' : 'bg-white/70 text-gray-800 border-white/30'}
+                            backdrop-blur-md shadow-lg transition-all duration-500 flex items-center justify-center font-inter text-lg`}>
                 Loading your journal...
             </div>
         );
@@ -107,9 +117,9 @@ function JournalPage() {
 
     if (error) {
         return (
-            <div className="w-full max-w-4xl flex-grow p-6 rounded-xl
-                            bg-white/70 dark:bg-black/30 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/10
-                            transition-all duration-500 flex flex-col items-center justify-center font-inter text-lg text-[#FF8A7A]">
+            <div className={`w-full max-w-4xl flex-grow p-6 rounded-xl
+                            ${theme === 'dark' ? 'bg-black/30 text-[#FF8A7A] border-white/10' : 'bg-white/70 text-[#FF8A7A] border-white/30'}
+                            backdrop-blur-md shadow-lg transition-all duration-500 flex flex-col items-center justify-center font-inter text-lg`}>
                 <p>{error}</p>
                 <button 
                     onClick={handleLogout} 
@@ -125,10 +135,10 @@ function JournalPage() {
     }
 
     return (
-        <div className="min-h-screen flex flex-col items-center p-2 sm:p-4
+        <div className={`min-h-screen flex flex-col items-center p-2 sm:p-4
                          bg-gradient-to-br from-[#F8F9FA] to-[#E0E0E0]
                          dark:from-[#1E1A3E] dark:to-[#3A355C]
-                         text-gray-800 dark:text-gray-200">
+                         text-gray-800 dark:text-gray-200`}>
             
             <main className="w-full max-w-4xl flex-grow p-4 sm:p-6 rounded-xl
                                  bg-white/70 dark:bg-black/30 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/10
@@ -184,6 +194,17 @@ function JournalPage() {
                     >
                         Search
                     </button>
+                    <button
+                        onClick={() => setActiveTab('milestones')} // ⭐ NEW TAB BUTTON ⭐
+                        className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
+                                    transition-all duration-300 shadow-md mb-2 sm:mb-0
+                                    ${activeTab === 'milestones' 
+                                        ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800' 
+                                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                    }`}
+                    >
+                        Milestones & To-Dos
+                    </button>
                 </div>
 
                 {/* Conditional Rendering based on activeTab */}
@@ -222,6 +243,10 @@ function JournalPage() {
                         userId={userId} 
                         onEntryChange={fetchJournalData}
                     />
+                )}
+
+                {activeTab === 'milestones' && ( // ⭐ RENDER MILESTONE TRACKER ⭐
+                    <MilestoneTracker userId={userId} />
                 )}
             </main>
 

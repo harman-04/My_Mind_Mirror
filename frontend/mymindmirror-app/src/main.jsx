@@ -9,12 +9,12 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { BrowserRouter as Router } from 'react-router-dom';
 
 ReactDOM.createRoot(document.getElementById('root')).render(
-  <React.StrictMode>
+  // <React.StrictMode>
     <ThemeProvider>
       {/* 👇 WRAP your App component with Router here! */}
       <Router>
         <App />
       </Router>
     </ThemeProvider>
-  </React.StrictMode>,
+  // </React.StrictMode>,
 );

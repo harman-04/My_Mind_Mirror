@@ -1,3 +1,4 @@
+// src/main/java/com/mymindmirror.backend/repository/UserRepository.java
 package com.mymindmirror.backend.repository;
 
 import com.mymindmirror.backend.model.User;
@@ -27,4 +28,11 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      * @return True if a user with this username exists, false otherwise.
      */
     Boolean existsByUsername(String username);
+
+    /**
+     * Finds a User by their UUID ID.
+     * @param id The UUID of the user to search for.
+     * @return An Optional containing the User if found, or empty if not.
+     */
+    Optional<User> findById(UUID id); // ⭐ NEW METHOD ⭐
 }

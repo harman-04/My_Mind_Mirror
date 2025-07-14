@@ -1,3 +1,4 @@
+// src/main/java/com/mymindmirror.backend/service/UserService.java
 package com.mymindmirror.backend.service;
 
 import com.mymindmirror.backend.model.User;
@@ -8,6 +9,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Optional;
+import java.util.UUID; // ⭐ NEW IMPORT ⭐
 
 /**
  * Service class for managing User-related business logic.
@@ -65,5 +67,15 @@ public class UserService {
     public Optional<User> findByUsername(String username) {
         logger.debug("Attempting to find user by username: {}", username);
         return userRepository.findByUsername(username);
+    }
+
+    /**
+     * Finds a user by their UUID ID.
+     * @param id The UUID of the user to search for.
+     * @return An Optional containing the User if found.
+     */
+    public Optional<User> findById(UUID id) { // ⭐ NEW METHOD ⭐
+        logger.debug("Attempting to find user by ID: {}", id);
+        return userRepository.findById(id);
     }
 }

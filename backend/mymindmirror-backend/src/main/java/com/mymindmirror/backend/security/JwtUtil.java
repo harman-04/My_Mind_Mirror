@@ -1,5 +1,4 @@
-// In src/main/java/com/mymindmirror/backend/security/JwtUtil.java
-
+// src/main/java/com/mymindmirror.backend/security/JwtUtil.java
 package com.mymindmirror.backend.security;
 
 import io.jsonwebtoken.Claims;
@@ -27,7 +26,7 @@ public class JwtUtil {
     @Value("${jwt.secret}")
     private String secret;
 
-    @Value("${jwt.expiration.ms}") // Use .ms as per your provided code
+    @Value("${jwt.expiration.ms}")
     private long expirationMs; // in milliseconds
 
     private Key key;
@@ -38,10 +37,11 @@ public class JwtUtil {
         logger.info("JWT Secret Key initialized.");
     }
 
-    // ⭐ MODIFIED: generateToken now accepts UUID userId ⭐
+    // This method signature is kept as per your existing code for compatibility.
+    // It now correctly adds the provided userId to the claims.
     public String generateToken(UserDetails userDetails, UUID userId) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("userId", userId.toString()); // ⭐ IMPORTANT: Add userId as a claim ⭐
+        claims.put("userId", userId.toString()); // Add userId as a claim
         return createToken(claims, userDetails.getUsername());
     }
 
@@ -50,7 +50,7 @@ public class JwtUtil {
                 .setClaims(claims)
                 .setSubject(subject)
                 .setIssuedAt(new Date(System.currentTimeMillis()))
-                .setExpiration(new Date(System.currentTimeMillis() + expirationMs)) // Use expirationMs
+                .setExpiration(new Date(System.currentTimeMillis() + expirationMs))
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
     }
@@ -68,7 +68,7 @@ public class JwtUtil {
         return extractAllClaims(token).getExpiration();
     }
 
-    // ⭐ NEW METHOD: Method to extract userId from token claims ⭐
+    // Method to extract userId from token claims (crucial for controllers)
     public String extractUserId(String token) {
         return extractAllClaims(token).get("userId", String.class);
     }
@@ -81,8 +81,6 @@ public class JwtUtil {
         return extractExpiration(token).before(new Date());
     }
 
-    // Keep the general validateToken for filter chain if you use it,
-    // but the one with UserDetails is more robust for specific user validation.
     public boolean validateToken(String authToken) {
         try {
             Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(authToken);

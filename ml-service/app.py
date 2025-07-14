@@ -40,7 +40,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 if not GEMINI_API_KEY:
     logger.error("GEMINI_API_KEY environment variable is not set. Gemini API calls will fail.")
 
-# Using gemini-2.0-flash-lite as requested
+# Using gemini-2.5-flash as requested by your existing code
 GEMINI_API_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 HEADERS = {'Content-Type': 'application/json'}
 
@@ -615,17 +615,162 @@ def analyze_journal():
 
     return jsonify(response_data)
 
+# ⭐ NEW FUNCTION: get_gemini_milestone_insights ⭐
+def get_gemini_milestone_insights(milestone_data):
+    """
+    Generates AI-driven insights for a given milestone and its tasks.
+    Args:
+        milestone_data (dict): A dictionary containing milestone and task details.
+                               Expected structure:
+                               {
+                                   "title": "...",
+                                   "description": "...",
+                                   "dueDate": "YYYY-MM-DD" or null,
+                                   "status": "PENDING" | "IN_PROGRESS" | "COMPLETED" | "OVERDUE" | "CANCELLED",
+                                   "completionPercentage": 0-100,
+                                   "tasks": [
+                                       {"description": "...", "dueDate": "YYYY-MM-DD" or null, "status": "PENDING" | "COMPLETED" | "OVERDUE" | "CANCELLED"},
+                                       ...
+                                   ]
+                               }
+    Returns:
+        dict: A dictionary containing various insights, or None if API call fails.
+    """
+    title = milestone_data.get("title", "a goal")
+    description = milestone_data.get("description", "no detailed description.")
+    due_date = milestone_data.get("dueDate")
+    status = milestone_data.get("status", "PENDING")
+    completion_percentage = milestone_data.get("completionPercentage", 0)
+    tasks = milestone_data.get("tasks", [])
+
+    # Format tasks for the prompt
+    tasks_str = ""
+    if tasks:
+        tasks_str = "\nTasks:\n"
+        for i, task in enumerate(tasks):
+            task_desc = task.get("description", "Unnamed task")
+            task_status = task.get("status", "PENDING")
+            task_due = task.get("dueDate", "No due date")
+            tasks_str += f"- {task_desc} (Status: {task_status}, Due: {task_due})\n"
+    else:
+        tasks_str = "No specific tasks defined for this milestone."
+
+    prompt = f"""
+    Analyze the following milestone and its associated tasks to provide comprehensive insights.
+    Focus on:
+    1.  **Remaining Work:** What specific tasks are left, and how much time is remaining if a due date is present.
+    2.  **Performance Assessment:** How well is the user progressing? Are they on track, falling behind, or excelling?
+    3.  **Actionable Tips:** Provide 2-3 practical tips to help the user progress or improve.
+    4.  **Encouragement:** Offer a brief, encouraging statement.
+    5.  **New Task Suggestions:** Suggest 1-2 concrete, next-step tasks to help achieve the goal, especially if it's stalled.
+
+    Milestone Details:
+    Title: {title}
+    Description: {description}
+    Due Date: {due_date if due_date else 'Not set'}
+    Current Status: {status}
+    Completion Percentage: {completion_percentage}%
+    {tasks_str}
+
+    Provide the response as a JSON object with the following structure:
+    {{
+        "remainingWork": "string (summary of what's left)",
+        "performanceAssessment": "string (how they're doing)",
+        "tips": ["string", "string", ...],
+        "encouragement": "string",
+        "suggestedNewTasks": ["string", "string", ...],
+        "status": "string (e.g., 'SUCCESS', 'ERROR', 'PARTIAL')"
+    }}
+    Ensure the "status" field is always included, indicating the success of insight generation.
+    """
+
+    response_schema = {
+        "type": "OBJECT",
+        "properties": {
+            "remainingWork": {"type": "STRING"},
+            "performanceAssessment": {"type": "STRING"},
+            "tips": {"type": "ARRAY", "items": {"type": "STRING"}},
+            "encouragement": {"type": "STRING"},
+            "suggestedNewTasks": {"type": "ARRAY", "items": {"type": "STRING"}},
+            "status": {"type": "STRING"} # ⭐ CRITICAL FIX: Ensure 'status' is defined in the schema ⭐
+        },
+        "required": ["remainingWork", "performanceAssessment", "tips", "encouragement", "suggestedNewTasks", "status"] # ⭐ Ensure it's required ⭐
+    }
+
+    insights = call_gemini_api(prompt, response_schema)
+
+    # ⭐ CRITICAL FIX: Ensure 'status' is populated even if Gemini fails or gives partial response ⭐
+    if insights is None:
+        logger.error("Gemini failed to generate milestone insights. Returning fallback response.")
+        return {
+            "remainingWork": "Unable to determine remaining work.",
+            "performanceAssessment": "Unable to assess performance.",
+            "tips": ["Review milestone details manually.", "Ensure all tasks are updated."],
+            "encouragement": "Keep going! Manual review can also provide clarity.",
+            "suggestedNewTasks": [],
+            "status": "ERROR" # Indicate an error status
+        }
+    
+    # If Gemini returns a response, but misses the status, default it to SUCCESS if other fields are present
+    if "status" not in insights:
+        insights["status"] = "SUCCESS" # Default to SUCCESS if Gemini provides other data but not status
+        logger.warning("Gemini milestone insights response missing 'status' field. Defaulting to 'SUCCESS'.")
+
+    return insights
+
+# ⭐ NEW ENDPOINT: /milestone_insights ⭐
+@app.route('/milestone_insights', methods=['POST'])
+def milestone_insights_endpoint():
+    data = request.json
+    if not data:
+        logger.error("No milestone data provided for insight generation.")
+        return jsonify({
+            "remainingWork": "No data provided.",
+            "performanceAssessment": "No data to assess.",
+            "tips": [],
+            "encouragement": "Please provide milestone data.",
+            "suggestedNewTasks": [],
+            "status": "ERROR" # Added status for this error case
+        }), 400
+
+    try:
+        insights = get_gemini_milestone_insights(data)
+        if insights:
+            return jsonify(insights)
+        else:
+            # This 'else' block will ideally be hit if get_gemini_milestone_insights returns None,
+            # but the function itself now handles the None case by returning an ERROR dict.
+            logger.error("get_gemini_milestone_insights returned None unexpectedly.")
+            return jsonify({
+                "remainingWork": "Failed to generate milestone insights from AI due to an unexpected null response.",
+                "performanceAssessment": "Failed to generate due to an unexpected null response.",
+                "tips": ["Review backend logs.", "Check Gemini API quota."],
+                "encouragement": "We're experiencing a temporary issue. Please try again.",
+                "suggestedNewTasks": [],
+                "status": "ERROR" # Added status for this error case
+            }), 500
+    except Exception as e:
+        logger.error(f"Error generating milestone insights: {e}", exc_info=True)
+        return jsonify({
+            "remainingWork": f"An internal error occurred: {str(e)}",
+            "performanceAssessment": "Failed to generate due to an unexpected error.",
+            "tips": ["Check backend logs for detailed error.", "Ensure all dependencies are installed."],
+            "encouragement": "We encountered an issue. Please try again.",
+            "suggestedNewTasks": [],
+            "status": "ERROR" # Added status for this error case
+        }), 500
+
 
 if __name__ == '__main__':
     # Ensure NLTK data is downloaded on startup
     try:
-        nltk.download('stopwords')
-        nltk.download('wordnet')
-        nltk.download('punkt') # Added punkt
-        nltk.download('averaged_perceptron_tagger')
-        nltk.download('averaged_perceptron_tagger_eng') # Explicitly download this one
+        nltk.download('stopwords', quiet=True) # Added quiet=True for less console spam
+        nltk.download('wordnet', quiet=True)
+        nltk.download('punkt', quiet=True) # Added punkt
+        nltk.download('averaged_perceptron_tagger', quiet=True)
+        nltk.download('averaged_perceptron_tagger_eng', quiet=True) # Explicitly download this one
         logger.info("NLTK essential data downloaded successfully on startup.")
     except Exception as e:
         logger.error(f"Failed to download NLTK data on startup: {e}")
 
-    app.run(debug=True, port=5000)
+    app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False) # use_reloader=False to prevent double loading of models
