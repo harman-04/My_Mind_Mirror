@@ -1,8 +1,7 @@
 // JournalEntryRequest.java
-package com.mymindmirror.backend.payload;
+package com.mymindmirror.backend.payload.request;
 
 import lombok.Data;
-import java.time.LocalDate;
 
 /**
  * DTO for incoming journal entry creation requests from the frontend.

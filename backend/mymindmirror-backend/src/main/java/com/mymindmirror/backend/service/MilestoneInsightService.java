@@ -60,7 +60,7 @@ public class MilestoneInsightService {
         );
 
         return mlServiceWebClient.post()
-                .uri("/milestone_insights") // Endpoint in Flask app.py
+                .uri("/ml/milestone/milestone_insights")// Endpoint in Flask app.py
                 .bodyValue(requestPayload)
                 .retrieve()
                 .bodyToMono(MilestoneInsightResponse.class)

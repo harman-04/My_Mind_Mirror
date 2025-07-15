@@ -13,6 +13,6 @@ import java.util.Map;
 @AllArgsConstructor
 public class ClusterResult {
     private Integer numClusters;
-    private Map<String, List<String>> clusterThemes; // e.g., "Cluster 1": ["work", "stress"]
+    private Map<String, String> clusterThemes; // ⭐ CHANGE THIS LINE from List<String> to String ⭐
     private List<Integer> entryClusters; // List of cluster IDs corresponding to the input entries
 }

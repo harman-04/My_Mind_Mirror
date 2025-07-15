@@ -4,8 +4,9 @@ package com.mymindmirror.backend.controller;
 
 import com.mymindmirror.backend.model.JournalEntry;
 import com.mymindmirror.backend.model.User;
-import com.mymindmirror.backend.payload.JournalEntryRequest;
-import com.mymindmirror.backend.payload.JournalEntryResponse;
+import com.mymindmirror.backend.payload.request.JournalEntryRequest;
+import com.mymindmirror.backend.payload.request.ClusterRequest; // ⭐ NEW IMPORT ⭐
+import com.mymindmirror.backend.payload.response.JournalEntryResponse;
 import com.mymindmirror.backend.payload.MoodDataResponse;
 import com.mymindmirror.backend.payload.ClusterResult;
 import com.mymindmirror.backend.service.JournalService;
@@ -267,21 +268,33 @@ public class JournalController {
      * Triggers journal entry clustering for the authenticated user.
      * This will train/update a personalized clustering model and assign cluster IDs to entries.
      *
-     * @param nClusters The desired number of clusters.
+     * @param clusterRequest The request body containing the desired number of clusters and journal texts.
      * @return A ClusterResult object containing cluster themes and entry-to-cluster mappings.
      */
+    // Inside clusterJournalEntries method
     @PostMapping("/cluster-entries")
     public ResponseEntity<ClusterResult> clusterJournalEntries(
-            @RequestParam(defaultValue = "5") int nClusters) { // Default to 5 clusters
+            @RequestBody ClusterRequest clusterRequest) {
         logger.info("Received request to cluster journal entries for current user.");
+        // This log already exists and is good:
+        logger.info("ClusterRequest received: numClusters={}, userId={}, journalTextsSize={}",
+                clusterRequest.getNClusters(), clusterRequest.getUserId(), clusterRequest.getJournalTexts() != null ? clusterRequest.getJournalTexts().size() : 0);
+
+        // ⭐ ADD THIS NEW LOG HERE ⭐
+        logger.info("NClusters from ClusterRequest before passing to service: {}", clusterRequest.getNClusters());
+
         User currentUser = getCurrentUser();
         try {
-            ClusterResult result = journalService.triggerJournalClustering(currentUser, nClusters);
+            ClusterResult result = journalService.triggerJournalClustering(
+                    currentUser,
+                    clusterRequest.getJournalTexts(),
+                    clusterRequest.getNClusters()
+            );
             return ResponseEntity.ok(result);
         } catch (Exception e) {
             logger.error("Error triggering journal clustering: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    new ClusterResult(0, Collections.emptyMap(), Collections.emptyList()) // Return empty result on error
+                    new ClusterResult(0, Collections.emptyMap(), Collections.emptyList())
             );
         }
     }

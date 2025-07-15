@@ -1,12 +1,13 @@
 // In src/main/java/com/mymindmirror/backend/payload/JournalEntryResponse.java
 
-package com.mymindmirror.backend.payload;
+package com.mymindmirror.backend.payload.response;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mymindmirror.backend.model.JournalEntry;
+import com.mymindmirror.backend.payload.UserResponse;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 

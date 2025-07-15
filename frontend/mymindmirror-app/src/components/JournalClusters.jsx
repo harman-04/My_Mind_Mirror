@@ -38,9 +38,12 @@ function JournalClusters({ userId, onClusteringComplete, journalEntries, current
         // Extract raw texts from journal entries for the ML service
         const rawTexts = journalEntries.map(entry => entry.rawText);
 
+            console.log("Sending clustering request with numClusters:", numClusters);
+
         try {
+            // ⭐ CHANGE: Call Spring Boot backend instead of Flask ML Service directly ⭐
             const response = await axios.post(
-                'http://localhost:5000/cluster_journal_entries', // Flask ML Service URL
+                'http://localhost:8080/api/journal/cluster-entries', // Spring Boot Backend URL
                 { userId: userId, journalTexts: rawTexts, nClusters: numClusters },
                 {
                     headers: {
@@ -49,12 +52,12 @@ function JournalClusters({ userId, onClusteringComplete, journalEntries, current
                     }
                 }
             );
-            console.log("Clustering response:", response.data);
+            console.log("Clustering response from Spring Boot:", response.data);
             onClusteringComplete(response.data); // Pass full response including themes and entry clusters
             setSuccessMessage('Journal themes generated successfully!');
         } catch (err) {
             console.error('Error during clustering:', err.response ? err.response.data : err.message);
-            setError(`Failed to generate themes: ${err.response?.data?.error || err.message}. Please ensure the ML service is running.`);
+            setError(`Failed to generate themes: ${err.response?.data?.message || err.message}. Please ensure the backend services are running.`);
         } finally {
             setLoading(false);
             setTimeout(() => setSuccessMessage(''), 3000); // Clear success message after 3 seconds
@@ -67,7 +70,7 @@ function JournalClusters({ userId, onClusteringComplete, journalEntries, current
 
     return (
         <div className={`p-6 rounded-lg shadow-md transition-all duration-500 w-full
-                         ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
+                             ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
             <h3 className="text-2xl font-poppins font-semibold text-[#B399D4] dark:text-[#5CC8C2] mb-4 text-center">
                 Discover Your Journal Themes
             </h3>
@@ -87,16 +90,16 @@ function JournalClusters({ userId, onClusteringComplete, journalEntries, current
                     min="2"
                     max={journalEntries.length > 0 ? journalEntries.length : 10} // Max clusters = num entries or 10
                     className={`p-2 rounded-lg border focus:outline-none focus:ring-2 w-24 text-center
-                                ${theme === 'dark' ? 'bg-gray-700 text-gray-200 border-gray-600 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
+                                 ${theme === 'dark' ? 'bg-gray-700 text-gray-200 border-gray-600 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
                     aria-label="Number of clusters"
                 />
                 <button
                     onClick={handleFindMyTheme}
                     disabled={loading || journalEntries.length < 2}
                     className="py-2 px-6 rounded-full font-poppins font-semibold text-white
-                               bg-[#B399D4] hover:bg-[#9B7BBF] active:bg-[#7F66A0]
-                               shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#B399D4] focus:ring-opacity-75
-                               transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                                 bg-[#B399D4] hover:bg-[#9B7BBF] active:bg-[#7F66A0]
+                                 shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#B399D4] focus:ring-opacity-75
+                                 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {loading ? 'Generating Themes...' : 'Find My Themes'}
                 </button>
@@ -130,9 +133,9 @@ function JournalClusters({ userId, onClusteringComplete, journalEntries, current
                                     key={clusterId}
                                     onClick={() => onFilterCluster(clusterId)}
                                     className={`px-4 py-2 rounded-full font-poppins font-semibold text-sm
-                                                transition-all duration-300 shadow-md
-                                                bg-[#B399D4] text-white hover:bg-[#9B7BBF] active:bg-[#7F66A0]
-                                                dark:bg-[#5CC8C2] dark:text-gray-800 dark:hover:bg-[#47A8A3] dark:active:bg-[#3A8D89]`}
+                                                 transition-all duration-300 shadow-md
+                                                 bg-[#B399D4] text-white hover:bg-[#9B7BBF] active:bg-[#7F66A0]
+                                                 dark:bg-[#5CC8C2] dark:text-gray-800 dark:hover:bg-[#47A8A3] dark:active:bg-[#3A8D89]`}
                                 >
                                     {themeName} {/* Display the descriptive name */}
                                 </button>
@@ -142,9 +145,9 @@ function JournalClusters({ userId, onClusteringComplete, journalEntries, current
                             <button
                                 onClick={handleClearFilter}
                                 className={`px-4 py-2 rounded-full font-poppins font-semibold text-sm
-                                            transition-all duration-300 shadow-md
-                                            bg-gray-300 text-gray-800 hover:bg-gray-400 active:bg-gray-500
-                                            dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:active:bg-gray-500`}
+                                             transition-all duration-300 shadow-md
+                                             bg-gray-300 text-gray-800 hover:bg-gray-400 active:bg-gray-500
+                                             dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 dark:active:bg-gray-500`}
                             >
                                 Clear Theme Filter
                             </button>

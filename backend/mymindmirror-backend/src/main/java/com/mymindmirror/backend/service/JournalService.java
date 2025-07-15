@@ -21,12 +21,7 @@ import org.hibernate.Hibernate;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -174,7 +169,7 @@ public class JournalService {
         try {
             logger.info("Calling ML service for journal analysis at {}/analyze_journal", mlServiceBaseUrl);
             mlResponse = webClient.post()
-                    .uri("/analyze_journal")
+                    .uri("/ml/journal/analyze_journal")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
@@ -339,7 +334,7 @@ public class JournalService {
                     .collect(Collectors.toList());
 
             Map<String, Object> mlResponse = webClient.post()
-                    .uri("/anomaly_detection")
+                    .uri("/ml/journal/anomaly_detection")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
@@ -358,40 +353,48 @@ public class JournalService {
      * After clustering, it updates the journal entries in the database with their assigned cluster IDs.
      *
      * @param user The user whose journal entries are to be clustered.
+     * @param journalTexts The list of raw journal texts to cluster. ⭐ NEW PARAMETER ⭐
      * @param nClusters The desired number of clusters.
      * @return A ClusterResult object containing cluster themes and entry-to-cluster mappings.
      */
-    public ClusterResult triggerJournalClustering(User user, int nClusters) {
-        logger.info("Triggering journal clustering for user: {} with {} clusters.", user.getUsername(), nClusters);
+    // Inside triggerJournalClustering method
+    public ClusterResult triggerJournalClustering(User user, List<String> journalTexts, Integer nClusters) {
+        logger.info("Triggering journal clustering for user: {} with {} clusters and {} texts.", user.getUsername(), nClusters, journalTexts.size());
+
+        // ⭐ ADD THIS NEW LOG HERE ⭐
+        logger.info("NClusters received in JournalService.triggerJournalClustering: {}", nClusters);
 
         List<JournalEntry> allUserEntries = journalEntryRepository.findByUser(user);
+        allUserEntries.sort(Comparator.comparing(JournalEntry::getCreationTimestamp));
 
         if (allUserEntries.isEmpty()) {
             logger.warn("No journal entries found for user {}. Cannot perform clustering.", user.getUsername());
             return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList());
         }
 
-        String userSecret = user.getPasswordHash();
-        if (userSecret == null || userSecret.isEmpty()) {
-            logger.error("User {} has no password hash. Cannot decrypt journal entries for clustering.", user.getUsername());
-            throw new IllegalStateException("User secret (password hash) not available for decryption for clustering.");
+        // Ensure that the number of journalTexts matches the number of allUserEntries
+        // This is a critical assumption for mapping cluster IDs back.
+        if (journalTexts.size() != allUserEntries.size()) {
+            logger.error("Mismatch in journalTexts size ({}) and allUserEntries size ({}). Cannot reliably assign cluster IDs.", journalTexts.size(), allUserEntries.size());
+            // You might want to throw an exception or return an error result here.
+            // For now, we'll proceed but log the warning.
         }
-
-        // Decrypt raw texts before sending to Flask for clustering
-        List<String> rawTexts = allUserEntries.stream()
-                .map(entry -> EncryptionUtil.decrypt(entry.getRawText(), userSecret))
-                .collect(Collectors.toList());
 
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("userId", user.getId().toString());
-        requestBody.put("journalTexts", rawTexts);
-        requestBody.put("nClusters", nClusters);
+        requestBody.put("journalTexts", journalTexts);
+        requestBody.put("nClusters", nClusters); // This is the value being put into the request body
+        // ⭐ ADD THIS NEW LOG HERE ⭐
+        logger.info("NClusters being put into Flask requestBody: {}", requestBody.get("nClusters"));
 
         ClusterResult clusterResult = null;
         try {
+            String requestBodyJson = objectMapper.writeValueAsString(requestBody);
+            logger.info("Sending ML service clustering request: {}", requestBodyJson); // Log the actual JSON being sent
+
             logger.info("Calling ML service for journal clustering at {}/cluster_journal_entries", mlServiceBaseUrl);
             clusterResult = webClient.post()
-                    .uri("/cluster_journal_entries")
+                    .uri("/ml/journal/cluster_journal_entries")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(ClusterResult.class)
@@ -399,19 +402,28 @@ public class JournalService {
             logger.info("ML service for journal clustering responded successfully.");
 
             if (clusterResult != null && clusterResult.getEntryClusters() != null && !clusterResult.getEntryClusters().isEmpty()) {
-                for (int i = 0; i < allUserEntries.size(); i++) {
-                    JournalEntry entry = allUserEntries.get(i);
-                    entry.setClusterId(clusterResult.getEntryClusters().get(i));
-                    journalEntryRepository.save(entry);
+                // Ensure the sizes match before attempting to update.
+                // If they don't, it indicates a problem in the ML service or data preparation.
+                if (clusterResult.getEntryClusters().size() == allUserEntries.size()) {
+                    for (int i = 0; i < allUserEntries.size(); i++) {
+                        JournalEntry entry = allUserEntries.get(i);
+                        entry.setClusterId(clusterResult.getEntryClusters().get(i));
+                        journalEntryRepository.save(entry);
+                    }
+                    logger.info("Updated {} journal entries with cluster IDs.", allUserEntries.size());
+                } else {
+                    logger.error("Mismatch between number of entries ({}) and cluster IDs received ({}). Cannot reliably assign cluster IDs.", allUserEntries.size(), clusterResult.getEntryClusters().size());
                 }
-                logger.info("Updated {} journal entries with cluster IDs.", allUserEntries.size());
             } else {
                 logger.warn("Clustering result from ML service was empty or malformed. No entries updated with cluster IDs.");
             }
 
+        } catch (JsonProcessingException e) {
+            logger.error("Error serializing clustering request body: {}", e.getMessage(), e);
+            throw new RuntimeException("Failed to serialize clustering request.", e);
         } catch (Exception e) {
-            logger.error("Failed to call ML service for journal clustering or received error: {}", e.getMessage(), e);
-            return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList());
+            logger.error("Error during ML service call for clustering: {}", e.getMessage(), e);
+            return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList()); // Return empty result on error
         }
         return clusterResult;
     }
@@ -445,7 +457,7 @@ public class JournalService {
         List<JournalEntry> entries = journalEntryRepository.findByUserAndRawTextContainingKeyword(user, keyword);
 
         String userSecret = user.getPasswordHash();
-        if (userSecret == null || userSecret.isEmpty()) {
+        if (userSecret == null || userSecret == null || userSecret.isEmpty()) {
             logger.error("User {} has no password hash. Cannot decrypt journal entries for keyword search.", user.getUsername());
         }
 
