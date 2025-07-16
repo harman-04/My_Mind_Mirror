@@ -35,4 +35,6 @@ public interface UserRepository extends JpaRepository<User, UUID> {
      * @return An Optional containing the User if found, or empty if not.
      */
     Optional<User> findById(UUID id); // ⭐ NEW METHOD ⭐
+
+
 }

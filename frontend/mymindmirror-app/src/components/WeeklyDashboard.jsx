@@ -1,23 +1,22 @@
-
 // src/components/WeeklyDashboard.js
-import React, { useState } from 'react'; // ⭐ Added useState ⭐
+import React, { useState } from 'react';
 import MoodChart from './MoodChart';
 import AverageEmotionChart from './AverageEmotionChart';
 import ConcernFrequencyChart from './ConcernFrequencyChart';
 import JournalClusters from './JournalClusters';
-import JournalHistory from './JournalHistory';
+import JournalHistory from './JournalHistory'; // Assuming JournalHistory handles its own mutations now
 import { format } from 'date-fns';
 
+// ⭐ MODIFIED: Removed onEntryChange prop ⭐
 function WeeklyDashboard({
     weeklyEntries,
     userId,
     onClusteringComplete,
     currentClusterResults,
-    onEntryChange,
     startOfCurrentWeek,
     endOfCurrentWeek
 }) {
-    const [filterClusterId, setFilterClusterId] = useState(null); // ⭐ NEW STATE ⭐
+    const [filterClusterId, setFilterClusterId] = useState(null);
 
     const handleFilterCluster = (clusterId) => {
         setFilterClusterId(clusterId);
@@ -44,15 +43,15 @@ function WeeklyDashboard({
                 onClusteringComplete={onClusteringComplete}
                 journalEntries={weeklyEntries}
                 currentClusterResults={currentClusterResults}
-                onFilterCluster={handleFilterCluster} 
+                onFilterCluster={handleFilterCluster}
             />
             <div className="bg-white/60 dark:bg-black/40 p-4 sm:p-6 rounded-lg shadow-inner transition-all duration-500 w-full">
                 <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">All Weekly Entries</h3>
-                <JournalHistory 
-                    entries={weeklyEntries} 
-                    onEntryChange={onEntryChange} 
-                    clusterThemes={currentClusterResults?.clusterThemes} 
-                    filterClusterId={filterClusterId} 
+                {/* ⭐ MODIFIED: Removed onEntryChange prop from JournalHistory ⭐ */}
+                <JournalHistory
+                    entries={weeklyEntries}
+                    clusterThemes={currentClusterResults?.clusterThemes}
+                    filterClusterId={filterClusterId}
                 />
             </div>
         </div>

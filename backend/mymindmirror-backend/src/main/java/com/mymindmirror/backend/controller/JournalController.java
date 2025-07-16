@@ -71,7 +71,7 @@ public class JournalController {
         logger.info("Received request to create journal entry.");
         try {
             User currentUser = getCurrentUser();
-            JournalEntry savedEntry = journalService.saveJournalEntry(currentUser, request.getText());
+            JournalEntry savedEntry = journalService.saveJournalEntry(currentUser, request.getRawText());
             logger.info("New journal entry saved successfully for user {}.", currentUser.getUsername());
             return ResponseEntity.status(HttpStatus.CREATED).body(new JournalEntryResponse(savedEntry));
         } catch (IllegalArgumentException e) {
@@ -97,7 +97,7 @@ public class JournalController {
         logger.info("Received request to update journal entry with ID: {}", id);
         try {
             User currentUser = getCurrentUser();
-            JournalEntry updatedEntry = journalService.updateJournalEntry(id, currentUser, request.getText());
+            JournalEntry updatedEntry = journalService.updateJournalEntry(id, currentUser, request.getRawText());
             logger.info("Journal entry with ID {} updated successfully for user {}.", id, currentUser.getUsername());
             return ResponseEntity.ok(new JournalEntryResponse(updatedEntry));
         } catch (IllegalArgumentException e) {

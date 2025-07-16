@@ -1,5 +1,3 @@
-// src/main/java/com/mymindmirror.backend/service/JournalService.java
-
 package com.mymindmirror.backend.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -49,8 +47,7 @@ public class JournalService {
     }
 
     /**
-     * Saves a new journal entry. Each call creates a distinct entry.
-     * Orchestrates the call to the Flask ML service for AI analysis.
+     * Saves a new journal entry. Always triggers AI analysis for new entries.
      * @param user The authenticated user creating the entry.
      * @param rawText The raw journal text provided by the user.
      * @return The saved JournalEntry entity with AI analysis results.
@@ -68,21 +65,27 @@ public class JournalService {
         newEntry.setUser(user);
         newEntry.setEntryDate(LocalDate.now());
         newEntry.setCreationTimestamp(LocalDateTime.now());
+        newEntry.setClusterId(null); // New entries don't have a cluster ID initially
 
-        String encryptedText = EncryptionUtil.encrypt(rawText, userSecret);
+        String actualRawText = (rawText != null) ? rawText : ""; // Ensure actualRawText is never null
+
+        logger.info("JournalService.saveJournalEntry: actualRawText before encryption: '{}' (length: {})",
+                actualRawText, actualRawText.length());
+        logger.info("JournalService.saveJournalEntry: actualRawText.trim().isEmpty(): {}", actualRawText.trim().isEmpty());
+
+
+        String encryptedText = EncryptionUtil.encrypt(actualRawText, userSecret);
         if (encryptedText == null) {
             logger.error("Failed to encrypt journal entry for user {}. Saving raw text unencrypted.", user.getUsername());
-            newEntry.setRawText(rawText);
+            newEntry.setRawText(actualRawText); // Fallback to actualRawText (guaranteed non-null, possibly empty)
         } else {
             newEntry.setRawText(encryptedText);
         }
 
-        newEntry.setClusterId(null);
-
-        if (rawText != null && !rawText.trim().isEmpty()) {
-            processAiAnalysis(rawText, newEntry);
+        if (!actualRawText.trim().isEmpty()) {
+            processAiAnalysis(actualRawText, newEntry);
         } else {
-            logger.warn("Raw text is empty for new entry. Skipping AI analysis.");
+            logger.warn("Raw text is empty for new entry. Skipping AI analysis and resetting fields.");
             resetAiFields(newEntry);
         }
 
@@ -93,7 +96,7 @@ public class JournalService {
 
     /**
      * Updates an existing journal entry.
-     * Re-runs AI analysis on the updated text.
+     * Re-runs AI analysis only if the raw text content has changed.
      * @param entryId The ID of the entry to update.
      * @param user The authenticated user (for ownership check).
      * @param updatedText The new raw text for the entry.
@@ -116,21 +119,35 @@ public class JournalService {
             throw new IllegalStateException("User secret (password hash) not available for encryption.");
         }
 
-        String textToEncrypt = (updatedText != null) ? updatedText : "";
-        String encryptedText = EncryptionUtil.encrypt(textToEncrypt, userSecret);
+        String textToEncrypt = (updatedText != null) ? updatedText : ""; // Ensure textToEncrypt is never null
 
+        logger.info("JournalService.updateJournalEntry: textToEncrypt before encryption: '{}' (length: {})",
+                textToEncrypt, textToEncrypt.length());
+        logger.info("JournalService.updateJournalEntry: textToEncrypt.trim().isEmpty(): {}", textToEncrypt.trim().isEmpty());
+
+
+        String decryptedOldText = EncryptionUtil.decrypt(existingEntry.getRawText(), userSecret);
+
+        boolean textContentChanged = !textToEncrypt.equals(decryptedOldText);
+
+        String encryptedText = EncryptionUtil.encrypt(textToEncrypt, userSecret);
         if (encryptedText == null) {
             logger.error("Failed to encrypt updated journal entry for user {}. Saving raw text unencrypted.", user.getUsername());
-            existingEntry.setRawText(textToEncrypt);
+            existingEntry.setRawText(textToEncrypt); // Fallback to textToEncrypt (guaranteed non-null, possibly empty)
         } else {
             existingEntry.setRawText(encryptedText);
         }
 
-        if (textToEncrypt != null && !textToEncrypt.trim().isEmpty()) {
-            processAiAnalysis(textToEncrypt, existingEntry);
+        if (textContentChanged) {
+            logger.info("Journal entry text content changed for ID {}. Re-running AI analysis.", entryId);
+            if (!textToEncrypt.trim().isEmpty()) {
+                processAiAnalysis(textToEncrypt, existingEntry);
+            } else {
+                logger.warn("Updated text is empty for entry {}. Skipping AI analysis and resetting fields.", entryId);
+                resetAiFields(existingEntry);
+            }
         } else {
-            logger.warn("Updated text is empty for entry {}. Skipping AI analysis.", entryId);
-            resetAiFields(existingEntry);
+            logger.info("Journal entry text content for ID {} is unchanged. Skipping AI analysis.", entryId);
         }
 
         JournalEntry savedEntry = journalEntryRepository.save(existingEntry);
@@ -189,10 +206,10 @@ public class JournalService {
                     logger.warn("MoodScore from ML service was not a Number. Value: {}", moodScoreObj);
                 }
 
-                entryToUpdate.setEmotions(objectMapper.writeValueAsString(mlResponse.get("emotions")));
-                entryToUpdate.setCoreConcerns(objectMapper.writeValueAsString(mlResponse.get("coreConcerns")));
+                entryToUpdate.setEmotions(mlResponse.get("emotions") != null ? objectMapper.writeValueAsString(mlResponse.get("emotions")) : null);
+                entryToUpdate.setCoreConcerns(mlResponse.get("coreConcerns") != null ? objectMapper.writeValueAsString(mlResponse.get("coreConcerns")) : null);
                 entryToUpdate.setSummary((String) mlResponse.get("summary"));
-                entryToUpdate.setGrowthTips(objectMapper.writeValueAsString(mlResponse.get("growthTips")));
+                entryToUpdate.setGrowthTips(mlResponse.get("growthTips") != null ? objectMapper.writeValueAsString(mlResponse.get("growthTips")) : null);
 
                 List<String> keyPhrasesFromMl = (List<String>) mlResponse.getOrDefault("keyPhrases", Collections.emptyList());
                 entryToUpdate.setKeyPhrases(keyPhrasesFromMl);
@@ -353,15 +370,13 @@ public class JournalService {
      * After clustering, it updates the journal entries in the database with their assigned cluster IDs.
      *
      * @param user The user whose journal entries are to be clustered.
-     * @param journalTexts The list of raw journal texts to cluster. ⭐ NEW PARAMETER ⭐
+     * @param journalTexts The list of raw journal texts to cluster.
      * @param nClusters The desired number of clusters.
      * @return A ClusterResult object containing cluster themes and entry-to-cluster mappings.
      */
-    // Inside triggerJournalClustering method
     public ClusterResult triggerJournalClustering(User user, List<String> journalTexts, Integer nClusters) {
         logger.info("Triggering journal clustering for user: {} with {} clusters and {} texts.", user.getUsername(), nClusters, journalTexts.size());
 
-        // ⭐ ADD THIS NEW LOG HERE ⭐
         logger.info("NClusters received in JournalService.triggerJournalClustering: {}", nClusters);
 
         List<JournalEntry> allUserEntries = journalEntryRepository.findByUser(user);
@@ -372,25 +387,20 @@ public class JournalService {
             return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList());
         }
 
-        // Ensure that the number of journalTexts matches the number of allUserEntries
-        // This is a critical assumption for mapping cluster IDs back.
         if (journalTexts.size() != allUserEntries.size()) {
             logger.error("Mismatch in journalTexts size ({}) and allUserEntries size ({}). Cannot reliably assign cluster IDs.", journalTexts.size(), allUserEntries.size());
-            // You might want to throw an exception or return an error result here.
-            // For now, we'll proceed but log the warning.
         }
 
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("userId", user.getId().toString());
         requestBody.put("journalTexts", journalTexts);
-        requestBody.put("nClusters", nClusters); // This is the value being put into the request body
-        // ⭐ ADD THIS NEW LOG HERE ⭐
+        requestBody.put("nClusters", nClusters);
         logger.info("NClusters being put into Flask requestBody: {}", requestBody.get("nClusters"));
 
         ClusterResult clusterResult = null;
         try {
             String requestBodyJson = objectMapper.writeValueAsString(requestBody);
-            logger.info("Sending ML service clustering request: {}", requestBodyJson); // Log the actual JSON being sent
+            logger.info("Sending ML service clustering request: {}", requestBodyJson);
 
             logger.info("Calling ML service for journal clustering at {}/cluster_journal_entries", mlServiceBaseUrl);
             clusterResult = webClient.post()
@@ -402,8 +412,6 @@ public class JournalService {
             logger.info("ML service for journal clustering responded successfully.");
 
             if (clusterResult != null && clusterResult.getEntryClusters() != null && !clusterResult.getEntryClusters().isEmpty()) {
-                // Ensure the sizes match before attempting to update.
-                // If they don't, it indicates a problem in the ML service or data preparation.
                 if (clusterResult.getEntryClusters().size() == allUserEntries.size()) {
                     for (int i = 0; i < allUserEntries.size(); i++) {
                         JournalEntry entry = allUserEntries.get(i);
@@ -457,7 +465,7 @@ public class JournalService {
         List<JournalEntry> entries = journalEntryRepository.findByUserAndRawTextContainingKeyword(user, keyword);
 
         String userSecret = user.getPasswordHash();
-        if (userSecret == null || userSecret == null || userSecret.isEmpty()) {
+        if (userSecret == null || userSecret.isEmpty()) {
             logger.error("User {} has no password hash. Cannot decrypt journal entries for keyword search.", user.getUsername());
         }
 
@@ -491,5 +499,38 @@ public class JournalService {
             }
         }
         return entries;
+    }
+
+    /**
+     * ⭐ NEW METHOD ⭐
+     * Calls the Flask ML service to generate a reflection based on provided prompt text.
+     * This acts as a proxy for the frontend to get reflections without direct Flask calls.
+     * @param promptText The text prompt to send to the ML service for reflection generation.
+     * @return The generated reflection text.
+     */
+    public String generateReflectionFromMlService(String promptText) {
+        Map<String, String> requestBody = new HashMap<>();
+        requestBody.put("prompt_text", promptText);
+
+        try {
+            logger.info("Calling ML service for reflection generation at {}/generate_reflection", mlServiceBaseUrl);
+            Map<String, String> mlResponse = webClient.post()
+                    .uri("/generate_reflection")
+                    .bodyValue(requestBody)
+                    .retrieve()
+                    .bodyToMono(Map.class)
+                    .block();
+
+            if (mlResponse != null && mlResponse.containsKey("reflection")) {
+                logger.info("ML service for reflection generation responded successfully.");
+                return mlResponse.get("reflection");
+            } else {
+                logger.warn("ML service for reflection generation returned null or missing 'reflection' key.");
+                return "Couldn't generate a reflection today. Please try again later.";
+            }
+        } catch (Exception e) {
+            logger.error("Failed to call ML service for reflection generation or received error: {}", e.getMessage(), e);
+            return "Failed to generate reflection due to an internal error.";
+        }
     }
 }

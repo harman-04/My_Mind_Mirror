@@ -11,8 +11,8 @@ from flask import Blueprint, request, jsonify
 from flask_cors import cross_origin
 import nltk
 
-# Import common utilities
-from modules.common.utils import call_gemini_api, preprocess_text_nltk, sentence_model, sentiment_analyzer, stop_words, lemmatizer
+# Import common utilities - ensure these are correctly sourced from your utils.py
+from modules.common.utils import call_gemini_api, preprocess_text_nltk, sentence_model, stop_words, lemmatizer 
 
 import sys
 import os
@@ -26,96 +26,134 @@ logger = logging.getLogger(__name__)
 
 journal_bp = Blueprint('journal', __name__, url_prefix='/ml/journal')
 
-# --- Gemini-Powered AI Functions ---
-def get_gemini_emotions(journal_text):
-    prompt = f"""Analyze the following journal entry and identify the primary emotions expressed.
-    For each emotion, provide a score indicating its intensity from 0.0 to 1.0.
-    Focus on common emotions like joy, sadness, anger, fear, surprise, disgust, love, anxiety, relief, neutral, excitement, contentment, frustration, gratitude, hope.
-    Provide the emotions as a JSON object where keys are emotion labels and values are their scores.
-    Ensure scores sum up to 1.0 if possible, or represent relative intensity.
-    The output MUST be a valid JSON object.
+# --- Optimized Unified Gemini AI Function ---
+def get_gemini_journal_analysis(journal_text):
+    """
+    Makes a single, comprehensive call to the Gemini API to get all required
+    journal analysis components (emotions, concerns, summary, growth tips, key phrases).
+    """
+    prompt = f"""Analyze the following journal entry and provide the following information as a single JSON object:
+    1.  **Emotions**: Identify primary emotions with intensity scores from 0.0 to 1.0. Focus on common emotions like joy, sadness, anger, fear, surprise, disgust, love, anxiety, relief, neutral, excitement, contentment, frustration, gratitude, hope. Ensure scores sum up to 1.0 if possible, or represent relative intensity.
+    2.  **Core Concerns**: Identify 3-5 main themes or core concerns discussed, as a list of concise strings (e.g., "work", "relationships", "health", "personal growth").
+    3.  **Summary**: Summarize the journal entry concisely, in 1-3 sentences, focusing on the main points and overall sentiment.
+    4.  **Growth Tips**: Generate 3-5 concise, empathetic, and actionable growth tips based on the entry's detected emotions and core concerns.
+    5.  **Key Phrases**: Extract 5-10 concise key phrases from the entry.
+
+    The output MUST be a valid JSON object with the exact following structure. If a field cannot be determined, provide an empty list for arrays, an empty string for strings, or an empty object for emotion scores.
+    {{
+        "emotions": {{
+            "joy": 0.X,
+            "sadness": 0.Y,
+            "anger": 0.Z,
+            "fear": 0.A,
+            "surprise": 0.B,
+            "disgust": 0.C,
+            "love": 0.D,
+            "anxiety": 0.E,
+            "relief": 0.F,
+            "neutral": 0.G,
+            "excitement": 0.H,
+            "contentment": 0.I,
+            "frustration": 0.J,
+            "gratitude": 0.K,
+            "hope": 0.L
+        }},
+        "coreConcerns": ["concern1", "concern2", "concern3"],
+        "summary": "This is a concise summary of the journal entry.",
+        "growthTips": ["Tip 1.", "Tip 2.", "Tip 3."],
+        "keyPhrases": ["phrase1", "phrase2", "phrase3"]
+    }}
 
     Journal Entry: "{journal_text}"
 
-    JSON Object of Emotions:"""
+    JSON Analysis:"""
 
+    # Define a comprehensive response schema
+    # While the Gemini API via direct requests.post doesn't use this directly
+    # for schema validation, it serves as excellent documentation for the expected structure
+    # and reinforces it in the prompt.
     response_schema = {
         "type": "OBJECT",
         "properties": {
-            "joy": {"type": "NUMBER"}, "sadness": {"type": "NUMBER"}, "anger": {"type": "NUMBER"},
-            "fear": {"type": "NUMBER"}, "surprise": {"type": "NUMBER"}, "disgust": {"type": "NUMBER"},
-            "love": {"type": "NUMBER"}, "anxiety": {"type": "NUMBER"}, "relief": {"type": "NUMBER"},
-            "neutral": {"type": "NUMBER"}, "excitement": {"type": "NUMBER"}, "contentment": {"type": "NUMBER"},
-            "frustration": {"type": "NUMBER"}, "gratitude": {"type": "NUMBER"}, "hope": {"type": "NUMBER"}
+            "emotions": {
+                "type": "OBJECT",
+                "properties": {
+                    "joy": {"type": "number"}, "sadness": {"type": "number"}, "anger": {"type": "number"},
+                    "fear": {"type": "number"}, "surprise": {"type": "number"}, "disgust": {"type": "number"},
+                    "love": {"type": "number"}, "anxiety": {"type": "number"}, "relief": {"type": "number"},
+                    "neutral": {"type": "number"}, "excitement": {"type": "number"}, "contentment": {"type": "number"},
+                    "frustration": {"type": "number"}, "gratitude": {"type": "number"}, "hope": {"type": "number"}
+                },
+                "additionalProperties": True # Allow other emotions if Gemini decides to add them
+            },
+            "coreConcerns": {"type": "array", "items": {"type": "string"}},
+            "summary": {"type": "string"},
+            "growthTips": {"type": "array", "items": {"type": "string"}},
+            "keyPhrases": {"type": "array", "items": {"type": "string"}}
         },
+        "required": ["emotions", "coreConcerns", "summary", "growthTips", "keyPhrases"]
     }
-    emotions = call_gemini_api(prompt, response_schema)
-    if emotions is None: logger.warning("Gemini failed to extract emotions. Returning empty dict."); return {}
+
+    # Call the now-compatible call_gemini_api
+    full_analysis = call_gemini_api(
+        prompt,
+        response_schema=response_schema, # Pass the schema for documentation/guidance
+        temperature=0.7, # Use a slightly higher temperature for more creative tips/phrases
+        timeout=60       # Give it more time for a complex response
+    )
+
+    if full_analysis is None:
+        logger.warning("Gemini failed to generate a full journal analysis. Returning empty/default values.")
+        return {
+            "emotions": {},
+            "coreConcerns": [],
+            "summary": journal_text[:150] + "..." if len(journal_text) > 150 else journal_text,
+            "growthTips": ["Keep reflecting on your thoughts and feelings. You're doing great by journaling!"],
+            "keyPhrases": []
+        }
+
+    # Post-process emotions: ensure float type and normalization
     processed_emotions = {}
-    for emotion, score in emotions.items():
-        try: processed_emotions[emotion] = float(score)
-        except (ValueError, TypeError): logger.warning(f"Invalid score for emotion '{emotion}': {score}. Skipping."); continue
+    raw_emotions = full_analysis.get("emotions", {})
+    for emotion, score in raw_emotions.items():
+        try:
+            # Ensure score is a number, not a string or other type
+            processed_emotions[emotion] = float(score)
+        except (ValueError, TypeError):
+            logger.warning(f"Invalid score for emotion '{emotion}': {score}. Skipping. Defaulting to 0.0.")
+            processed_emotions[emotion] = 0.0
+    
     total_score = sum(processed_emotions.values())
     if total_score > 0 and abs(total_score - 1.0) > 0.01:
         logger.info(f"Normalizing emotion scores (sum was {total_score:.2f}).")
         normalized_emotions = {k: v / total_score for k, v in processed_emotions.items()}
-        return normalized_emotions
-    return processed_emotions
+        full_analysis["emotions"] = normalized_emotions
+    else:
+        full_analysis["emotions"] = processed_emotions # Use as is if sum is fine or zero
 
-def get_gemini_core_concerns(journal_text):
-    prompt = f"""Analyze the following journal entry and identify the main themes or core concerns discussed.
-    Provide the concerns as a JSON array of strings. Each string should be a concise category.
-    Examples of categories: "work", "relationships", "health", "financial", "personal growth", "stress/anxiety", "positive experience", "education", "hobbies".
-    The output MUST be a valid JSON array.
+    # Ensure other fields are lists/strings if Gemini somehow returns None or wrong type
+    full_analysis["coreConcerns"] = full_analysis.get("coreConcerns", [])
+    if not isinstance(full_analysis["coreConcerns"], list):
+        logger.warning(f"coreConcerns not a list. Resetting. Value: {full_analysis['coreConcerns']}")
+        full_analysis["coreConcerns"] = []
+    
+    full_analysis["growthTips"] = full_analysis.get("growthTips", [])
+    if not isinstance(full_analysis["growthTips"], list):
+        logger.warning(f"growthTips not a list. Resetting. Value: {full_analysis['growthTips']}")
+        full_analysis["growthTips"] = ["Keep reflecting on your thoughts and feelings. You're doing great by journaling!"]
 
-    Journal Entry: "{journal_text}"
+    full_analysis["keyPhrases"] = full_analysis.get("keyPhrases", [])
+    if not isinstance(full_analysis["keyPhrases"], list):
+        logger.warning(f"keyPhrases not a list. Resetting. Value: {full_analysis['keyPhrases']}")
+        full_analysis["keyPhrases"] = []
+    
+    full_analysis["summary"] = full_analysis.get("summary", journal_text[:150] + "..." if len(journal_text) > 150 else journal_text)
+    if not isinstance(full_analysis["summary"], str):
+        logger.warning(f"summary not a string. Resetting. Value: {full_analysis['summary']}")
+        full_analysis["summary"] = journal_text[:150] + "..." if len(journal_text) > 150 else journal_text
 
-    JSON Array of Concerns:"""
-    response_schema = {"type": "ARRAY", "items": { "type": "STRING" }}
-    concerns = call_gemini_api(prompt, response_schema)
-    if concerns is None: logger.warning("Gemini failed to extract core concerns. Returning empty list."); return []
-    return concerns
+    return full_analysis
 
-def get_gemini_growth_tips(journal_text, emotions, core_concerns):
-    emotions_str = ", ".join([f"{label} ({score:.2f})" for label, score in emotions.items()])
-    concerns_str = ", ".join(core_concerns) if core_concerns else "No specific concerns identified."
-    prompt = f"""Based on the following journal entry, detected emotions, and core concerns,
-    generate 3-5 concise, empathetic, and actionable growth tips.
-    Provide the tips as a JSON array of strings.
-    The output MUST be a valid JSON array.
-
-    Journal Entry: "{journal_text}"
-    Detected Emotions: {emotions_str}
-    Core Concerns: {concerns_str}
-
-    JSON Array of Growth Tips:"""
-    response_schema = {"type": "ARRAY", "items": { "type": "STRING" }}
-    tips = call_gemini_api(prompt, response_schema)
-    if tips is None: logger.warning("Gemini failed to generate growth tips. Returning empty list."); return ["Keep reflecting on your thoughts and feelings. You're doing great by journaling!"]
-    return tips
-
-def get_gemini_summary(journal_text):
-    prompt = f"""Summarize the following journal entry concisely, in 1-3 sentences.
-    Focus on the main points and overall sentiment.
-
-    Journal Entry: "{journal_text}"
-
-    Summary:"""
-    summary = call_gemini_api(prompt)
-    if summary is None: logger.warning("Gemini failed to generate summary. Returning truncated raw text."); return journal_text[:150] + "..." if len(journal_text) > 150 else journal_text
-    return summary
-
-def get_gemini_key_phrases(journal_text):
-    prompt = f"""Extract 5-10 concise key phrases from the following journal entry.
-    Provide the key phrases as a JSON array of strings.
-
-    Journal Entry: "{journal_text}"
-
-    JSON Array of Key Phrases:"""
-    response_schema = {"type": "ARRAY", "items": { "type": "STRING" }}
-    key_phrases = call_gemini_api(prompt, response_schema)
-    if key_phrases is None: logger.warning("Gemini failed to extract key phrases. Returning empty list."); return []
-    return key_phrases
 
 # --- Journal AI Endpoints ---
 @journal_bp.route('/analyze_journal', methods=['POST'])
@@ -126,18 +164,18 @@ def analyze_journal():
     if not journal_text:
         return jsonify({"error": "No text provided"}), 400
 
+    # Call the new unified function
+    ai_analysis_results = get_gemini_journal_analysis(journal_text)
+
     response_data = {
-        "moodScore": 0.0,
-        "emotions": {},
-        "coreConcerns": [],
-        "summary": "",
-        "growthTips": [],
-        "keyPhrases": []
+        "moodScore": 0.0, # Will be calculated below
+        "emotions": ai_analysis_results.get("emotions", {}),
+        "coreConcerns": ai_analysis_results.get("coreConcerns", []),
+        "summary": ai_analysis_results.get("summary", ""),
+        "growthTips": ai_analysis_results.get("growthTips", []),
+        "keyPhrases": ai_analysis_results.get("keyPhrases", [])
     }
 
-    # 1. Emotion Recognition (Gemini AI)
-    response_data["emotions"] = get_gemini_emotions(journal_text)
-    
     # 2. Mood Score (Derived from Emotion Recognition)
     emotion_weights = {
         'joy': 1.0, 'love': 1.0, 'surprise': 0.5, 'amusement': 0.5, 'excitement': 0.8,
@@ -164,22 +202,7 @@ def analyze_journal():
     else:
         response_data["moodScore"] = 0.0
 
-    # 3. Core Concerns (Gemini AI)
-    response_data["coreConcerns"] = get_gemini_core_concerns(journal_text)
-
-    # 4. Summarization (Gemini AI)
-    response_data["summary"] = get_gemini_summary(journal_text)
-
-    # 5. Growth Tips (Gemini AI)
-    response_data["growthTips"] = get_gemini_growth_tips(
-        journal_text, 
-        response_data["emotions"],
-        response_data["coreConcerns"]
-    )
-
-    # 6. Key Phrases (Gemini AI)
-    response_data["keyPhrases"] = get_gemini_key_phrases(journal_text)
-
+    logger.info(f"Journal analysis completed for entry. Mood Score: {response_data['moodScore']:.2f}")
     return jsonify(response_data)
 
 # --- Anomaly Detection Function ---
@@ -262,8 +285,8 @@ def anomaly_detection_endpoint():
 
 
 # --- Journal Clustering Module Functions ---
-def train_and_save_clustering_model(user_id, journal_texts, n_clusters): # Removed default value here, it's handled in endpoint
-    logger.info(f"train_and_save_clustering_model received n_clusters: {n_clusters}") # Existing log
+def train_and_save_clustering_model(user_id, journal_texts, n_clusters):
+    logger.info(f"train_and_save_clustering_model received n_clusters: {n_clusters}")
 
     if not journal_texts:
         logger.warning(f"No journal texts provided for user {user_id} to train clustering model.")
@@ -277,14 +300,11 @@ def train_and_save_clustering_model(user_id, journal_texts, n_clusters): # Remov
     
     embeddings = sentence_model.encode(journal_texts, show_progress_bar=False)
 
-    # Ensure n_clusters is an integer before min() operation
-    # This block is now redundant here if handled correctly in the endpoint,
-    # but keeping it for robustness in case this function is called directly.
     try:
         n_clusters_int = int(n_clusters)
     except (ValueError, TypeError):
         logger.error(f"train_and_save_clustering_model received invalid n_clusters value: {n_clusters}. Defaulting to 5.")
-        n_clusters_int = 5 # Fallback to 5 if it's not a valid integer
+        n_clusters_int = 5
 
     actual_n_clusters = min(n_clusters_int, len(journal_texts))
     if actual_n_clusters <= 1:
@@ -326,9 +346,8 @@ def get_cluster_keywords_semantic(kmeans_model, journal_texts, num_keywords=5):
     cluster_themes = {}
     
     clusters_data = defaultdict(list)
-    # Use kmeans_model.labels_ directly as it's from the training data
     for i, text in enumerate(journal_texts):
-        if i < len(kmeans_model.labels_): # Check bounds
+        if i < len(kmeans_model.labels_):
             cluster_id = kmeans_model.labels_[i]
             clusters_data[cluster_id].append(text)
         else:
@@ -337,7 +356,6 @@ def get_cluster_keywords_semantic(kmeans_model, journal_texts, num_keywords=5):
     from sklearn.feature_extraction.text import TfidfVectorizer
     
     for cluster_id, texts_in_cluster in clusters_data.items():
-        # Initialize a default theme name for this cluster
         current_theme_name = f"General Theme {cluster_id+1}" 
 
         if not texts_in_cluster:
@@ -353,7 +371,6 @@ def get_cluster_keywords_semantic(kmeans_model, journal_texts, num_keywords=5):
             
             if not non_empty_preprocessed_texts:
                 logger.warning(f"Cluster {cluster_id+1} has no non-empty preprocessed texts. Cannot extract TF-IDF keywords. Falling back to simple word count.")
-                # Fallback to common words from raw texts if TF-IDF cannot be applied
                 all_words_in_cluster = ' '.join(texts_in_cluster).lower()
                 all_words_in_cluster = re.sub(r'[^a-z\s]', '', all_words_in_cluster)
                 words_freq = [word for word in all_words_in_cluster.split() if word not in stop_words]
@@ -361,16 +378,12 @@ def get_cluster_keywords_semantic(kmeans_model, journal_texts, num_keywords=5):
                 if words_freq:
                     top_keywords = [word for word, count in Counter(words_freq).most_common(num_keywords)]
                     if top_keywords:
-                        current_theme_name = ", ".join(top_keywords[:2]) # Take top 2 for conciseness
+                        current_theme_name = ", ".join(top_keywords[:2])
                         if len(top_keywords) > 2:
                             current_theme_name += "..."
-                    else:
-                        current_theme_name = f"General Theme {cluster_id+1}" # Fallback if no words found
-                else:
-                    current_theme_name = f"General Theme {cluster_id+1}" # Default if absolutely no words are found
                 
                 cluster_themes[f"Theme {cluster_id+1}"] = current_theme_name
-                continue # Skip to next cluster as TF-IDF failed
+                continue 
 
             tfidf_matrix_cluster = tfidf_vectorizer_cluster.fit_transform(non_empty_preprocessed_texts)
             feature_names = tfidf_vectorizer_cluster.get_feature_names_out()
@@ -382,24 +395,22 @@ def get_cluster_keywords_semantic(kmeans_model, journal_texts, num_keywords=5):
                 pos_tagged_keywords = nltk.pos_tag(feature_names[top_feature_indices].tolist())
                 descriptive_keywords = [
                     word for word, tag in pos_tagged_keywords 
-                    if tag.startswith('N') or tag.startswith('J') # Nouns (NN, NNS, NNP, NNPS) or Adjectives (JJ, JJR, JJS)
+                    if tag.startswith('N') or tag.startswith('J') 
                     and word not in stop_words
                 ][:num_keywords]
                 
                 if descriptive_keywords:
-                    current_theme_name = ", ".join(descriptive_keywords[:2]) # Take top 2 for conciseness
+                    current_theme_name = ", ".join(descriptive_keywords[:2])
                     if len(descriptive_keywords) > 2:
-                        current_theme_name += "..." # Indicate more keywords if available
-                else:
-                    current_theme_name = f"General Theme {cluster_id+1}" # Fallback if no descriptive keywords found
-
-                cluster_themes[f"Theme {cluster_id+1}"] = current_theme_name # Store as a single string
+                        current_theme_name += "..." 
+                
+                cluster_themes[f"Theme {cluster_id+1}"] = current_theme_name
             else:
-                cluster_themes[f"Theme {cluster_id+1}"] = f"General Theme {cluster_id+1}" # No features, use generic
+                cluster_themes[f"Theme {cluster_id+1}"] = f"General Theme {cluster_id+1}" 
 
 
-        except Exception as e: # Catch any other unexpected errors during TF-IDF or keyword extraction
-            cluster_themes[f"Theme {cluster_id+1}"] = f"Error Theme {cluster_id+1}" # Fallback on error
+        except Exception as e:
+            cluster_themes[f"Theme {cluster_id+1}"] = f"Error Theme {cluster_id+1}" 
             logger.error(f"An unexpected error occurred during keyword extraction for cluster {cluster_id+1}: {e}", exc_info=True)
             
     return cluster_themes
@@ -415,36 +426,32 @@ def cluster_journal_entries_endpoint():
     user_id = data.get('userId')
     journal_texts = data.get('journalTexts', []) 
     
-    # ⭐ NEW LOG: Print the entire raw data dictionary ⭐
     logger.info(f"cluster_journal_entries_endpoint received raw data: {data}") 
 
-    # Retrieve n_clusters from request. Use None as default to differentiate from 0 or 5.
     n_clusters_from_request = data.get('nClusters') 
 
-    # Explicitly convert to int and handle potential errors or None
-    n_clusters = 5 # Default fallback
+    n_clusters = 5 
     if n_clusters_from_request is not None:
         try:
             n_clusters = int(n_clusters_from_request)
             logger.info(f"Successfully parsed n_clusters from request: {n_clusters}")
         except (ValueError, TypeError):
             logger.error(f"Invalid n_clusters value received: {n_clusters_from_request}. Defaulting to 5.")
-            n_clusters = 5 # Fallback if conversion fails
+            n_clusters = 5 
     else:
         logger.warning("nClusters not found in request data. Defaulting to 5.")
 
 
-    logger.info(f"cluster_journal_entries_endpoint final n_clusters value: {n_clusters}") # Updated log
+    logger.info(f"cluster_journal_entries_endpoint final n_clusters value: {n_clusters}") 
 
     if not user_id or not journal_texts: 
         logger.error("User ID or journal texts missing for clustering request.")
         return jsonify({"error": "User ID and journal texts are required for clustering."}), 400
 
-    if len(journal_texts) < 2: # Need at least 2 entries for meaningful clustering
+    if len(journal_texts) < 2: 
         logger.warning(f"Not enough journal entries ({len(journal_texts)}) for clustering. Need at least 2.")
         return jsonify({"error": "You need at least 2 journal entries to perform clustering."}), 400
     
-    # Ensure n_clusters is not more than available entries, and at least 2 for >1 cluster
     actual_n_clusters = min(n_clusters, len(journal_texts))
     if actual_n_clusters <= 1:
         logger.warning(f"Adjusting n_clusters to {actual_n_clusters} as it was too low/high for available entries.")
@@ -462,7 +469,6 @@ def cluster_journal_entries_endpoint():
         return jsonify({"error": "Semantic clustering model not loaded. Please check Flask logs."}), 500
 
     try:
-        # Pass the correctly retrieved n_clusters to the training function
         kmeans_model = train_and_save_clustering_model(user_id, journal_texts, n_clusters) 
         
         if kmeans_model is None:
