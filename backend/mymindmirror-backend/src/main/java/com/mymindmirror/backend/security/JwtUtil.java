@@ -1,4 +1,3 @@
-// src/main/java/com/mymindmirror.backend/security/JwtUtil.java
 package com.mymindmirror.backend.security;
 
 import io.jsonwebtoken.Claims;
@@ -37,11 +36,15 @@ public class JwtUtil {
         logger.info("JWT Secret Key initialized.");
     }
 
-    // This method signature is kept as per your existing code for compatibility.
-    // It now correctly adds the provided userId to the claims.
+    /**
+     * Generates a JWT token for the given UserDetails and includes the user's UUID as a claim.
+     * @param userDetails The Spring Security UserDetails object.
+     * @param userId The UUID of the user.
+     * @return The generated JWT string.
+     */
     public String generateToken(UserDetails userDetails, UUID userId) {
         Map<String, Object> claims = new HashMap<>();
-        claims.put("userId", userId.toString()); // Add userId as a claim
+        claims.put("userId", userId.toString()); // Add userId as a string claim
         return createToken(claims, userDetails.getUsername());
     }
 
@@ -55,22 +58,54 @@ public class JwtUtil {
                 .compact();
     }
 
+    /**
+     * Validates a JWT token against UserDetails.
+     * @param token The JWT token string.
+     * @param userDetails The UserDetails object to validate against.
+     * @return True if the token is valid for the user, false otherwise.
+     */
     public Boolean validateToken(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
         return (username.equals(userDetails.getUsername()) && !isTokenExpired(token));
     }
 
+    /**
+     * Extracts the username (subject) from the JWT token.
+     * @param token The JWT token string.
+     * @return The username.
+     */
     public String extractUsername(String token) {
         return extractAllClaims(token).getSubject();
     }
 
+    /**
+     * Extracts the expiration date from the JWT token.
+     * @param token The JWT token string.
+     * @return The expiration Date.
+     */
     public Date extractExpiration(String token) {
         return extractAllClaims(token).getExpiration();
     }
 
-    // Method to extract userId from token claims (crucial for controllers)
-    public String extractUserId(String token) {
-        return extractAllClaims(token).get("userId", String.class);
+    /**
+     * ⭐ MODIFIED METHOD ⭐
+     * Extracts the user's UUID from the JWT token claims.
+     * @param token The JWT token string.
+     * @return The user's UUID.
+     * @throws IllegalArgumentException if userId claim is missing or not a valid UUID.
+     */
+    public UUID extractUserId(String token) {
+        String userIdStr = extractAllClaims(token).get("userId", String.class);
+        if (userIdStr == null) {
+            logger.error("JWT token missing 'userId' claim.");
+            throw new IllegalArgumentException("JWT token is missing 'userId' claim.");
+        }
+        try {
+            return UUID.fromString(userIdStr);
+        } catch (IllegalArgumentException e) {
+            logger.error("Invalid UUID format for 'userId' claim in JWT: {}", userIdStr);
+            throw new IllegalArgumentException("Invalid UUID format in JWT 'userId' claim.", e);
+        }
     }
 
     private Claims extractAllClaims(String token) {
@@ -81,6 +116,12 @@ public class JwtUtil {
         return extractExpiration(token).before(new Date());
     }
 
+    /**
+     * Validates a JWT token's signature and expiration.
+     * This is a simpler validation for filters, without needing UserDetails.
+     * @param authToken The JWT token string.
+     * @return True if the token is valid (signature and not expired), false otherwise.
+     */
     public boolean validateToken(String authToken) {
         try {
             Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(authToken);

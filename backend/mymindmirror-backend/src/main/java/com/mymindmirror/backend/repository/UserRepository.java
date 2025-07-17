@@ -1,4 +1,3 @@
-// src/main/java/com/mymindmirror.backend/repository/UserRepository.java
 package com.mymindmirror.backend.repository;
 
 import com.mymindmirror.backend.model.User;
@@ -11,30 +10,28 @@ import java.util.UUID;
  * JPA Repository for User entities.
  * Provides standard CRUD operations and custom query methods for User data.
  */
-@Repository // Marks this interface as a Spring Data JPA repository
+@Repository
 public interface UserRepository extends JpaRepository<User, UUID> {
 
-    /**
-     * Finds a User by their username.
-     * Spring Data JPA automatically generates the query based on the method name.
-     * @param username The username to search for.
-     * @return An Optional containing the User if found, or empty if not.
-     */
     Optional<User> findByUsername(String username);
 
-    /**
-     * Checks if a User with the given username already exists.
-     * @param username The username to check.
-     * @return True if a user with this username exists, false otherwise.
-     */
     Boolean existsByUsername(String username);
 
+    Optional<User> findById(UUID id);
+
     /**
-     * Finds a User by their UUID ID.
-     * @param id The UUID of the user to search for.
+     * ⭐ NEW METHOD ⭐
+     * Finds a User by their email address.
+     * @param email The email to search for.
      * @return An Optional containing the User if found, or empty if not.
      */
-    Optional<User> findById(UUID id); // ⭐ NEW METHOD ⭐
+    Optional<User> findByEmail(String email); // ⭐ ADDED METHOD ⭐
 
-
+    /**
+     * ⭐ NEW METHOD ⭐
+     * Checks if a User with the given email already exists.
+     * @param email The email to check.
+     * @return True if a user with this email exists, false otherwise.
+     */
+    Boolean existsByEmail(String email); // ⭐ ADDED METHOD ⭐
 }

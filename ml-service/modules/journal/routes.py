@@ -205,65 +205,131 @@ def analyze_journal():
     logger.info(f"Journal analysis completed for entry. Mood Score: {response_data['moodScore']:.2f}")
     return jsonify(response_data)
 
-# --- Anomaly Detection Function ---
+# --- Anomaly Detection Function (Advanced with EWMA) ---
 def detect_anomalies(daily_data_list):
-    if len(daily_data_list) < 7:
-        return {"anomalies": [], "message": "Not enough data for anomaly detection (need at least 7 days)."}
-    
+    """
+    Detects anomalies in daily mood and word count data using Exponentially Weighted Moving Averages (EWMA).
+
+    Anomalies are identified when a daily value deviates significantly from its
+    recent EWMA mean, based on EWMA standard deviation.
+
+    Args:
+        daily_data_list (list of dict): A list of dictionaries, where each dictionary
+                                        represents a day's aggregated data.
+                                        Expected keys: 'date' (str, 'YYYY-MM-DD'),
+                                        'averageMood' (float), 'totalWords' (int).
+
+    Returns:
+        dict: A dictionary containing:
+              - "anomalies" (list): A list of detected anomaly dictionaries.
+                                    Each anomaly dict includes "date", "type" (list of affected metrics),
+                                    and a detailed "message".
+              - "message" (str): An overall message about the detection results.
+    """
+    if not daily_data_list:
+        return {"anomalies": [], "message": "No data provided for anomaly detection."}
+
+    # Convert to DataFrame
     df = pd.DataFrame(daily_data_list)
     df['date'] = pd.to_datetime(df['date'])
     df = df.sort_values(by='date').set_index('date')
+
+    # Ensure numeric types and handle potential NaNs from missing days
+    df['averageMood'] = pd.to_numeric(df['averageMood'], errors='coerce')
+    df['totalWords'] = pd.to_numeric(df['totalWords'], errors='coerce')
+
+    # Parameters for EWMA
+    # span is roughly equivalent to a window size, but gives more weight to recent data
+    ewma_span = 7 # Equivalent to a 7-day half-life, giving more weight to recent days
     
-    window_size = 7
-    
-    df['mood_mean'] = df['averageMood'].rolling(window=window_size, min_periods=1).mean()
-    df['mood_std'] = df['averageMood'].rolling(window=window_size, min_periods=1).std()
-    df['words_mean'] = df['totalWords'].rolling(window=window_size, min_periods=1).mean()
-    df['words_std'] = df['totalWords'].rolling(window=window_size, min_periods=1).std()
-    
-    mood_threshold_std = 1.0
-    words_threshold_std = 1.5
-    
+    # Calculate EWMA mean and standard deviation for mood and words
+    df['mood_ewma_mean'] = df['averageMood'].ewm(span=ewma_span, adjust=False, min_periods=1).mean()
+    df['mood_ewma_std'] = df['averageMood'].ewm(span=ewma_span, adjust=False, min_periods=1).std()
+    df['words_ewma_mean'] = df['totalWords'].ewm(span=ewma_span, adjust=False, min_periods=1).mean()
+    df['words_ewma_std'] = df['totalWords'].ewm(span=ewma_span, adjust=False, min_periods=1).std()
+
+    # Anomaly thresholds (in terms of standard deviations from EWMA mean)
+    # Mood might be more sensitive, word count can have larger natural fluctuations
+    mood_threshold_std = 0.8 # Increased sensitivity slightly from 1.0
+    words_threshold_std = 1. # Increased sensitivity from 1.5
+
     anomalies = []
-    for i in range(len(df)):
+
+    # Iterate through the DataFrame to detect anomalies
+    # Start from `ewma_span - 1` to ensure enough data points for a stable EWMA calculation
+    # or from `min_periods - 1` if min_periods is smaller
+    start_idx = ewma_span - 1 if len(df) >= ewma_span else 0 # Start from where EWMA is more stable
+
+    for i in range(start_idx, len(df)):
         current_day = df.iloc[i]
-        
+        current_date_str = current_day.name.strftime('%Y-%m-%d')
+
+        # Skip anomaly check if critical EWMA values are NaN (e.g., at very beginning of data)
         if pd.isna(current_day['averageMood']) or pd.isna(current_day['totalWords']) or \
-           pd.isna(current_day['mood_mean']) or pd.isna(current_day['mood_std']) or \
-           pd.isna(current_day['words_mean']) or pd.isna(current_day['words_std']):
-            logger.debug(f"Skipping anomaly check for {current_day.name.strftime('%Y-%m-%d')} due to NaN values.")
+           pd.isna(current_day['mood_ewma_mean']) or pd.isna(current_day['mood_ewma_std']) or \
+           pd.isna(current_day['words_ewma_mean']) or pd.isna(current_day['words_ewma_std']):
+            logger.debug(f"Skipping anomaly check for {current_date_str} due to insufficient EWMA data or missing daily values.")
             continue
-        
+
         is_mood_anomaly = False
-        mood_deviation = None
-        if current_day['mood_std'] > 0:
-            z_score_mood = (current_day['averageMood'] - current_day['mood_mean']) / current_day['mood_std']
+        mood_deviation_msg = ""
+        
+        # Check mood anomaly
+        if current_day['mood_ewma_std'] > 0: # Avoid division by zero if std is 0
+            z_score_mood = (current_day['averageMood'] - current_day['mood_ewma_mean']) / current_day['mood_ewma_std']
             if abs(z_score_mood) > mood_threshold_std:
                 is_mood_anomaly = True
-                mood_deviation = "significantly " + ("lower" if z_score_mood < 0 else "higher")
-            logger.debug(f"Mood for {current_day.name.strftime('%Y-%m-%d')}: Avg={current_day['averageMood']:.2f}, Mean={current_day['mood_mean']:.2f}, Std={current_day['mood_std']:.2f}, Z-score={z_score_mood:.2f}")
+                deviation_direction = "lower" if z_score_mood < 0 else "higher"
+                mood_deviation_msg = (
+                    f"Your average mood ({current_day['averageMood']:.2f}) was significantly {deviation_direction} "
+                    f"than your recent typical mood ({current_day['mood_ewma_mean']:.2f} ± {mood_threshold_std * current_day['mood_ewma_std']:.2f})."
+                )
+            logger.debug(f"Mood for {current_date_str}: Avg={current_day['averageMood']:.2f}, EWMA Mean={current_day['mood_ewma_mean']:.2f}, EWMA Std={current_day['mood_ewma_std']:.2f}, Z-score={z_score_mood:.2f}")
+        elif current_day['averageMood'] != current_day['mood_ewma_mean']: # If std is 0 but mood deviates (e.g., constant mood then sudden change)
+             is_mood_anomaly = True
+             deviation_direction = "lower" if current_day['averageMood'] < current_day['mood_ewma_mean'] else "higher"
+             mood_deviation_msg = (
+                 f"Your average mood ({current_day['averageMood']:.2f}) was significantly {deviation_direction} "
+                 f"than your recent constant mood ({current_day['mood_ewma_mean']:.2f})."
+             )
+
 
         is_words_anomaly = False
-        words_deviation = None
-        if current_day['words_std'] > 0:
-            z_score_words = (current_day['totalWords'] - current_day['words_mean']) / current_day['words_std']
+        words_deviation_msg = ""
+        
+        # Check words anomaly
+        if current_day['words_ewma_std'] > 0: # Avoid division by zero if std is 0
+            z_score_words = (current_day['totalWords'] - current_day['words_ewma_mean']) / current_day['words_ewma_std']
             if abs(z_score_words) > words_threshold_std:
                 is_words_anomaly = True
-                words_deviation = "much " + ("less" if z_score_words < 0 else "more")
-            logger.debug(f"Words for {current_day.name.strftime('%Y-%m-%d')}: Total={current_day['totalWords']}, Mean={current_day['words_mean']:.2f}, Std={current_day['words_std']:.2f}, Z-score={z_score_words:.2f}")
+                deviation_direction = "less" if z_score_words < 0 else "more"
+                words_deviation_msg = (
+                    f"You wrote {current_day['totalWords']} words, which is {deviation_direction} "
+                    f"than your recent typical word count ({current_day['words_ewma_mean']:.2f} ± {words_threshold_std * current_day['words_ewma_std']:.2f})."
+                )
+            logger.debug(f"Words for {current_date_str}: Total={current_day['totalWords']}, EWMA Mean={current_day['words_ewma_mean']:.2f}, EWMA Std={current_day['words_ewma_std']:.2f}, Z-score={z_score_words:.2f}")
+        elif current_day['totalWords'] != current_day['words_ewma_mean']: # If std is 0 but words deviate
+            is_words_anomaly = True
+            deviation_direction = "less" if current_day['totalWords'] < current_day['words_ewma_mean'] else "more"
+            words_deviation_msg = (
+                f"You wrote {current_day['totalWords']} words, which is {deviation_direction} "
+                f"than your recent constant word count ({current_day['words_ewma_mean']:.2f})."
+            )
+
 
         if is_mood_anomaly or is_words_anomaly:
             anomaly_details = {
-                "date": current_day.name.strftime('%Y-%m-%d'),
+                "date": current_date_str,
                 "type": [],
                 "message": ""
             }
             if is_mood_anomaly:
                 anomaly_details["type"].append("mood")
-                anomaly_details["message"] += f"Your average mood was {mood_deviation} than usual. "
+                anomaly_details["message"] += mood_deviation_msg + " "
             if is_words_anomaly:
                 anomaly_details["type"].append("words")
-                anomaly_details["message"] += f"You wrote {words_deviation} than usual. "
+                anomaly_details["message"] += words_deviation_msg + " "
+            
             anomalies.append(anomaly_details)
             logger.info(f"Anomaly detected for {anomaly_details['date']}: {anomaly_details['message']}")
     
@@ -272,17 +338,22 @@ def detect_anomalies(daily_data_list):
     else:
         return {"anomalies": [], "message": "No significant anomalies detected in your recent journaling patterns."}
 
-@journal_bp.route('/anomaly_detection', methods=['POST'])
+# --- Anomaly Detection Endpoint ---
+@journal_bp.route('/anomaly_detection', methods=['POST']) # ⭐ THIS IS THE UNCOMMENTED ENDPOINT ⭐
+@cross_origin() # Add cross_origin decorator if not already handled globally
 def anomaly_detection_endpoint():
+    if request.method == 'OPTIONS':
+        return '', 200 # Handle CORS preflight requests
+
     data = request.json
-    if not data: return jsonify({"error": "No daily aggregated data provided for anomaly detection"}), 400
+    if not data:
+        return jsonify({"error": "No daily aggregated data provided for anomaly detection"}), 400
     try:
         results = detect_anomalies(data)
         return jsonify(results)
     except Exception as e:
         logger.error(f"Error during anomaly detection: {e}", exc_info=True)
         return jsonify({"error": "Failed to perform anomaly detection."}), 500
-
 
 # --- Journal Clustering Module Functions ---
 def train_and_save_clustering_model(user_id, journal_texts, n_clusters):

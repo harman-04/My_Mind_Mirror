@@ -459,26 +459,39 @@ public class JournalService {
         return entries;
     }
 
-    // ⭐ NEW METHOD FOR KEYWORD SEARCH ⭐
+    // ⭐ MODIFIED METHOD FOR KEYWORD SEARCH ⭐
     public List<JournalEntry> searchJournalEntriesByKeyword(User user, String keyword) {
         logger.info("Searching journal entries for user: {} with keyword: '{}'", user.getUsername(), keyword);
-        List<JournalEntry> entries = journalEntryRepository.findByUserAndRawTextContainingKeyword(user, keyword);
 
         String userSecret = user.getPasswordHash();
         if (userSecret == null || userSecret.isEmpty()) {
             logger.error("User {} has no password hash. Cannot decrypt journal entries for keyword search.", user.getUsername());
+            // Depending on desired behavior, could throw an exception or return empty list
+            return List.of(); // Return empty list if decryption is not possible
         }
 
-        for (JournalEntry entry : entries) {
-            if (userSecret != null && !userSecret.isEmpty()) {
-                entry.setRawText(EncryptionUtil.decrypt(entry.getRawText(), userSecret));
-            }
-            if (entry.getKeyPhrases() != null) {
-                Hibernate.initialize(entry.getKeyPhrases());
-            }
-        }
-        return entries;
+        // 1. Fetch all encrypted entries for the user
+        List<JournalEntry> allEncryptedEntries = journalEntryRepository.findByUserOrderByCreationTimestampDesc(user);
+        logger.info("Fetched {} encrypted entries for user {}.", allEncryptedEntries.size(), user.getUsername());
+
+        // 2. Decrypt each entry and then filter by keyword in memory
+        String lowerCaseKeyword = keyword.toLowerCase();
+        List<JournalEntry> matchingEntries = allEncryptedEntries.stream()
+                .peek(entry -> {
+                    // Decrypt the rawText (this part is crucial for search)
+                    String decryptedText = EncryptionUtil.decrypt(entry.getRawText(), userSecret);
+                    entry.setRawText(decryptedText != null ? decryptedText : ""); // Set decrypted text, handle null if decryption fails
+                    if (entry.getKeyPhrases() != null) {
+                        Hibernate.initialize(entry.getKeyPhrases()); // Ensure key phrases are loaded
+                    }
+                })
+                .filter(entry -> entry.getRawText().toLowerCase().contains(lowerCaseKeyword)) // Filter on the decrypted text
+                .collect(Collectors.toList());
+
+        logger.info("Found {} journal entries matching keyword '{}' after decryption for user {}.", matchingEntries.size(), keyword, user.getUsername());
+        return matchingEntries;
     }
+
 
     // ⭐ NEW METHOD FOR MOOD SCORE RANGE SEARCH ⭐
     public List<JournalEntry> searchJournalEntriesByMoodScore(User user, Double minMood, Double maxMood) {

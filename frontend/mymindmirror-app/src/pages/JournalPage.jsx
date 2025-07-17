@@ -17,6 +17,7 @@ import WeeklyDashboard from '../components/WeeklyDashboard';
 import OverallDashboard from '../components/OverallDashboard';
 import JournalSearch from '../components/JournalSearch';
 import MilestoneTracker from '../components/MilestoneTracker';
+import AppLoader from '../components/AppLoader'; // ⭐ NEW: Import the advanced loader ⭐
 
 function JournalPage() {
     const [username, setUsername] = useState('');
@@ -61,19 +62,12 @@ function JournalPage() {
     const handleClusteringComplete = (results) => {
         console.log("handleClusteringComplete called with results:", results);
         setCurrentClusterResults(results);
-        // After clustering updates entries in backend, the 'journalEntries' query
-        // might need to be refreshed to reflect the new cluster IDs.
-        // Tanstack Query will automatically refetch if the data is stale or on window focus.
-        // If you need an immediate visual update *after* clustering, you could manually refetch:
-        // queryClient.invalidateQueries({ queryKey: ['journalEntries'] });
-        // (You'd need to get queryClient via useQueryClient() if you do this here)
     };
 
     // The most recent entry overall (for TodaysReflection and DailyEmotionSnapshot)
-    // journalEntries will be undefined or null while loading, so add a check
     const latestEntryForDashboard = journalEntries?.length > 0 ? journalEntries[0] : null;
 
-    // Filter entries for "Today" tab - now using the data from useJournalEntries
+    // Filter entries for "Today" tab
     const todayDate = new Date();
     const todayEntries = journalEntries ? journalEntries.filter(entry =>
         isSameDay(parseISO(entry.entryDate), todayDate)
@@ -88,13 +82,7 @@ function JournalPage() {
     }) : [];
 
     if (isLoading) { // Use Tanstack Query's isLoading
-        return (
-            <div className={`w-full max-w-4xl flex-grow p-6 rounded-xl
-                            ${theme === 'dark' ? 'bg-black/30 text-gray-200 border-white/10' : 'bg-white/70 text-gray-800 border-white/30'}
-                            backdrop-blur-md shadow-lg transition-all duration-500 flex items-center justify-center font-inter text-lg`}>
-                Loading your journal...
-            </div>
-        );
+        return <AppLoader />; // ⭐ REPLACED with the new loader component ⭐
     }
 
     if (isError) { // Use Tanstack Query's isError and error object
@@ -123,10 +111,9 @@ function JournalPage() {
                             text-gray-800 dark:text-gray-200`}>
 
             <main className="w-full max-w-4xl flex-grow p-4 sm:p-6 rounded-xl
-                                 bg-white/70 dark:bg-black/30 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/10
-                                 transition-all duration-500 flex flex-col space-y-6 sm:space-y-8">
+                                    bg-white/70 dark:bg-black/30 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/10
+                                    transition-all duration-500 flex flex-col space-y-6 sm:space-y-8">
 
-                {/* JournalInput no longer needs onNewEntry prop */}
                 <JournalInput />
 
                 <AnomalyAlerts />
@@ -136,55 +123,55 @@ function JournalPage() {
                     <button
                         onClick={() => setActiveTab('today')}
                         className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
-                                         transition-all duration-300 shadow-md mb-2 sm:mb-0
-                                         ${activeTab === 'today'
-                                             ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
-                                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                                         }`}
+                                            transition-all duration-300 shadow-md mb-2 sm:mb-0
+                                            ${activeTab === 'today'
+                                                ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                            }`}
                     >
                         Today
                     </button>
                     <button
                         onClick={() => setActiveTab('weekly')}
                         className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
-                                         transition-all duration-300 shadow-md mb-2 sm:mb-0
-                                         ${activeTab === 'weekly'
-                                             ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
-                                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                                         }`}
+                                            transition-all duration-300 shadow-md mb-2 sm:mb-0
+                                            ${activeTab === 'weekly'
+                                                ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                            }`}
                     >
                         Weekly Overview
                     </button>
                     <button
                         onClick={() => setActiveTab('all')}
                         className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
-                                         transition-all duration-300 shadow-md mb-2 sm:mb-0
-                                         ${activeTab === 'all'
-                                             ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
-                                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                                         }`}
+                                            transition-all duration-300 shadow-md mb-2 sm:mb-0
+                                            ${activeTab === 'all'
+                                                ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                            }`}
                     >
                         All Entries
                     </button>
                     <button
                         onClick={() => setActiveTab('search')}
                         className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
-                                         transition-all duration-300 shadow-md mb-2 sm:mb-0
-                                         ${activeTab === 'search'
-                                             ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
-                                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                                         }`}
+                                            transition-all duration-300 shadow-md mb-2 sm:mb-0
+                                            ${activeTab === 'search'
+                                                ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                            }`}
                     >
                         Search
                     </button>
                     <button
                         onClick={() => setActiveTab('milestones')}
                         className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
-                                         transition-all duration-300 shadow-md mb-2 sm:mb-0
-                                         ${activeTab === 'milestones'
-                                             ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
-                                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                                         }`}
+                                            transition-all duration-300 shadow-md mb-2 sm:mb-0
+                                            ${activeTab === 'milestones'
+                                                ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
+                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                            }`}
                     >
                         Milestones & To-Dos
                     </button>
@@ -195,8 +182,6 @@ function JournalPage() {
                     <TodayDashboard
                         latestEntry={latestEntryForDashboard}
                         todayEntries={todayEntries}
-                        // onEntryChange is no longer needed directly;
-                        // Child components will use useMutation and invalidate queries
                     />
                 )}
 
@@ -206,7 +191,6 @@ function JournalPage() {
                         userId={userId}
                         onClusteringComplete={handleClusteringComplete}
                         currentClusterResults={currentClusterResults}
-                        // onEntryChange is no longer needed
                         startOfCurrentWeek={startOfCurrentWeek}
                         endOfCurrentWeek={endOfCurrentWeek}
                     />
@@ -218,14 +202,12 @@ function JournalPage() {
                         userId={userId}
                         onClusteringComplete={handleClusteringComplete}
                         currentClusterResults={currentClusterResults}
-                        // onEntryChange is no longer needed
                     />
                 )}
 
                 {activeTab === 'search' && (
                     <JournalSearch
                         userId={userId}
-                        // onEntryChange is no longer needed
                     />
                 )}
 
@@ -233,10 +215,6 @@ function JournalPage() {
                     <MilestoneTracker userId={userId} />
                 )}
             </main>
-
-            <footer className="w-full max-w-4xl text-center mt-6 sm:mt-8 text-xs sm:text-sm text-gray-600 dark:text-gray-400 p-2 sm:p-0">
-                &copy; {new Date().getFullYear()} MyMindMirror. All rights reserved.
-            </footer>
         </div>
     );
 }

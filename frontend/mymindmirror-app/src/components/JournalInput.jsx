@@ -1,24 +1,20 @@
 // src/components/JournalInput.js
 
 import React, { useState } from 'react';
-// import axios from 'axios'; // No longer needed directly
-import { useAddJournalEntry } from '../hooks/useJournalData'; // Import the add hook
+import { useAddJournalEntry } from '../hooks/useJournalData';
 import { useTheme } from '../contexts/ThemeContext';
 
-// ⭐ MODIFIED: Removed onNewEntry prop ⭐
 function JournalInput() {
     const [text, setText] = useState('');
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
-    // const [loading, setLoading] = useState(false); // Replaced by mutation hook's isPending
 
     const { theme } = useTheme();
 
-    // Use the mutation hook
     const addEntryMutation = useAddJournalEntry();
 
     const handleSubmit = async (e) => {
-        e.preventDefault();
+        e.preventDefault(); // Prevent default form submission
         setMessage('');
         setError('');
 
@@ -28,7 +24,6 @@ function JournalInput() {
         }
 
         try {
-            // Call the mutate function from the hook
             await addEntryMutation.mutateAsync({ rawText: text });
             setMessage('Entry saved and analyzed successfully!');
             setText(''); // Clear textarea after successful submission
@@ -36,6 +31,17 @@ function JournalInput() {
             console.error('JournalInput: Error saving entry:', err.response ? err.response.data : err.message);
             setError('Failed to save entry. Please ensure backend services are running and you are logged in.');
         }
+    };
+
+    // ⭐ NEW: Handle key down events for Enter and Shift+Enter ⭐
+    const handleKeyDown = (e) => {
+        // If Enter is pressed WITHOUT Shift
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault(); // Prevent default newline behavior
+            handleSubmit(e); // Trigger submission
+        }
+        // If Shift+Enter is pressed, allow default behavior (new line)
+        // No 'else if' needed, as default behavior for Shift+Enter is already newline
     };
 
     return (
@@ -46,18 +52,19 @@ function JournalInput() {
             </h2>
             {message && <p className="text-green-600 dark:text-green-400 font-inter">{message}</p>}
             {addEntryMutation.isError && <p className="text-[#FF8A7A] font-inter">{addEntryMutation.error.message || 'An error occurred.'}</p>}
-            {error && <p className="text-[#FF8A7A] font-inter">{error}</p>} {/* For local validation errors */}
+            {error && <p className="text-[#FF8A7A] font-inter">{error}</p>}
             <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                placeholder="Write your thoughts here... The AI will help you understand them."
+                onKeyDown={handleKeyDown} // ⭐ ADDED: Key down handler ⭐
+                placeholder="Write your thoughts here... Press Enter to save, Shift+Enter for a new line. The AI will help you understand them."
                 rows="10"
                 className={`w-full p-3 rounded-lg border border-gray-300 dark:border-gray-600
                             bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200
                             focus:outline-none focus:ring-2 focus:ring-[#B399D4] dark:focus:ring-[#5CC8C2]
                             font-inter resize-y transition-colors duration-300`}
                 aria-label="Journal Entry Text Area"
-                disabled={addEntryMutation.isPending} // Disable while submitting
+                disabled={addEntryMutation.isPending}
             ></textarea>
             <div className="flex space-x-4">
                 <button
