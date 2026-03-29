@@ -3,6 +3,7 @@ package com.mymindmirror.backend.service;
 
 import com.mymindmirror.backend.model.Milestone;
 import com.mymindmirror.backend.model.Task;
+import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.payload.request.MilestoneInsightRequest;
 import com.mymindmirror.backend.payload.request.TaskForInsightRequest;
 import com.mymindmirror.backend.payload.response.MilestoneInsightResponse;
@@ -26,9 +27,12 @@ public class MilestoneInsightService {
 
     // Inject the WebClient configured for the ML service
     private final WebClient mlServiceWebClient;
+    private final ApiKeyService apiKeyService;
 
-    public MilestoneInsightService(@Qualifier("mlServiceWebClient") WebClient mlServiceWebClient) {
+    public MilestoneInsightService(@Qualifier("mlServiceWebClient") WebClient mlServiceWebClient,
+                                   ApiKeyService apiKeyService) {
         this.mlServiceWebClient = mlServiceWebClient;
+        this.apiKeyService = apiKeyService;
     }
 
     /**
@@ -38,6 +42,8 @@ public class MilestoneInsightService {
      * @return A Mono containing MilestoneInsightResponse, or a fallback response if an error occurs.
      */
     public Mono<MilestoneInsightResponse> getMilestoneInsights(Milestone milestone) {
+        User user = milestone.getUser();
+        String apiKey = apiKeyService.getDecryptedApiKey(user);
         logger.info("MilestoneInsightService: Requesting AI insights for milestone: {}", milestone.getTitle());
 
         // Map Milestone tasks to TaskForInsightRequest DTOs
@@ -59,8 +65,10 @@ public class MilestoneInsightService {
                 taskRequests
         );
 
+
         return mlServiceWebClient.post()
-                .uri("/ml/milestone/milestone_insights")// Endpoint in Flask app.py
+                .uri("/ml/milestone/milestone_insights")
+                .header("X-Gemini-Key", apiKey != null ? apiKey : "")
                 .bodyValue(requestPayload)
                 .retrieve()
                 .bodyToMono(MilestoneInsightResponse.class)

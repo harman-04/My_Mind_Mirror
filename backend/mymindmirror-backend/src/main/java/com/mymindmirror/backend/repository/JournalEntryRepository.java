@@ -85,8 +85,6 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID
      * @param keyword The keyword to search for (case-insensitive).
      * @return A list of JournalEntry objects matching the criteria.
      */
-    @Query("SELECT je FROM JournalEntry je WHERE je.user = :user AND LOWER(je.rawText) LIKE LOWER(CONCAT('%', :keyword, '%')) ORDER BY je.creationTimestamp DESC")
-    List<JournalEntry> findByUserAndRawTextContainingKeyword(@Param("user") User user, @Param("keyword") String keyword);
 
     /**
      * Finds journal entries for a user that have a mood score within a specified range.

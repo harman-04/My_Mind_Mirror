@@ -3,6 +3,7 @@
 package com.mymindmirror.backend.controller;
 
 import com.mymindmirror.backend.model.JournalEntry;
+import com.mymindmirror.backend.model.KeyPhrase;
 import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.payload.request.JournalEntryRequest;
 import com.mymindmirror.backend.payload.request.ClusterRequest; // ⭐ NEW IMPORT ⭐
@@ -245,11 +246,12 @@ public class JournalController {
 
         List<JournalEntry> entries = journalService.getJournalEntriesForUser(currentUser, start, end);
 
+        // Inside getJournalTrends method
         Map<String, Long> trendCounts = entries.stream()
                 .filter(entry -> entry.getKeyPhrases() != null)
                 .flatMap(entry -> entry.getKeyPhrases().stream())
+                .map(KeyPhrase::getPhrase) // ⭐ Extract the string from the entity
                 .collect(Collectors.groupingBy(phrase -> phrase, Collectors.counting()));
-
         Map<String, Long> topTrends = trendCounts.entrySet().stream()
                 .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
                 .limit(limit)

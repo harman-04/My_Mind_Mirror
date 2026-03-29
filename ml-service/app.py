@@ -1,7 +1,7 @@
 # D:\new ai\My_Mind_Mirror\ml-service\app.py
 
 from flask import Flask, request, jsonify
-from flask_cors import CORS 
+from flask_cors import CORS
 import logging
 import os
 
@@ -45,16 +45,18 @@ app.register_blueprint(milestone_bp)
 @app.route('/generate_reflection', methods=['POST', 'OPTIONS'])
 def generate_reflection_app_level():
     if request.method == 'OPTIONS':
-        # This is a preflight request, just return 200 OK.
-        # flask-cors will add the necessary headers.
         return '', 200
-    
+
     data = request.json
     prompt_text = data.get('prompt_text', '')
     if not prompt_text:
         return jsonify({"error": "No prompt text provided"}), 400
-    
-    reflection_text = call_gemini_api(prompt_text)
+
+    # Read the API key from header (may be None)
+    api_key = request.headers.get('X-Gemini-Key')
+
+    # Pass the key to the helper
+    reflection_text = call_gemini_api(prompt_text, api_key=api_key)
     if reflection_text:
         return jsonify({"reflection": reflection_text})
     else:

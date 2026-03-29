@@ -15,7 +15,7 @@ milestone_bp = Blueprint('milestone', __name__, url_prefix='/ml/milestone') # No
 logger = logging.getLogger(__name__)
 
 # --- Milestone AI Functions (Moved from app.py) ---
-def get_gemini_milestone_insights(milestone_data):
+def get_gemini_milestone_insights(milestone_data, api_key=None):
     title = milestone_data.get("title", "a goal")
     description = milestone_data.get("description", "no detailed description.")
     due_date = milestone_data.get("dueDate")
@@ -76,7 +76,7 @@ def get_gemini_milestone_insights(milestone_data):
         "required": ["remainingWork", "performanceAssessment", "tips", "encouragement", "suggestedNewTasks", "status"]
     }
 
-    insights = call_gemini_api(prompt, response_schema)
+    insights = call_gemini_api(prompt, response_schema, api_key=api_key)
 
     if insights is None:
         logger.error("Gemini failed to generate milestone insights. Returning fallback response.")
@@ -99,6 +99,7 @@ def get_gemini_milestone_insights(milestone_data):
 @milestone_bp.route('/milestone_insights', methods=['POST'])
 def milestone_insights_endpoint():
     data = request.json
+    api_key = request.headers.get('X-Gemini-Key')  # <-- proper indentation
     if not data:
         logger.error("No milestone data provided for insight generation.")
         return jsonify({
@@ -111,7 +112,7 @@ def milestone_insights_endpoint():
         }), 400
 
     try:
-        insights = get_gemini_milestone_insights(data)
+        insights = get_gemini_milestone_insights(data, api_key=api_key)  # <-- remove extra )
         if insights:
             return jsonify(insights)
         else:

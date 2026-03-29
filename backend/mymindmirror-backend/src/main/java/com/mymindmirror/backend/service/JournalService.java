@@ -3,6 +3,7 @@ package com.mymindmirror.backend.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mymindmirror.backend.model.JournalEntry;
+import com.mymindmirror.backend.model.KeyPhrase;
 import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.repository.JournalEntryRepository;
 import com.mymindmirror.backend.payload.MoodDataResponse;
@@ -35,15 +36,18 @@ public class JournalService {
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
     private final UserService userService;
+    private final ApiKeyService apiKeyService;
 
     @Value("${app.ml-service.url}")
     private String mlServiceBaseUrl;
 
-    public JournalService(JournalEntryRepository journalEntryRepository, WebClient mlServiceWebClient, ObjectMapper objectMapper, UserService userService) {
+    public JournalService(JournalEntryRepository journalEntryRepository, WebClient mlServiceWebClient,
+                          ObjectMapper objectMapper, UserService userService, ApiKeyService apiKeyService) {
         this.journalEntryRepository = journalEntryRepository;
         this.webClient = mlServiceWebClient;
         this.objectMapper = objectMapper;
         this.userService = userService;
+        this.apiKeyService = apiKeyService;
     }
 
     /**
@@ -83,7 +87,7 @@ public class JournalService {
         }
 
         if (!actualRawText.trim().isEmpty()) {
-            processAiAnalysis(actualRawText, newEntry);
+            processAiAnalysis(actualRawText, newEntry, user);
         } else {
             logger.warn("Raw text is empty for new entry. Skipping AI analysis and resetting fields.");
             resetAiFields(newEntry);
@@ -141,7 +145,7 @@ public class JournalService {
         if (textContentChanged) {
             logger.info("Journal entry text content changed for ID {}. Re-running AI analysis.", entryId);
             if (!textToEncrypt.trim().isEmpty()) {
-                processAiAnalysis(textToEncrypt, existingEntry);
+                processAiAnalysis(textToEncrypt, existingEntry, user);
             } else {
                 logger.warn("Updated text is empty for entry {}. Skipping AI analysis and resetting fields.", entryId);
                 resetAiFields(existingEntry);
@@ -178,7 +182,8 @@ public class JournalService {
     /**
      * Helper method to call ML service for general journal analysis and update JournalEntry fields.
      */
-    private void processAiAnalysis(String textForAnalysis, JournalEntry entryToUpdate) {
+    private void processAiAnalysis(String textForAnalysis, JournalEntry entryToUpdate, User user) {
+        String apiKey = apiKeyService.getDecryptedApiKey(user);
         Map<String, String> requestBody = new HashMap<>();
         requestBody.put("text", textForAnalysis);
 
@@ -187,6 +192,7 @@ public class JournalService {
             logger.info("Calling ML service for journal analysis at {}/analyze_journal", mlServiceBaseUrl);
             mlResponse = webClient.post()
                     .uri("/ml/journal/analyze_journal")
+                    .header("X-Gemini-Key", apiKey != null ? apiKey : "")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)
@@ -212,7 +218,11 @@ public class JournalService {
                 entryToUpdate.setGrowthTips(mlResponse.get("growthTips") != null ? objectMapper.writeValueAsString(mlResponse.get("growthTips")) : null);
 
                 List<String> keyPhrasesFromMl = (List<String>) mlResponse.getOrDefault("keyPhrases", Collections.emptyList());
-                entryToUpdate.setKeyPhrases(keyPhrasesFromMl);
+                List<KeyPhrase> keyPhraseEntities = keyPhrasesFromMl.stream()
+                        .map(phrase -> new KeyPhrase(phrase, entryToUpdate))
+                        .collect(Collectors.toList());
+
+                entryToUpdate.setKeyPhrases(keyPhraseEntities);
 
                 logger.info("Journal entry AI analysis results processed.");
             } catch (JsonProcessingException e) {
@@ -237,7 +247,7 @@ public class JournalService {
         entry.setCoreConcerns(null);
         entry.setSummary(null);
         entry.setGrowthTips(null);
-        entry.setKeyPhrases(Collections.emptyList());
+        entry.setKeyPhrases(new ArrayList<>()); // Use an empty list of the new type
         entry.setClusterId(null);
     }
 
@@ -391,6 +401,7 @@ public class JournalService {
             logger.error("Mismatch in journalTexts size ({}) and allUserEntries size ({}). Cannot reliably assign cluster IDs.", journalTexts.size(), allUserEntries.size());
         }
 
+        String apiKey = apiKeyService.getDecryptedApiKey(user);
         Map<String, Object> requestBody = new HashMap<>();
         requestBody.put("userId", user.getId().toString());
         requestBody.put("journalTexts", journalTexts);
@@ -405,6 +416,7 @@ public class JournalService {
             logger.info("Calling ML service for journal clustering at {}/cluster_journal_entries", mlServiceBaseUrl);
             clusterResult = webClient.post()
                     .uri("/ml/journal/cluster_journal_entries")
+                    .header("X-Gemini-Key", apiKey != null ? apiKey : "") // pass even if null
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(ClusterResult.class)
@@ -459,26 +471,39 @@ public class JournalService {
         return entries;
     }
 
-    // ⭐ NEW METHOD FOR KEYWORD SEARCH ⭐
+    // ⭐ MODIFIED METHOD FOR KEYWORD SEARCH ⭐
     public List<JournalEntry> searchJournalEntriesByKeyword(User user, String keyword) {
         logger.info("Searching journal entries for user: {} with keyword: '{}'", user.getUsername(), keyword);
-        List<JournalEntry> entries = journalEntryRepository.findByUserAndRawTextContainingKeyword(user, keyword);
 
         String userSecret = user.getPasswordHash();
         if (userSecret == null || userSecret.isEmpty()) {
             logger.error("User {} has no password hash. Cannot decrypt journal entries for keyword search.", user.getUsername());
+            // Depending on desired behavior, could throw an exception or return empty list
+            return List.of(); // Return empty list if decryption is not possible
         }
 
-        for (JournalEntry entry : entries) {
-            if (userSecret != null && !userSecret.isEmpty()) {
-                entry.setRawText(EncryptionUtil.decrypt(entry.getRawText(), userSecret));
-            }
-            if (entry.getKeyPhrases() != null) {
-                Hibernate.initialize(entry.getKeyPhrases());
-            }
-        }
-        return entries;
+        // 1. Fetch all encrypted entries for the user
+        List<JournalEntry> allEncryptedEntries = journalEntryRepository.findByUserOrderByCreationTimestampDesc(user);
+        logger.info("Fetched {} encrypted entries for user {}.", allEncryptedEntries.size(), user.getUsername());
+
+        // 2. Decrypt each entry and then filter by keyword in memory
+        String lowerCaseKeyword = keyword.toLowerCase();
+        List<JournalEntry> matchingEntries = allEncryptedEntries.stream()
+                .peek(entry -> {
+                    // Decrypt the rawText (this part is crucial for search)
+                    String decryptedText = EncryptionUtil.decrypt(entry.getRawText(), userSecret);
+                    entry.setRawText(decryptedText != null ? decryptedText : ""); // Set decrypted text, handle null if decryption fails
+                    if (entry.getKeyPhrases() != null) {
+                        Hibernate.initialize(entry.getKeyPhrases()); // Ensure key phrases are loaded
+                    }
+                })
+                .filter(entry -> entry.getRawText().toLowerCase().contains(lowerCaseKeyword)) // Filter on the decrypted text
+                .collect(Collectors.toList());
+
+        logger.info("Found {} journal entries matching keyword '{}' after decryption for user {}.", matchingEntries.size(), keyword, user.getUsername());
+        return matchingEntries;
     }
+
 
     // ⭐ NEW METHOD FOR MOOD SCORE RANGE SEARCH ⭐
     public List<JournalEntry> searchJournalEntriesByMoodScore(User user, Double minMood, Double maxMood) {
@@ -508,7 +533,8 @@ public class JournalService {
      * @param promptText The text prompt to send to the ML service for reflection generation.
      * @return The generated reflection text.
      */
-    public String generateReflectionFromMlService(String promptText) {
+    public String generateReflectionFromMlService(String promptText, User user) {
+        String apiKey = apiKeyService.getDecryptedApiKey(user);
         Map<String, String> requestBody = new HashMap<>();
         requestBody.put("prompt_text", promptText);
 
@@ -516,6 +542,7 @@ public class JournalService {
             logger.info("Calling ML service for reflection generation at {}/generate_reflection", mlServiceBaseUrl);
             Map<String, String> mlResponse = webClient.post()
                     .uri("/generate_reflection")
+                    .header("X-Gemini-Key", apiKey != null ? apiKey : "")
                     .bodyValue(requestBody)
                     .retrieve()
                     .bodyToMono(Map.class)

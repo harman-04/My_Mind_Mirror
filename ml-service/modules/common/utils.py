@@ -64,14 +64,14 @@ def preprocess_text_nltk(text):
     return ' '.join(words)
 
 # --- Public Gemini API Helper Function (now just a wrapper for the client) ---
-def call_gemini_api(prompt_text, response_schema=None, temperature=0.7, timeout=None):
+# modules/common/utils.py
+
+def call_gemini_api(prompt_text, response_schema=None, temperature=0.7, timeout=None, api_key=None):
     """
-    Public function to call Gemini API, now using the centralized GeminiApiClient.
-    Uses Config.GEMINI_API_TIMEOUT as default if not specified.
+    Public function to call Gemini API, now accepting a per‑request API key.
     """
-    # Use the timeout from Config if not explicitly provided
     actual_timeout = timeout if timeout is not None else Config.GEMINI_API_TIMEOUT
-    return gemini_api_client.call_gemini_api(prompt_text, response_schema, temperature, actual_timeout)
+    return gemini_api_client.call_gemini_api(prompt_text, response_schema, temperature, actual_timeout, api_key)
 
 # Add other utility functions here if needed
 # Example:

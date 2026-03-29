@@ -1,5 +1,3 @@
-// In src/main/java/com/mymindmirror/backend/payload/JournalEntryResponse.java
-
 package com.mymindmirror.backend.payload.response;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
@@ -7,6 +5,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mymindmirror.backend.model.JournalEntry;
+import com.mymindmirror.backend.model.KeyPhrase; // ⭐ IMPORT THE NEW MODEL
 import com.mymindmirror.backend.payload.UserResponse;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -17,12 +16,13 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors; // ⭐ IMPORT FOR STREAMING
 
 @Data
 @NoArgsConstructor
 public class JournalEntryResponse {
     private UUID id;
-    private UserResponse user; // Nested UserResponse
+    private UserResponse user;
 
     @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate entryDate;
@@ -34,28 +34,32 @@ public class JournalEntryResponse {
 
     // AI Analysis Fields
     private Double moodScore;
-    private Map<String, Double> emotions; // Parsed from JSON string
-    private List<String> coreConcerns; // Parsed from JSON string
+    private Map<String, Double> emotions;
+    private List<String> coreConcerns;
     private String summary;
-    private List<String> growthTips; // Parsed from JSON string
-    private List<String> keyPhrases;
+    private List<String> growthTips;
+    private List<String> keyPhrases; // Keeps the API consistent as a List of Strings
 
-    // ⭐ NEW FIELD ⭐
-    private Integer clusterId; // Expose the cluster ID
+    private Integer clusterId;
 
     public JournalEntryResponse(JournalEntry journalEntry) {
         this.id = journalEntry.getId();
-        this.user = new UserResponse(journalEntry.getUser()); // Convert User to UserResponse
+        this.user = new UserResponse(journalEntry.getUser());
         this.entryDate = journalEntry.getEntryDate();
         this.creationTimestamp = journalEntry.getCreationTimestamp();
         this.rawText = journalEntry.getRawText();
         this.moodScore = journalEntry.getMoodScore();
         this.summary = journalEntry.getSummary();
-        this.keyPhrases = journalEntry.getKeyPhrases() != null ? journalEntry.getKeyPhrases() : Collections.emptyList();
-        // ⭐ NEW: Map clusterId directly ⭐
         this.clusterId = journalEntry.getClusterId();
 
-        ObjectMapper objectMapper = new ObjectMapper(); // Or inject, but for DTOs often done inline
+        // ⭐ FIX: Map the KeyPhrase entity back to a simple String for the frontend
+        this.keyPhrases = (journalEntry.getKeyPhrases() != null)
+                ? journalEntry.getKeyPhrases().stream()
+                .map(KeyPhrase::getPhrase)
+                .collect(Collectors.toList())
+                : Collections.emptyList();
+
+        ObjectMapper objectMapper = new ObjectMapper();
         try {
             if (journalEntry.getEmotions() != null && !journalEntry.getEmotions().isEmpty()) {
                 this.emotions = objectMapper.readValue(journalEntry.getEmotions(), new TypeReference<Map<String, Double>>() {});
@@ -74,7 +78,6 @@ public class JournalEntryResponse {
             }
 
         } catch (JsonProcessingException e) {
-            // Log the error and set fields to default empty values
             System.err.println("Error parsing JSON from JournalEntry: " + e.getMessage());
             this.emotions = Collections.emptyMap();
             this.coreConcerns = Collections.emptyList();

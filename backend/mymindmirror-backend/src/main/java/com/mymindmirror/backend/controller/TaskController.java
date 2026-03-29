@@ -1,4 +1,3 @@
-// src/main/java/com/mymindmirror.backend/controller/TaskController.java
 package com.mymindmirror.backend.controller;
 
 import com.mymindmirror.backend.model.Task;
@@ -11,7 +10,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-// import org.springframework.security.access.prepost.PreAuthorize; // ⭐ REMOVE THIS IMPORT ⭐
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
@@ -39,17 +37,19 @@ public class TaskController {
             throw new IllegalArgumentException("Bearer token is missing or malformed.");
         }
         String jwt = authorizationHeader.substring(7);
-        String userIdString = jwtUtil.extractUserId(jwt);
-        if (userIdString == null) {
+
+        // ⭐ FIX HERE: Directly use UUID returned by jwtUtil.extractUserId ⭐
+        UUID userId = jwtUtil.extractUserId(jwt);
+
+        if (userId == null) { // This check is technically redundant if extractUserId throws on null
             throw new IllegalArgumentException("User ID not found in JWT token.");
         }
-        UUID userId = UUID.fromString(userIdString);
+
         return userService.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Error: User not found in database for ID: " + userId));
     }
 
     @PostMapping
-    // @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')") // ⭐ REMOVE THIS LINE ⭐
     public ResponseEntity<Task> createTask(@RequestHeader("Authorization") String authorizationHeader,
                                            @PathVariable UUID milestoneId, @RequestBody TaskRequest taskRequest) {
         User currentUser = getCurrentUserFromToken(authorizationHeader);
@@ -63,7 +63,6 @@ public class TaskController {
     }
 
     @GetMapping
-    // @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')") // ⭐ REMOVE THIS LINE ⭐
     public ResponseEntity<List<Task>> getAllTasksForMilestone(@RequestHeader("Authorization") String authorizationHeader,
                                                               @PathVariable UUID milestoneId) {
         User currentUser = getCurrentUserFromToken(authorizationHeader);
@@ -72,7 +71,6 @@ public class TaskController {
     }
 
     @GetMapping("/{taskId}")
-    // @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')") // ⭐ REMOVE THIS LINE ⭐
     public ResponseEntity<Task> getTaskById(@RequestHeader("Authorization") String authorizationHeader,
                                             @PathVariable UUID milestoneId, @PathVariable UUID taskId) {
         User currentUser = getCurrentUserFromToken(authorizationHeader);
@@ -82,7 +80,6 @@ public class TaskController {
     }
 
     @PutMapping("/{taskId}")
-    // @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')") // ⭐ REMOVE THIS LINE ⭐
     public ResponseEntity<Task> updateTask(@RequestHeader("Authorization") String authorizationHeader,
                                            @PathVariable UUID milestoneId, @PathVariable UUID taskId, @RequestBody TaskRequest taskRequest) {
         User currentUser = getCurrentUserFromToken(authorizationHeader);
@@ -98,7 +95,6 @@ public class TaskController {
     }
 
     @DeleteMapping("/{taskId}")
-    // @PreAuthorize("hasRole('USER') or hasRole('MODERATOR') or hasRole('ADMIN')") // ⭐ REMOVE THIS LINE ⭐
     public ResponseEntity<MessageResponse> deleteTask(@RequestHeader("Authorization") String authorizationHeader,
                                                       @PathVariable UUID milestoneId, @PathVariable UUID taskId) {
         User currentUser = getCurrentUserFromToken(authorizationHeader);

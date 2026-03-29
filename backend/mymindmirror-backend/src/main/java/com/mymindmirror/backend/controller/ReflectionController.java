@@ -61,7 +61,7 @@ public class ReflectionController {
         logger.info("Received request to generate reflection for user: {}", user.getUsername());
 
         try {
-            String reflection = journalService.generateReflectionFromMlService(promptText);
+            String reflection = journalService.generateReflectionFromMlService(promptText, user);
             return ResponseEntity.ok(Collections.singletonMap("reflection", reflection));
         } catch (Exception e) {
             logger.error("Error generating reflection for user {}: {}", user.getUsername(), e.getMessage(), e);

@@ -11,6 +11,7 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -62,11 +63,8 @@ public class JournalEntry {
     @Column(name = "growth_tips", columnDefinition = "TEXT")
     private String growthTips; // Stored as JSON string
 
-    // ⭐ FIX: Changed FetchType from LAZY to EAGER for keyPhrases to resolve LazyInitializationException ⭐
-    @ElementCollection(fetch = FetchType.EAGER) // Stores collection of simple types
-    @CollectionTable(name = "journal_entry_key_phrases", joinColumns = @JoinColumn(name = "journal_entry_id"))
-    @Column(name = "key_phrase", columnDefinition = "TEXT")
-    private List<String> keyPhrases;
+    @OneToMany(mappedBy = "journalEntry", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    private List<KeyPhrase> keyPhrases = new ArrayList<>();
 
     // NEW FIELD for Clustering
     @Column(name = "cluster_id")
