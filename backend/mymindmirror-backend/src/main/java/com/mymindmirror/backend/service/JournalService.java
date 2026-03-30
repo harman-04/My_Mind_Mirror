@@ -14,10 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 import org.hibernate.Hibernate;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -33,21 +30,22 @@ public class JournalService {
     private static final Logger logger = LoggerFactory.getLogger(JournalService.class);
 
     private final JournalEntryRepository journalEntryRepository;
-    private final WebClient webClient;
     private final ObjectMapper objectMapper;
     private final UserService userService;
     private final ApiKeyService apiKeyService;
+    private final MLServiceClient mlServiceClient;
 
     @Value("${app.ml-service.url}")
     private String mlServiceBaseUrl;
 
-    public JournalService(JournalEntryRepository journalEntryRepository, WebClient mlServiceWebClient,
-                          ObjectMapper objectMapper, UserService userService, ApiKeyService apiKeyService) {
+    public JournalService(JournalEntryRepository journalEntryRepository,
+                          ObjectMapper objectMapper, UserService userService, ApiKeyService apiKeyService,
+                          MLServiceClient mlServiceClient) {
         this.journalEntryRepository = journalEntryRepository;
-        this.webClient = mlServiceWebClient;
         this.objectMapper = objectMapper;
         this.userService = userService;
         this.apiKeyService = apiKeyService;
+        this.mlServiceClient = mlServiceClient;
     }
 
     /**
@@ -184,19 +182,10 @@ public class JournalService {
      */
     private void processAiAnalysis(String textForAnalysis, JournalEntry entryToUpdate, User user) {
         String apiKey = apiKeyService.getDecryptedApiKey(user);
-        Map<String, String> requestBody = new HashMap<>();
-        requestBody.put("text", textForAnalysis);
-
         Map<String, Object> mlResponse = null;
         try {
-            logger.info("Calling ML service for journal analysis at {}/analyze_journal", mlServiceBaseUrl);
-            mlResponse = webClient.post()
-                    .uri("/ml/journal/analyze_journal")
-                    .header("X-Gemini-Key", apiKey != null ? apiKey : "")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .block();
+            logger.info("Calling ML service for journal analysis via circuit breaker");
+            mlResponse = mlServiceClient.analyzeJournal(textForAnalysis, apiKey).block();
             logger.info("ML service for journal analysis responded successfully.");
         } catch (Exception e) {
             logger.error("Failed to call ML service for journal analysis or received error: {}", e.getMessage(), e);
@@ -349,7 +338,7 @@ public class JournalService {
      */
     public Map<String, Object> runAnomalyDetection(List<DailyAggregatedDataResponse> aggregatedData) {
         try {
-            logger.info("Calling ML service for anomaly detection at {}/anomaly_detection with {} data points.", mlServiceBaseUrl, aggregatedData.size());
+            logger.info("Calling ML service for anomaly detection via circuit breaker");
             List<Map<String, Object>> requestBody = aggregatedData.stream()
                     .map(data -> {
                         Map<String, Object> map = new HashMap<>();
@@ -359,13 +348,7 @@ public class JournalService {
                         return map;
                     })
                     .collect(Collectors.toList());
-
-            Map<String, Object> mlResponse = webClient.post()
-                    .uri("/ml/journal/anomaly_detection")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .block();
+            Map<String, Object> mlResponse = mlServiceClient.runAnomalyDetection(requestBody, null).block();
             logger.info("ML service for anomaly detection responded successfully.");
             return mlResponse;
         } catch (Exception e) {
@@ -373,7 +356,6 @@ public class JournalService {
             return Map.of("error", "Failed to run anomaly detection: " + e.getMessage());
         }
     }
-
     /**
      * Triggers the journal entry clustering process in the Flask ML service.
      * This method collects all journal entries for a user and sends them to Flask for clustering.
@@ -406,21 +388,11 @@ public class JournalService {
         requestBody.put("userId", user.getId().toString());
         requestBody.put("journalTexts", journalTexts);
         requestBody.put("nClusters", nClusters);
-        logger.info("NClusters being put into Flask requestBody: {}", requestBody.get("nClusters"));
 
         ClusterResult clusterResult = null;
         try {
-            String requestBodyJson = objectMapper.writeValueAsString(requestBody);
-            logger.info("Sending ML service clustering request: {}", requestBodyJson);
-
-            logger.info("Calling ML service for journal clustering at {}/cluster_journal_entries", mlServiceBaseUrl);
-            clusterResult = webClient.post()
-                    .uri("/ml/journal/cluster_journal_entries")
-                    .header("X-Gemini-Key", apiKey != null ? apiKey : "") // pass even if null
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(ClusterResult.class)
-                    .block();
+            logger.info("Sending ML service clustering request");
+            clusterResult = mlServiceClient.clusterJournalEntries(requestBody, apiKey).block();
             logger.info("ML service for journal clustering responded successfully.");
 
             if (clusterResult != null && clusterResult.getEntryClusters() != null && !clusterResult.getEntryClusters().isEmpty()) {
@@ -435,17 +407,14 @@ public class JournalService {
                     logger.error("Mismatch between number of entries ({}) and cluster IDs received ({}). Cannot reliably assign cluster IDs.", allUserEntries.size(), clusterResult.getEntryClusters().size());
                 }
             } else {
-                logger.warn("Clustering result from ML service was empty or malformed. No entries updated with cluster IDs.");
+                logger.warn("Clustering result from ML service was empty or malformed.");
             }
-
-        } catch (JsonProcessingException e) {
-            logger.error("Error serializing clustering request body: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed to serialize clustering request.", e);
         } catch (Exception e) {
             logger.error("Error during ML service call for clustering: {}", e.getMessage(), e);
-            return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList()); // Return empty result on error
+            return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList());
         }
         return clusterResult;
+
     }
 
     /**
@@ -535,19 +504,9 @@ public class JournalService {
      */
     public String generateReflectionFromMlService(String promptText, User user) {
         String apiKey = apiKeyService.getDecryptedApiKey(user);
-        Map<String, String> requestBody = new HashMap<>();
-        requestBody.put("prompt_text", promptText);
-
         try {
-            logger.info("Calling ML service for reflection generation at {}/generate_reflection", mlServiceBaseUrl);
-            Map<String, String> mlResponse = webClient.post()
-                    .uri("/generate_reflection")
-                    .header("X-Gemini-Key", apiKey != null ? apiKey : "")
-                    .bodyValue(requestBody)
-                    .retrieve()
-                    .bodyToMono(Map.class)
-                    .block();
-
+            logger.info("Calling ML service for reflection generation via circuit breaker");
+            Map<String, String> mlResponse = mlServiceClient.generateReflection(promptText, apiKey).block();
             if (mlResponse != null && mlResponse.containsKey("reflection")) {
                 logger.info("ML service for reflection generation responded successfully.");
                 return mlResponse.get("reflection");

@@ -141,10 +141,15 @@ public class TaskService {
         Task existingTask = getTaskByIdForMilestoneAndUser(taskId, milestoneId, user)
                 .orElseThrow(() -> new IllegalArgumentException("Task not found or not owned by user/milestone."));
 
+        // Remove the task from the milestone's collection to avoid orphaned references
+        Milestone milestone = existingTask.getMilestone();
+        milestone.getTasks().remove(existingTask);
+
+        // Now delete the task
         taskRepository.delete(existingTask);
         logger.info("Task {} deleted successfully.", taskId);
 
-        // Update milestone status after deleting a task
-        milestoneService.updateMilestoneStatusBasedOnTasks(milestoneId);
+        // Update milestone status after deletion
+        milestoneService.updateMilestoneStatusBasedOnTasks(milestone.getId());
     }
 }

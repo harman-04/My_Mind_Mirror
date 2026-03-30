@@ -2,7 +2,6 @@
 package com.mymindmirror.backend.service;
 
 import com.mymindmirror.backend.model.Milestone;
-import com.mymindmirror.backend.model.Task;
 import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.payload.request.MilestoneInsightRequest;
 import com.mymindmirror.backend.payload.request.TaskForInsightRequest;
@@ -26,21 +25,22 @@ public class MilestoneInsightService {
     private static final Logger logger = LoggerFactory.getLogger(MilestoneInsightService.class);
 
     // Inject the WebClient configured for the ML service
-    private final WebClient mlServiceWebClient;
     private final ApiKeyService apiKeyService;
+    private final MLServiceClient mlServiceClient;
 
-    public MilestoneInsightService(@Qualifier("mlServiceWebClient") WebClient mlServiceWebClient,
-                                   ApiKeyService apiKeyService) {
-        this.mlServiceWebClient = mlServiceWebClient;
+    // Remove the @Qualifier entirely as it is not needed for these two services
+    public MilestoneInsightService(ApiKeyService apiKeyService, MLServiceClient mlServiceClient) {
         this.apiKeyService = apiKeyService;
-    }
-
+        this.mlServiceClient = mlServiceClient;
+    } 
     /**
      * Calls the Flask ML service to get AI-driven insights for a given milestone.
      *
      * @param milestone The Milestone entity for which to get insights.
      * @return A Mono containing MilestoneInsightResponse, or a fallback response if an error occurs.
      */
+
+
     public Mono<MilestoneInsightResponse> getMilestoneInsights(Milestone milestone) {
         User user = milestone.getUser();
         String apiKey = apiKeyService.getDecryptedApiKey(user);
@@ -65,26 +65,6 @@ public class MilestoneInsightService {
                 taskRequests
         );
 
-
-        return mlServiceWebClient.post()
-                .uri("/ml/milestone/milestone_insights")
-                .header("X-Gemini-Key", apiKey != null ? apiKey : "")
-                .bodyValue(requestPayload)
-                .retrieve()
-                .bodyToMono(MilestoneInsightResponse.class)
-                .doOnSuccess(response -> logger.info("MilestoneInsightService: Successfully received AI insights from ML service for milestone: {}", milestone.getTitle()))
-                .doOnError(e -> logger.error("MilestoneInsightService: Error calling Flask ML service for milestone insights: {}", e.getMessage(), e))
-                .onErrorResume(e -> {
-                    logger.error("MilestoneInsightService: Fallback for getMilestoneInsights due to error: {}", e.getMessage());
-                    // Return a default/empty response on error to prevent breaking the frontend
-                    return Mono.just(new MilestoneInsightResponse(
-                            "Insights currently unavailable.",
-                            "Cannot assess performance at this moment.",
-                            List.of("Check network connection to ML service or ML service logs."),
-                            "Keep up the great work!",
-                            List.of("Review milestone details."),
-                            MilestoneInsightResponse.InsightStatus.ERROR // ⭐ Ensure this is here in your actual code ⭐
-                    ));
-                });
+        return mlServiceClient.getMilestoneInsights(requestPayload, apiKey);
     }
 }

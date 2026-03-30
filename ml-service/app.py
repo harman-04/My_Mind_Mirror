@@ -31,7 +31,15 @@ os.environ['HF_HUB_ENABLE_HF_TRANSFER'] = '1'
 
 app = Flask(__name__)
 # Ensure CORS is applied to the entire app instance, which should handle preflight requests globally
-CORS(app) 
+CORS(app)
+
+# Global error handler – must come before the if __name__ block
+@app.errorhandler(Exception)
+def handle_exception(e):
+    logger.error(f"Unhandled exception: {e}", exc_info=True)
+    return jsonify({"error": "Internal server error", "message": str(e)}), 500
+
+
 
 if not Config.GEMINI_API_KEY:
     logger.error("GEMINI_API_KEY environment variable is not set. Gemini API calls will fail.")
@@ -73,3 +81,6 @@ if __name__ == '__main__':
     # but ensure your environment's PYTHONPATH is set up correctly or you're
     # running from the parent directory as a module.
     app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+
+
+# app.py

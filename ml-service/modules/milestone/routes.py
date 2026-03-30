@@ -5,6 +5,7 @@ from flask import Blueprint, request, jsonify
 from ..common.utils import call_gemini_api
 import sys
 import os
+from modules.common.gemini_api_client import GeminiAPIException
 
 # Add the ml-service root directory to the Python path
 # This allows importing config.py directly
@@ -76,25 +77,29 @@ def get_gemini_milestone_insights(milestone_data, api_key=None):
         "required": ["remainingWork", "performanceAssessment", "tips", "encouragement", "suggestedNewTasks", "status"]
     }
 
-    insights = call_gemini_api(prompt, response_schema, api_key=api_key)
+    try:
+        insights = call_gemini_api(prompt, response_schema, api_key=api_key)
 
-    if insights is None:
-        logger.error("Gemini failed to generate milestone insights. Returning fallback response.")
+        if insights is None:
+            raise GeminiAPIException("Gemini returned None", status_code=500)
+
+        if "status" not in insights:
+            insights["status"] = "SUCCESS"
+            logger.warning("Gemini milestone insights response missing 'status' field. Defaulting to 'SUCCESS'.")
+
+        return insights
+
+    except GeminiAPIException as e:
+        logger.error(f"Gemini API error in milestone insights: {e}")
         return {
             "remainingWork": "Unable to determine remaining work.",
-            "performanceAssessment": "Unable to assess performance.",
-            "tips": ["Review milestone details manually.", "Ensure all tasks are updated."],
-            "encouragement": "Keep going! Manual review can also provide clarity.",
+            "performanceAssessment": "AI analysis unavailable.",
+            "tips": ["Check your Gemini API key and quota."],
+            "encouragement": "Manual review is recommended.",
             "suggestedNewTasks": [],
-            "status": "ERROR"
+            "status": "ERROR",
+            "error": {"message": str(e), "code": e.status_code}
         }
-    
-    if "status" not in insights:
-        insights["status"] = "SUCCESS"
-        logger.warning("Gemini milestone insights response missing 'status' field. Defaulting to 'SUCCESS'.")
-
-    return insights
-
 # --- Milestone AI Endpoint (Moved from app.py) ---
 @milestone_bp.route('/milestone_insights', methods=['POST'])
 def milestone_insights_endpoint():
@@ -113,6 +118,9 @@ def milestone_insights_endpoint():
 
     try:
         insights = get_gemini_milestone_insights(data, api_key=api_key)  # <-- remove extra )
+        if "error" in insights:
+                logger.warning(f"Returning fallback milestone insights due to error: {insights['error']}")
+
         if insights:
             return jsonify(insights)
         else:

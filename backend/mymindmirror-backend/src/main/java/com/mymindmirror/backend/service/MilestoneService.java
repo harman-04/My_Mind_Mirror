@@ -5,6 +5,7 @@ import com.mymindmirror.backend.model.Milestone;
 import com.mymindmirror.backend.model.Task; // ⭐ Import Task to access Task.Status ⭐
 import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.repository.MilestoneRepository;
+import org.hibernate.Hibernate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -66,17 +67,21 @@ public class MilestoneService {
      * @param user The authenticated user.
      * @return An Optional containing the Milestone if found and owned by the user.
      */
+    @Transactional(readOnly = true)
     public Optional<Milestone> getMilestoneByIdForUser(UUID milestoneId, User user) {
         logger.info("Fetching milestone {} for user {}", milestoneId, user.getUsername());
-        // Use findByIdAndUser to ensure ownership check
         List<Milestone> milestones = milestoneRepository.findByIdAndUser(milestoneId, user);
         if (milestones.isEmpty()) {
             logger.warn("Milestone {} not found or not owned by user {}", milestoneId, user.getUsername());
             return Optional.empty();
         }
-        return Optional.of(milestones.get(0)); // Should be at most one result
+        Milestone milestone = milestones.get(0);
+        // Force initialization of the User proxy while session is open
+        Hibernate.initialize(milestone.getUser());
+        // Also initialize tasks if they are lazy (but they are already EAGER in your model)
+        Hibernate.initialize(milestone.getTasks());
+        return Optional.of(milestone);
     }
-
     /**
      * Updates an existing milestone.
      * Ensures that the milestone belongs to the authenticated user.

@@ -1,8 +1,11 @@
 package com.mymindmirror.backend.service;
 
+import com.mymindmirror.backend.model.JournalEntry;
 import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.payload.UserProfileRequest;
+import com.mymindmirror.backend.repository.JournalEntryRepository;
 import com.mymindmirror.backend.repository.UserRepository;
+import com.mymindmirror.backend.util.EncryptionUtil;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.slf4j.Logger;
@@ -11,6 +14,7 @@ import org.slf4j.LoggerFactory;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Service class for managing User-related business logic.
@@ -22,10 +26,15 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JournalEntryRepository journalEntryRepository;
 
-    public UserService(UserRepository userRepository, PasswordEncoder passwordEncoder) {
+
+    public UserService(UserRepository userRepository,
+                       PasswordEncoder passwordEncoder,
+                       JournalEntryRepository journalEntryRepository) {
         this.userRepository = userRepository;
         this.passwordEncoder = passwordEncoder;
+        this.journalEntryRepository = journalEntryRepository;
     }
 
     public User registerNewUser(String username, String email, String password) {
@@ -129,29 +138,54 @@ public class UserService {
      * @throws IllegalArgumentException if user not found, current password is incorrect,
      * or new password is the same as the old password.
      */
+    @Transactional
     public void changeUserPassword(UUID userId, String currentPassword, String newPassword) {
         logger.info("Attempting to change password for user ID: {}", userId);
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> {
-                    logger.warn("Password change failed: User with ID {} not found.", userId);
-                    return new IllegalArgumentException("User not found.");
-                });
+                .orElseThrow(() -> new IllegalArgumentException("User not found."));
 
         // Verify current password
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
-            logger.warn("Password change failed for user ID {}: Incorrect current password.", userId);
             throw new IllegalArgumentException("Incorrect current password.");
         }
 
-        // Check if new password is the same as old password
+        // Check if new password is same as old
         if (passwordEncoder.matches(newPassword, user.getPasswordHash())) {
-            logger.warn("Password change failed for user ID {}: New password cannot be the same as old password.", userId);
             throw new IllegalArgumentException("New password cannot be the same as the old password.");
         }
 
-        // Hash and set new password
-        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        // --- Re-encrypt all journal entries with the new password hash ---
+        List<JournalEntry> userEntries = journalEntryRepository.findByUser(user);
+        logger.info("Re-encrypting {} journal entries for user: {}", userEntries.size(), user.getUsername());
+
+        String oldPasswordHash = user.getPasswordHash(); // current hash (before change)
+        String newPasswordHash = passwordEncoder.encode(newPassword);
+
+        for (JournalEntry entry : userEntries) {
+            // Decrypt with old password hash
+            String decryptedText = EncryptionUtil.decrypt(entry.getRawText(), oldPasswordHash);
+            if (decryptedText == null) {
+                // If decryption fails (e.g., corrupted data), log and skip
+                logger.warn("Failed to decrypt entry {} for user {}. Skipping re-encryption.", entry.getId(), user.getUsername());
+                continue;
+            }
+            // Encrypt with new password hash
+            String newEncryptedText = EncryptionUtil.encrypt(decryptedText, newPasswordHash);
+            if (newEncryptedText == null) {
+                logger.error("Failed to encrypt entry {} for user {}. Aborting password change.", entry.getId(), user.getUsername());
+                throw new RuntimeException("Failed to re-encrypt journal entries. Password change aborted.");
+            }
+            entry.setRawText(newEncryptedText);
+        }
+
+        // Save all updated entries
+        journalEntryRepository.saveAll(userEntries);
+        logger.info("Successfully re-encrypted {} entries for user: {}", userEntries.size(), user.getUsername());
+
+        // Update password hash
+        user.setPasswordHash(newPasswordHash);
         userRepository.save(user);
+
         logger.info("Password changed successfully for user ID: {}", userId);
     }
 
