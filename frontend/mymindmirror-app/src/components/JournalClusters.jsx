@@ -106,10 +106,13 @@ function JournalClusters({ userId, onClusteringComplete, journalEntries, current
             </div>
 
             {error && (
-                <div className="bg-red-100 dark:bg-red-900/40 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded relative mb-4 font-inter" role="alert">
-                    <strong className="font-bold">Error!</strong>
-                    <span className="block sm:inline"> {error}</span>
-                </div>
+              <div className="bg-red-100 dark:bg-red-900/40 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded relative mb-4 font-inter" role="alert">
+                <strong className="font-bold">Error!</strong>
+                <span className="block sm:inline"> {error}</span>
+                <p className="text-sm mt-1">
+                  Ensure the ML service is running and your Gemini API key is valid.
+                </p>
+              </div>
             )}
 
             {successMessage && (

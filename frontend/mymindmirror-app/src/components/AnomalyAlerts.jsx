@@ -142,8 +142,11 @@ function AnomalyAlerts() {
       <div className={`p-6 rounded-xl ${currentColors.cardBg} ${currentColors.cardShadow} transition-all duration-500
                        flex flex-col items-center justify-center font-inter ${currentColors.accentColor}
                        min-h-[120px]`}>
-        <AlertCircle className="w-8 h-8 mb-3" />
-        <p className="text-lg">{error}</p>
+       <AlertCircle className="w-8 h-8 mb-3" />
+             <p className="text-lg">{error}</p>
+             <p className="text-sm mt-2">
+               Anomaly detection requires the ML service to be running. Check your connection.
+             </p>
       </div>
     );
   }

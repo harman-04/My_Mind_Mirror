@@ -496,10 +496,13 @@ const fetchMilestoneInsights = useCallback(async (milestoneId) => {
             )}
             {/* Display insight specific error if any */}
             {insightErrorId && milestoneError && (
-                <div className="bg-red-100 dark:bg-red-900/40 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded relative mb-4 font-inter" role="alert">
-                    <strong className="font-bold">Insight Error!</strong>
-                    <span className="block sm:inline"> {milestoneError}</span>
-                </div>
+              <div className="bg-red-100 dark:bg-red-900/40 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded relative mb-4 font-inter" role="alert">
+                <strong className="font-bold">Insight Error!</strong>
+                <span className="block sm:inline"> {milestoneError}</span>
+                <p className="text-sm mt-1">
+                  Make sure your Gemini API key is set in your profile and the ML service is running.
+                </p>
+              </div>
             )}
 
 
