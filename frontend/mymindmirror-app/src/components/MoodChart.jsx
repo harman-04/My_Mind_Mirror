@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
-import axios from 'axios';
+import { SkeletonChart } from './Skeleton';
+import { useTheme } from '../contexts/ThemeContext';
 import {
     Chart as ChartJS,
     CategoryScale,
@@ -10,10 +11,9 @@ import {
     Title,
     Tooltip,
     Legend,
-    Filler, // Import Filler for area under the line
+    Filler,
 } from 'chart.js';
 
-// Register Chart.js components
 ChartJS.register(
     CategoryScale,
     LinearScale,
@@ -22,41 +22,42 @@ ChartJS.register(
     Title,
     Tooltip,
     Legend,
-    Filler // Register Filler plugin
+    Filler
 );
 
-// Define a consistent color palette for emotions
+// Emotion colors – light mode
 const EMOTION_COLORS_LIGHT = {
-    'overall mood score': '#B399D4', // Gentle Lavender for overall mood
-    'joy': '#5CC8C2',         // Serene Teal
-    'sadness': '#FF8A7A',     // Warm Coral (Distinct from mood score)
-    'anger': '#A93226',       // Darker Red
-    'anxiety': '#F7DC6F',     // Yellowish for caution
-    'fear': '#6C3483',        // Purple-ish
-    'surprise': '#85C1E9',    // Light Blue for surprise
-    'neutral': '#E0E0E0',     // Soft Gray
-    'disgust': '#D35400',     // Dark Orange
-    'disappointment': '#283747', // Dark blue-gray
-    'remorse': '#7F8C8D',     // Gray
-    'grief': '#17202A',       // Very dark blue-gray
-    'optimism': '#F1C40F',    // Golden yellow
-    'caring': '#2ECC71',      // Green
-    'curiosity': '#AF7AC5',   // Light purple
-    'relief': '#58D68D',      // Light green
-    'love': '#E74C3C',        // Red
-    'pride': '#F39C12',       // Orange
-    'annoyance': '#E67E22',   // Orange
-    'excitement': '#FFD700',  // Gold
-    'contentment': '#90EE90', // Light Green
-    'frustration': '#FF4500', // Orange-Red
-    'gratitude': '#ADFF2F',   // Green-Yellow
-    'hope': '#ADD8E6',        // Light Blue
+    'overall mood score': '#B399D4',
+    'joy': '#5CC8C2',
+    'sadness': '#FF8A7A',
+    'anger': '#A93226',
+    'anxiety': '#F7DC6F',
+    'fear': '#6C3483',
+    'surprise': '#85C1E9',
+    'neutral': '#E0E0E0',
+    'disgust': '#D35400',
+    'disappointment': '#283747',
+    'remorse': '#7F8C8D',
+    'grief': '#17202A',
+    'optimism': '#F1C40F',
+    'caring': '#2ECC71',
+    'curiosity': '#AF7AC5',
+    'relief': '#58D68D',
+    'love': '#E74C3C',
+    'pride': '#F39C12',
+    'annoyance': '#E67E22',
+    'excitement': '#FFD700',
+    'contentment': '#90EE90',
+    'frustration': '#FF4500',
+    'gratitude': '#ADFF2F',
+    'hope': '#ADD8E6',
 };
 
+// Emotion colors – dark mode
 const EMOTION_COLORS_DARK = {
-    'overall mood score': '#C7B3E6', // Lighter Gentle Lavender for dark mode mood
+    'overall mood score': '#C7B3E6',
     'joy': '#8DE2DD',
-    'sadness': '#FFB0A4',     // Lighter Warm Coral
+    'sadness': '#FFB0A4',
     'anger': '#D45E4D',
     'anxiety': '#FFF0B3',
     'fear': '#9B6EB4',
@@ -80,196 +81,169 @@ const EMOTION_COLORS_DARK = {
     'hope': '#C0E0FF',
 };
 
+const MoodChart = ({ entries, isLoading }) => {
+    const { theme } = useTheme();
+    const isDarkMode = theme === 'dark';
+    const emotionColors = isDarkMode ? EMOTION_COLORS_DARK : EMOTION_COLORS_LIGHT;
 
-function MoodChart({ entries }) {
-    const [moodData, setMoodData] = useState([]);
-    const [emotionTrendData, setEmotionTrendData] = useState({}); // Stores emotion scores per date
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+    // Process data only when entries change
+    const { moodData, emotionTrendData } = useMemo(() => {
+        if (!entries || entries.length === 0) return { moodData: [], emotionTrendData: {} };
 
-    useEffect(() => {
-        const processMoodAndEmotionData = () => {
-            setLoading(true);
-            setError('');
-            try {
-                const fetchedEntries = entries;
+        // Mood data: filter entries with moodScore, map to {date, moodScore}, sort
+        const moodPoints = entries
+            .filter(entry => entry.moodScore !== null && entry.moodScore !== undefined)
+            .map(entry => ({ date: entry.entryDate, moodScore: entry.moodScore }))
+            .sort((a, b) => new Date(a.date) - new Date(b.date));
 
-                // Process data for Mood Score chart
-                const processedMoodData = fetchedEntries
-                    .filter(entry => entry.moodScore !== null)
-                    .map(entry => ({ date: entry.entryDate, moodScore: entry.moodScore }))
-                    .sort((a, b) => new Date(a.date) - new Date(b.date));
-                setMoodData(processedMoodData);
-
-                // Process data for Emotion Trends chart
-                const newEmotionTrendData = {}; // {date: {emotion: score, ...}}
-                fetchedEntries.forEach(entry => {
-                    if (entry.emotions) {
-                        let parsedEmotions = {};
-                        try {
-                            // Emotions are already parsed to an object in JournalEntryResponse
-                            parsedEmotions = entry.emotions;
-                            if (typeof parsedEmotions !== 'object' || parsedEmotions === null) parsedEmotions = {};
-                        } catch (e) {
-                            console.error("Error parsing entry.emotions for MoodChart:", e);
-                            parsedEmotions = {};
-                        }
-                        newEmotionTrendData[entry.entryDate] = parsedEmotions;
-                    }
-                });
-                setEmotionTrendData(newEmotionTrendData);
-
-                console.log("Fetched mood chart data:", processedMoodData);
-                console.log("Processed emotion trend data:", newEmotionTrendData);
-
-            } catch (err) {
-                console.error('Error processing mood/emotion data for chart:', err);
-                setError('Failed to load mood/emotion chart data.');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        processMoodAndEmotionData();
-    }, [entries]); // Re-run effect when journalEntries change (new entry added)
-
-    if (loading) {
-        return <div className="font-inter text-gray-700 dark:text-gray-300 text-center">Loading charts...</div>;
-    }
-
-    if (error) {
-        return <div className="font-inter text-[#FF8A7A] text-center">{error}</div>;
-    }
-
-    // Get all unique dates from moodData for x-axis labels
-    const allDates = [...new Set(moodData.map(d => d.date))].sort();
-
-    // ⭐ FIX: Dynamically select color palette based on theme ⭐
-    const rootElement = document.documentElement;
-    const isDarkMode = rootElement.classList.contains('dark');
-    const selectedEmotionColors = isDarkMode ? EMOTION_COLORS_DARK : EMOTION_COLORS_LIGHT;
-
-
-    // Dynamically create datasets for top emotions
-    const emotionDatasets = [];
-    const allEmotionLabels = new Set();
-    Object.values(emotionTrendData).forEach(dayEmotions => {
-        Object.keys(dayEmotions).forEach(label => allEmotionLabels.add(label));
-    });
-
-    // Filter for common/important emotions to display (e.g., top 3-5)
-    // ⭐ FIX: Ensure 'sadness' is included and has a distinct color ⭐
-    const emotionsToShow = ['joy', 'sadness', 'anger', 'anxiety', 'fear', 'neutral'];
-
-    emotionsToShow.forEach(emotionLabel => {
-        if (allEmotionLabels.has(emotionLabel)) {
-            emotionDatasets.push({
-                label: emotionLabel.charAt(0).toUpperCase() + emotionLabel.slice(1), // Capitalize
-                data: allDates.map(date => {
-                    const dayEmotions = emotionTrendData[date];
-                    return dayEmotions ? dayEmotions[emotionLabel] || 0 : 0;
-                }),
-                borderColor: selectedEmotionColors[emotionLabel] || '#CCCCCC', // Fallback color
-                backgroundColor: (selectedEmotionColors[emotionLabel] || '#CCCCCC') + '33', // Add transparency
-                tension: 0.3, // Smooth curves
-                pointBackgroundColor: selectedEmotionColors[emotionLabel] || '#CCCCCC',
-                pointBorderColor: selectedEmotionColors[emotionLabel] || '#CCCCCC',
-                pointRadius: 4,
-                pointHoverRadius: 6,
-                fill: false, // Don't fill for emotion lines
-            });
-        }
-    });
-
-    // Main chart data for Mood Score and Emotion Trends
-    const chartData = {
-        labels: allDates,
-        datasets: [
-            {
-                label: 'Overall Mood Score',
-                data: allDates.map(date => {
-                    const moodEntry = moodData.find(d => d.date === date);
-                    return moodEntry ? moodEntry.moodScore : null; // Use null for gaps
-                }),
-                borderColor: selectedEmotionColors['overall mood score'], // ⭐ FIX: Use distinct color ⭐
-                backgroundColor: selectedEmotionColors['overall mood score'] + '33', // With transparency
-                tension: 0.3,
-                pointBackgroundColor: selectedEmotionColors['overall mood score'],
-                pointBorderColor: selectedEmotionColors['overall mood score'],
-                pointRadius: 5,
-                pointHoverRadius: 7,
-                fill: 'origin', // ⭐ FIX: Fill area under the line ⭐
-                spanGaps: true, // Connect gaps where data is null
-            },
-            ...emotionDatasets, // Add emotion trend datasets
-        ],
-    };
-
-    const chartOptions = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                position: 'top',
-                labels: {
-                    font: { family: 'Inter', size: 14 },
-                    color: 'rgb(75, 85, 99)', // Default text color for legend
-                },
-            },
-            title: {
-                display: true,
-                text: 'Your Mood & Emotion Trends Over Time',
-                font: { family: 'Poppins', size: 20, weight: '600' },
-                color: '#1E1A3E', // Dark text for light mode
-            },
-            tooltip: {
-                callbacks: {
-                    label: function(context) {
-                        let label = context.dataset.label || '';
-                        if (label) {
-                            label += ': ';
-                        }
-                        if (context.parsed.y !== null) {
-                            label += context.parsed.y.toFixed(3); // More precision for emotion scores
-                        }
-                        return label;
-                    }
+        // Emotion trend data: group by date
+        const emotionMap = {};
+        entries.forEach(entry => {
+            if (entry.emotions) {
+                let parsedEmotions = entry.emotions;
+                if (typeof parsedEmotions === 'string') {
+                    try { parsedEmotions = JSON.parse(parsedEmotions); } catch (e) { parsedEmotions = {}; }
+                }
+                if (typeof parsedEmotions === 'object' && parsedEmotions !== null) {
+                    emotionMap[entry.entryDate] = parsedEmotions;
                 }
             }
-        },
-        scales: {
-            x: {
-                title: { display: true, text: 'Date', font: { family: 'Inter', size: 14 }, color: 'rgb(75, 85, 99)' },
-                ticks: { color: 'rgb(75, 85, 99)', font: { family: 'Inter' } },
-                grid: { color: 'rgba(200, 200, 200, 0.2)' },
-            },
-            y: {
-                min: -1, // For mood score
-                max: 1,  // For mood score and emotion intensity (0 to 1)
-                title: { display: true, text: 'Score / Intensity', font: { family: 'Inter', size: 14 }, color: 'rgb(75, 85, 99)' },
-                ticks: { color: 'rgb(75, 85, 99)', font: { family: 'Inter' } },
-                grid: { color: 'rgba(200, 200, 200, 0.2)' },
-            },
-        },
-    };
+        });
 
-    // Adjust chart colors for dark mode dynamically
-    if (isDarkMode) { // Use the already determined isDarkMode
-        chartOptions.plugins.legend.labels.color = '#E0E0E0';
-        chartOptions.plugins.title.color = '#E0E0E0';
-        chartOptions.scales.x.title.color = '#E0E0E0';
-        chartOptions.scales.x.ticks.color = '#E0E0E0';
-        chartOptions.scales.x.grid.color = 'rgba(100, 100, 100, 0.2)';
-        chartOptions.scales.y.title.color = '#E0E0E0';
-        chartOptions.scales.y.ticks.color = '#E0E0E0';
-        chartOptions.scales.y.grid.color = 'rgba(100, 100, 100, 0.2)';
+        return { moodData: moodPoints, emotionTrendData: emotionMap };
+    }, [entries]);
+
+    // Prepare chart data
+    const { chartData, chartOptions } = useMemo(() => {
+        if (!moodData.length && Object.keys(emotionTrendData).length === 0) {
+            return { chartData: { labels: [], datasets: [] }, chartOptions: {} };
+        }
+
+        // All unique dates from moodData and emotionTrendData
+//         const allDates = [...new Set([
+//             ...moodData.map(d => d.date),
+//             ...Object.keys(emotionTrendData)
+//         ])].sort();
+//
+
+       const allDates = [...new Set([
+           ...moodData.map(d => d.date),
+           ...Object.keys(emotionTrendData)
+       ])].sort((a, b) => new Date(a) - new Date(b)); // Add the date comparison
+
+        // Emotion datasets
+        const emotionDatasets = [];
+        const allEmotionLabels = new Set();
+        Object.values(emotionTrendData).forEach(dayEmotions => {
+            Object.keys(dayEmotions).forEach(label => allEmotionLabels.add(label));
+        });
+
+        // Emotions to show (can be made configurable later)
+        const emotionsToShow = ['joy', 'sadness', 'anger', 'anxiety', 'fear', 'neutral'];
+
+        emotionsToShow.forEach(emotionLabel => {
+            if (allEmotionLabels.has(emotionLabel)) {
+                emotionDatasets.push({
+                    label: emotionLabel.charAt(0).toUpperCase() + emotionLabel.slice(1),
+                    data: allDates.map(date => emotionTrendData[date]?.[emotionLabel] || 0),
+                    borderColor: emotionColors[emotionLabel] || '#CCCCCC',
+                    backgroundColor: (emotionColors[emotionLabel] || '#CCCCCC') + '33',
+                    tension: 0.3,
+                    pointBackgroundColor: emotionColors[emotionLabel] || '#CCCCCC',
+                    pointBorderColor: emotionColors[emotionLabel] || '#CCCCCC',
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    fill: false,
+                });
+            }
+        });
+
+        // Main mood dataset
+        const moodDataset = {
+            label: 'Overall Mood Score',
+            data: allDates.map(date => {
+                const entry = moodData.find(d => d.date === date);
+                return entry ? entry.moodScore : null;
+            }),
+            borderColor: emotionColors['overall mood score'],
+            backgroundColor: emotionColors['overall mood score'] + '33',
+            tension: 0.3,
+            pointBackgroundColor: emotionColors['overall mood score'],
+            pointBorderColor: emotionColors['overall mood score'],
+            pointRadius: 5,
+            pointHoverRadius: 7,
+            fill: 'origin',
+            spanGaps: true,
+        };
+
+        const datasets = [moodDataset, ...emotionDatasets];
+
+        const chartDataConfig = {
+            labels: allDates,
+            datasets,
+        };
+
+        // Theme-aware chart options
+        const textColor = isDarkMode ? '#E0E0E0' : '#1E1A3E';
+        const axisColor = isDarkMode ? '#E0E0E0' : 'rgb(75, 85, 99)';
+        const gridColor = isDarkMode ? 'rgba(100, 100, 100, 0.2)' : 'rgba(200, 200, 200, 0.2)';
+
+        const options = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: { font: { family: 'Inter', size: 14 }, color: axisColor },
+                },
+                title: {
+                    display: true,
+                    text: 'Your Mood & Emotion Trends Over Time',
+                    font: { family: 'Poppins', size: 20, weight: '600' },
+                    color: textColor,
+                },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: ${ctx.parsed.y?.toFixed(3) ?? 'N/A'}`,
+                    },
+                },
+            },
+            scales: {
+                x: {
+                    title: { display: true, text: 'Date', color: axisColor },
+                    ticks: { color: axisColor },
+                    grid: { color: gridColor },
+                },
+                y: {
+                    min: -1,
+                    max: 1,
+                    title: { display: true, text: 'Score / Intensity', color: axisColor },
+                    ticks: { color: axisColor },
+                    grid: { color: gridColor },
+                },
+            },
+        };
+
+        return { chartData: chartDataConfig, chartOptions: options };
+    }, [moodData, emotionTrendData, emotionColors, isDarkMode]);
+
+    if (isLoading) {
+        return <SkeletonChart />;
+    }
+
+    if (!chartData.labels.length) {
+        return (
+            <div className="h-80 w-full flex items-center justify-center font-inter text-gray-700 dark:text-gray-300">
+                Not enough data to display chart. Keep journaling!
+            </div>
+        );
     }
 
     return (
-        <div className="h-96 w-full"> {/* Increased height for more lines */}
+        <div className="h-96 w-full">
             <Line data={chartData} options={chartOptions} />
         </div>
     );
-}
+};
 
 export default MoodChart;

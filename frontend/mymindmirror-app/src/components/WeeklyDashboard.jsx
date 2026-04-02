@@ -8,6 +8,7 @@ import JournalClusters from './JournalClusters';
 import JournalHistory from './JournalHistory';
 import { format } from 'date-fns';
 import { useTheme } from '../contexts/ThemeContext';
+import { SkeletonChart, SkeletonCard } from './Skeleton';
 
 // ⭐ NEW CHART COMPONENT IMPORT ⭐
 import MoodCalendarHeatmap from './MoodCalendarHeatmap';
@@ -19,7 +20,8 @@ function WeeklyDashboard({
     onClusteringComplete,
     currentClusterResults,
     startOfCurrentWeek,
-    endOfCurrentWeek
+    endOfCurrentWeek,
+    isLoading,
 }) {
     const [filterClusterId, setFilterClusterId] = useState(null);
     const { theme } = useTheme(); // Use theme for background colors
@@ -40,6 +42,57 @@ function WeeklyDashboard({
         cardBgClass = 'bg-white/60';
         textColorClass = 'text-gray-800';
     }
+
+     if (isLoading) {
+            return (
+                <div className="space-y-6 sm:space-y-8 w-full">
+                    <div className="bg-white/60 dark:bg-black/40 p-4 sm:p-6 rounded-lg shadow-inner transition-all duration-500 w-full">
+                        <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">
+                            Weekly Mood & Emotion Trends
+                        </h3>
+                        <SkeletonChart />
+                    </div>
+                    <div className="bg-white/60 dark:bg-black/40 p-4 sm:p-6 rounded-lg shadow-inner transition-all duration-500 w-full">
+                        <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">
+                            Weekly Mood Calendar
+                        </h3>
+                        <div className="h-80 w-full bg-gray-100 dark:bg-gray-800 rounded-lg animate-pulse flex items-center justify-center">
+                            <div className="text-gray-400">Loading calendar...</div>
+                        </div>
+                    </div>
+                    <div className="bg-white/60 dark:bg-black/40 p-4 sm:p-6 rounded-lg shadow-inner transition-all duration-500 w-full">
+                        <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">
+                            Weekly Average Emotion Intensity
+                        </h3>
+                        <SkeletonChart />
+                    </div>
+                    <div className="bg-white/60 dark:bg-black/40 p-4 sm:p-6 rounded-lg shadow-inner transition-all duration-500 w-full">
+                        <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">
+                            Weekly Most Frequent Journal Concerns
+                        </h3>
+                        <SkeletonChart />
+                    </div>
+                    <div className="bg-white/60 dark:bg-black/40 p-4 sm:p-6 rounded-lg shadow-inner transition-all duration-500 w-full">
+                        <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">
+                            Weekly Journal Themes
+                        </h3>
+                        <div className="p-6 rounded-lg bg-white/60 dark:bg-black/40 shadow-inner">
+                            <div className="animate-pulse space-y-4">
+                                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/3" />
+                                <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded w-2/3" />
+                                <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded w-1/2" />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="bg-white/60 dark:bg-black/40 p-4 sm:p-6 rounded-lg shadow-inner transition-all duration-500 w-full">
+                        <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">
+                            All Weekly Entries
+                        </h3>
+                        <SkeletonCard count={3} />
+                    </div>
+                </div>
+            );
+        }
 
     // ⭐ ADDED DEBUG LOGGING ⭐
     console.log("WeeklyDashboard Render - theme:", theme);
@@ -77,6 +130,7 @@ function WeeklyDashboard({
                 journalEntries={weeklyEntries}
                 currentClusterResults={currentClusterResults}
                 onFilterCluster={handleFilterCluster}
+                isLoading={isLoading}              // ← add this
             />
             <div className={`${cardBgClass} p-4 sm:p-6 rounded-lg shadow-inner transition-all duration-500 w-full`}>
                 <h3 className={`text-xl font-poppins font-semibold ${textColorClass} mb-4 text-center`}>All Weekly Entries</h3>

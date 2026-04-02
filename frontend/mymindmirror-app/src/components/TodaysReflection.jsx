@@ -1,17 +1,23 @@
-// src/components/TodaysReflection.jsx
 import React from 'react';
 import { format } from 'date-fns';
 import { useTodaysReflection } from '../hooks/useJournalData';
+import { RefreshCw } from 'lucide-react';
 
-function TodaysReflection({ latestEntry }) {
+function TodaysReflection({ todayEntries }) {
   const {
     data: reflection,
     isLoading,
     isError,
     error,
-  } = useTodaysReflection(latestEntry);
+    refresh,          // ← manual refresh function
+    isRefetching,
+  } = useTodaysReflection(todayEntries);
 
-  if (!latestEntry || format(new Date(), 'yyyy-MM-dd') !== latestEntry.entryDate) {
+  const handleRefresh = () => {
+    refresh();
+  };
+
+  if (!todayEntries || todayEntries.length === 0) {
     return (
       <div className="p-6 rounded-lg bg-white/60 dark:bg-black/40 shadow-inner">
         <h3 className="text-2xl font-poppins font-semibold mb-3 text-[#5CC8C2] dark:text-[#B399D4]">
@@ -26,10 +32,20 @@ function TodaysReflection({ latestEntry }) {
 
   return (
     <div className="p-6 rounded-lg bg-white/60 dark:bg-black/40 shadow-inner">
-      <h3 className="text-2xl font-poppins font-semibold mb-3 text-[#5CC8C2] dark:text-[#B399D4]">
-        Today's Reflection
-      </h3>
-      {isLoading ? (
+      <div className="flex justify-between items-start mb-3">
+        <h3 className="text-2xl font-poppins font-semibold text-[#5CC8C2] dark:text-[#B399D4]">
+          Today's Reflection
+        </h3>
+        <button
+          onClick={handleRefresh}
+          disabled={isLoading || isRefetching}
+          className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+          title="Regenerate reflection"
+        >
+          <RefreshCw size={18} className={isLoading || isRefetching ? 'animate-spin' : ''} />
+        </button>
+      </div>
+      {isLoading || isRefetching ? (
         <p className="font-inter text-gray-700 dark:text-gray-300">Generating your reflection...</p>
       ) : isError ? (
         <div>

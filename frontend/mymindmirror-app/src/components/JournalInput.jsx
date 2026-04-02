@@ -1,20 +1,19 @@
 // src/components/JournalInput.js
-
-import React, { useState } from 'react';
+import React, { useState, forwardRef, useImperativeHandle } from 'react';
 import { useAddJournalEntry } from '../hooks/useJournalData';
 import { useTheme } from '../contexts/ThemeContext';
 
-function JournalInput() {
+// Wrap the component in forwardRef so 'ref' is defined
+const JournalInput = forwardRef((props, ref) => {
     const [text, setText] = useState('');
     const [message, setMessage] = useState('');
     const [error, setError] = useState('');
 
     const { theme } = useTheme();
-
     const addEntryMutation = useAddJournalEntry();
 
     const handleSubmit = async (e) => {
-        e.preventDefault(); // Prevent default form submission
+        if (e) e.preventDefault();
         setMessage('');
         setError('');
 
@@ -26,23 +25,25 @@ function JournalInput() {
         try {
             await addEntryMutation.mutateAsync({ rawText: text });
             setMessage('Entry saved and analyzed successfully!');
-            setText(''); // Clear textarea after successful submission
+            setText('');
         } catch (err) {
             console.error('JournalInput: Error saving entry:', err.response ? err.response.data : err.message);
-            setError('Failed to save entry. Please ensure backend services are running and you are logged in.');
+            setError('Failed to save entry. Please ensure backend services are running.');
         }
     };
 
-    // ⭐ NEW: Handle key down events for Enter and Shift+Enter ⭐
     const handleKeyDown = (e) => {
-        // If Enter is pressed WITHOUT Shift
         if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault(); // Prevent default newline behavior
-            handleSubmit(e); // Trigger submission
+            e.preventDefault();
+            handleSubmit(e);
         }
-        // If Shift+Enter is pressed, allow default behavior (new line)
-        // No 'else if' needed, as default behavior for Shift+Enter is already newline
     };
+
+    // This now works because 'ref' is passed in by forwardRef above
+    useImperativeHandle(ref, () => ({
+        setText: (newText) => setText(newText),
+        clearText: () => setText('')
+    }));
 
     return (
         <form onSubmit={handleSubmit} className="flex flex-col space-y-4 p-6 rounded-lg
@@ -50,14 +51,20 @@ function JournalInput() {
             <h2 className="text-2xl font-poppins font-semibold text-[#B399D4] dark:text-[#5CC8C2]">
                 What's on your mind today?
             </h2>
+
             {message && <p className="text-green-600 dark:text-green-400 font-inter">{message}</p>}
-            {addEntryMutation.isError && <p className="text-[#FF8A7A] font-inter">{addEntryMutation.error.message || 'An error occurred.'}</p>}
+            {addEntryMutation.isError && (
+                <p className="text-[#FF8A7A] font-inter">
+                    {addEntryMutation.error.message || 'An error occurred.'}
+                </p>
+            )}
             {error && <p className="text-[#FF8A7A] font-inter">{error}</p>}
+
             <textarea
                 value={text}
                 onChange={(e) => setText(e.target.value)}
-                onKeyDown={handleKeyDown} // ⭐ ADDED: Key down handler ⭐
-                placeholder="Write your thoughts here... Press Enter to save, Shift+Enter for a new line. The AI will help you understand them."
+                onKeyDown={handleKeyDown}
+                placeholder="Write your thoughts here... Press Enter to save, Shift+Enter for a new line."
                 rows="10"
                 className={`w-full p-3 rounded-lg border border-gray-300 dark:border-gray-600
                             bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200
@@ -66,6 +73,7 @@ function JournalInput() {
                 aria-label="Journal Entry Text Area"
                 disabled={addEntryMutation.isPending}
             ></textarea>
+
             <div className="flex space-x-4">
                 <button
                     type="submit"
@@ -82,6 +90,6 @@ function JournalInput() {
             </div>
         </form>
     );
-}
+}); // Don't forget to close the forwardRef parenthesis
 
 export default JournalInput;

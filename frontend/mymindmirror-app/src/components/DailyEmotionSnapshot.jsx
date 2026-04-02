@@ -1,96 +1,99 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
-import { parseISO, format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
-// Register Chart.js components
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-// Define a consistent color palette for emotions (expanded for more variety)
 const EMOTION_DOUGHNUT_COLORS = {
-    'joy': '#5CC8C2',         // Serene Teal
-    'sadness': '#B399D4',     // Gentle Lavender
-    'anger': '#FF8A7A',       // Warm Coral
-    'fear': '#A93226',        // Darker Red
-    'surprise': '#85C1E9',    // Light Blue
-    'neutral': '#E0E0E0',     // Soft Gray (Light Mode)
-    'love': '#E74C3C',        // Red
-    'disgust': '#6C3483',     // Purple
-    'anxiety': '#F7DC6F',     // Yellow
-    'optimism': '#F1C40F',    // Golden Yellow
-    'relief': '#58D68D',      // Light Green
-    'caring': '#2ECC71',      // Green
-    'curiosity': '#AF7AC5',   // Light Purple
-    'embarrassment': '#D35400', // Dark Orange
-    'pride': '#F39C12',       // Orange
-    'remorse': '#7F8C8D',     // Gray
-    'annoyance': '#E67E22',   // Orange-Brown
-    'disappointment': '#283747', // Dark Blue-Gray
-    'grief': '#17202A',       // Very Dark Blue-Gray
-    'excitement': '#FFD700',  // Gold
-    'contentment': '#90EE90', // Light Green
-    'frustration': '#FF4500', // Orange-Red
-    'gratitude': '#ADFF2F',   // Green-Yellow
-    'hope': '#ADD8E6',        // Light Blue
+    joy: '#5CC8C2',
+    sadness: '#B399D4',
+    anger: '#FF8A7A',
+    fear: '#A93226',
+    surprise: '#85C1E9',
+    neutral: '#E0E0E0',
+    love: '#E74C3C',
+    disgust: '#6C3483',
+    anxiety: '#F7DC6F',
+    optimism: '#F1C40F',
+    relief: '#58D68D',
+    caring: '#2ECC71',
+    curiosity: '#AF7AC5',
+    embarrassment: '#D35400',
+    pride: '#F39C12',
+    remorse: '#7F8C8D',
+    annoyance: '#E67E22',
+    disappointment: '#283747',
+    grief: '#17202A',
+    excitement: '#FFD700',
+    contentment: '#90EE90',
+    frustration: '#FF4500',
+    gratitude: '#ADFF2F',
+    hope: '#ADD8E6',
 };
 
-function DailyEmotionSnapshot({ latestEntry }) {
+function DailyEmotionSnapshot({ todayEntries }) {
     const chartRef = useRef(null);
-    const [chartData, setChartData] = useState({
-        labels: [],
-        datasets: []
-    });
+    const [chartData, setChartData] = useState({ labels: [], datasets: [] });
 
     useEffect(() => {
-        if (latestEntry && latestEntry.emotions) {
-            try {
-                // Defensive parsing: emotions should already be an object from Spring Boot's JournalEntryResponse
-                const emotions = typeof latestEntry.emotions === 'string'
-                                 ? JSON.parse(latestEntry.emotions)
-                                 : latestEntry.emotions;
-
-                // Ensure 'emotions' is an object before proceeding
-                if (typeof emotions !== 'object' || emotions === null) {
-                    console.warn("Emotions data is not a valid object after parsing/checking:", emotions);
-                    setChartData({ labels: [], datasets: [] });
-                    return;
-                }
-
-                const labels = Object.keys(emotions);
-                const data = Object.values(emotions);
-
-                // Filter out emotions with zero or very low scores for cleaner chart
-                const filteredLabels = [];
-                const filteredData = [];
-                labels.forEach((label, index) => {
-                    if (data[index] > 0.01) { // Only include if score is greater than 1%
-                        filteredLabels.push(label.charAt(0).toUpperCase() + label.slice(1)); // Capitalize label
-                        filteredData.push(data[index]);
-                    }
-                });
-
-                const backgroundColors = filteredLabels.map(label => EMOTION_DOUGHNUT_COLORS[label.toLowerCase()] || '#CCCCCC');
-
-                setChartData({
-                    labels: filteredLabels,
-                    datasets: [
-                        {
-                            label: 'Emotion Intensity',
-                            data: filteredData,
-                            backgroundColor: backgroundColors,
-                            borderColor: backgroundColors.map(color => color + 'CC'),
-                            borderWidth: 1,
-                        },
-                    ],
-                });
-            } catch (e) {
-                console.error("Error parsing emotions for DailyEmotionSnapshot:", e);
-                setChartData({ labels: [], datasets: [] }); // Reset on error
-            }
-        } else {
-            setChartData({ labels: [], datasets: [] }); // Clear chart if no latest entry or emotions
+        if (!todayEntries || todayEntries.length === 0) {
+            setChartData({ labels: [], datasets: [] });
+            return;
         }
-    }, [latestEntry]);
+
+        // Aggregate emotions across all today's entries
+        const aggregated = {};
+        let totalEntries = todayEntries.length;
+
+        todayEntries.forEach(entry => {
+            let emotions = {};
+            try {
+                emotions = typeof entry.emotions === 'string' ? JSON.parse(entry.emotions) : entry.emotions;
+                if (typeof emotions !== 'object' || emotions === null) emotions = {};
+            } catch (e) {
+                emotions = {};
+            }
+            Object.entries(emotions).forEach(([emotion, score]) => {
+                aggregated[emotion] = (aggregated[emotion] || 0) + score;
+            });
+        });
+
+        // Average the scores
+        Object.keys(aggregated).forEach(emotion => {
+            aggregated[emotion] = aggregated[emotion] / totalEntries;
+        });
+
+        // Filter out low scores (> 0.01) and prepare chart data
+        const labels = [];
+        const data = [];
+        Object.entries(aggregated).forEach(([emotion, score]) => {
+            if (score > 0.01) {
+                labels.push(emotion.charAt(0).toUpperCase() + emotion.slice(1));
+                data.push(score);
+            }
+        });
+
+        if (labels.length === 0) {
+            setChartData({ labels: [], datasets: [] });
+            return;
+        }
+
+        const backgroundColors = labels.map(label =>
+            EMOTION_DOUGHNUT_COLORS[label.toLowerCase()] || '#CCCCCC'
+        );
+
+        setChartData({
+            labels,
+            datasets: [{
+                label: 'Emotion Intensity',
+                data,
+                backgroundColor: backgroundColors,
+                borderColor: backgroundColors.map(c => c + 'CC'),
+                borderWidth: 1,
+            }],
+        });
+    }, [todayEntries]);
 
     const options = {
         responsive: true,
@@ -99,64 +102,43 @@ function DailyEmotionSnapshot({ latestEntry }) {
             legend: {
                 position: 'right',
                 labels: {
-                    color: 'rgb(156 163 175)', // Tailwind gray-400 for dark mode
-                    font: {
-                        family: 'Inter, sans-serif',
-                    },
+                    color: 'rgb(156 163 175)',
+                    font: { family: 'Inter, sans-serif' },
                 },
             },
             tooltip: {
                 callbacks: {
-                    label: function(context) {
-                        let label = context.label || '';
-                        if (label) {
-                            label += ': ';
-                        }
-                        if (context.parsed !== null) {
-                            label += `${(context.parsed * 100).toFixed(1)}%`;
-                        }
-                        return label;
-                    }
-                }
+                    label: ctx => `${ctx.label}: ${(ctx.parsed * 100).toFixed(1)}%`,
+                },
             },
             title: {
                 display: true,
-                text: "Today's Emotion Breakdown", // This is the Chart.js title
+                text: "Today's Emotion Breakdown",
                 font: { family: 'Poppins', size: 18, weight: '600' },
-                color: '#1E1A3E', // Default dark text for light mode
+                color: '#1E1A3E',
             },
         },
-        cutout: '60%', // Makes it a doughnut chart
+        cutout: '60%',
     };
 
-    // Adjust emotion chart colors for dark mode dynamically
-    const rootElement = document.documentElement;
-    if (rootElement.classList.contains('dark')) {
+    const root = document.documentElement;
+    if (root.classList.contains('dark')) {
         options.plugins.legend.labels.color = '#E0E0E0';
         options.plugins.title.color = '#E0E0E0';
     }
 
-    const hasData = chartData.datasets.length > 0 && chartData.datasets[0].data.some(val => val > 0);
+    const hasData = chartData.datasets.length > 0 && chartData.datasets[0].data.some(v => v > 0);
 
     return (
         <div className="p-6 rounded-lg bg-white/60 dark:bg-black/40 shadow-inner flex flex-col items-center justify-center transition-all duration-500 min-h-[250px] md:min-h-[300px]">
-            {/* Removed the redundant h2 tag */}
-            {/* <h2 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">
-                Today's Emotion Breakdown
-            </h2> */}
             {hasData ? (
-                <div className="relative w-full h-[200px] md:h-[250px]"> {/* Fixed height for chart container */}
+                <div className="relative w-full h-[200px] md:h-[250px]">
                     <Doughnut ref={chartRef} data={chartData} options={options} />
                 </div>
             ) : (
                 <div className="flex flex-col items-center justify-center h-full text-center text-gray-600 dark:text-gray-400">
-                    <p className="font-inter text-lg">No emotion data available for display.</p>
-                    {latestEntry && latestEntry.entryDate && latestEntry.entryDate !== format(new Date(), 'yyyy-MM-dd') && ( // Added check for latestEntry.entryDate existence
-                        <p className="font-inter text-sm mt-2">Last entry was on {format(parseISO(latestEntry.entryDate), 'MMMM d d, yyyy')}.</p>
-                    )}
-                    {!latestEntry && (
-                           <p className="font-inter text-sm mt-2">Journal an entry to see your emotion breakdown!</p>
-                    )}
+                    <p className="font-inter text-lg">No emotion data available for today.</p>
+                    <p className="font-inter text-sm mt-2">Journal an entry to see your emotion breakdown!</p>
                 </div>
             )}
         </div>

@@ -1,7 +1,8 @@
 // src/components/ConcernFrequencyChart.js
 
-import React, { useState, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { Bar } from 'react-chartjs-2';
+import { SkeletonChart } from './Skeleton';
 import {
     Chart as ChartJS,
     CategoryScale,
@@ -13,7 +14,6 @@ import {
     Filler,
 } from 'chart.js';
 
-// Register Chart.js components
 ChartJS.register(
     CategoryScale,
     LinearScale,
@@ -51,94 +51,66 @@ const CONCERN_PALETTE_DARK = [
     '#FF8C40', // Lighter Dark Orange
 ];
 
-function ConcernFrequencyChart({ entries }) {
-    const [concernData, setConcernData] = useState({ labels: [], datasets: [] });
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
+function ConcernFrequencyChart({ entries, isLoading }) {
+    if (isLoading) return <SkeletonChart />;
 
-    useEffect(() => {
-        const processConcerns = () => {
-            setLoading(true);
-            setError('');
-            try {
-                const concernCounts = {};
-                entries.forEach(entry => {
-                    let parsedConcerns = [];
-                    if (entry.coreConcerns) {
-                        try {
-                            parsedConcerns = entry.coreConcerns;
-                            if (!Array.isArray(parsedConcerns)) {
-                                console.warn("Parsed coreConcerns is not an array:", parsedConcerns);
-                                parsedConcerns = [];
-                            }
-                        } catch (e) {
-                            console.error("Error parsing coreConcerns for ConcernFrequencyChart:", e);
-                            parsedConcerns = [];
-                        }
+    // Compute chart data in useMemo – no internal loading state
+    const { chartData, error } = useMemo(() => {
+        try {
+            const concernCounts = {};
+            entries.forEach(entry => {
+                let parsedConcerns = [];
+                if (entry.coreConcerns) {
+                    try {
+                        parsedConcerns = entry.coreConcerns;
+                        if (!Array.isArray(parsedConcerns)) parsedConcerns = [];
+                    } catch (e) {
+                        console.error("Error parsing coreConcerns:", e);
+                        parsedConcerns = [];
                     }
-
-                    parsedConcerns.forEach(concern => {
-                        if (typeof concern === 'string' && concern.trim() !== '') {
-                            concernCounts[concern] = (concernCounts[concern] || 0) + 1;
-                        }
-                    });
+                }
+                parsedConcerns.forEach(concern => {
+                    if (typeof concern === 'string' && concern.trim()) {
+                        concernCounts[concern] = (concernCounts[concern] || 0) + 1;
+                    }
                 });
+            });
 
-                const sortedConcerns = Object.entries(concernCounts)
-                    .sort(([, countA], [, countB]) => countB - countA)
-                    .slice(0, 7); // Show top 7 concerns
+            const sorted = Object.entries(concernCounts)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 7);
 
-                const labels = sortedConcerns.map(([concern]) =>
-                    concern.charAt(0).toUpperCase() + concern.slice(1)
-                );
-                const data = sortedConcerns.map(([, count]) => count);
+            const labels = sorted.map(([c]) => c.charAt(0).toUpperCase() + c.slice(1));
+            const data = sorted.map(([, v]) => v);
 
-                // ⭐ NEW: Dynamically select color palette based on theme ⭐
-                const rootElement = document.documentElement;
-                const isDarkMode = rootElement.classList.contains('dark');
-                const selectedPalette = isDarkMode ? CONCERN_PALETTE_DARK : CONCERN_PALETTE_LIGHT;
+            const isDark = document.documentElement.classList.contains('dark');
+            const palette = isDark ? CONCERN_PALETTE_DARK : CONCERN_PALETTE_LIGHT;
+            const colors = data.map((_, i) => palette[i % palette.length]);
 
-                // Assign colors dynamically from the palette
-                const backgroundColors = data.map((_, index) => selectedPalette[index % selectedPalette.length]);
-                // Slightly darker border for definition
-                const borderColors = backgroundColors.map(color => color + 'CC');
-
-                setConcernData({
-                    labels: labels,
-                    datasets: [
-                        {
-                            label: 'Frequency',
-                            data: data,
-                            backgroundColor: backgroundColors,
-                            borderColor: borderColors,
-                            borderWidth: 1,
-                            borderRadius: 8, // More rounded bars for a modern look
-                            barPercentage: 0.8,
-                            categoryPercentage: 0.8,
-                        },
-                    ],
-                });
-                console.log("Processed concern frequency data:", sortedConcerns);
-            } catch (err) {
-                console.error('Error processing concern data:', err);
-                setError('Failed to process concern frequency data.');
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        processConcerns();
+            return {
+                chartData: {
+                    labels,
+                    datasets: [{
+                        label: 'Frequency',
+                        data,
+                        backgroundColor: colors,
+                        borderColor: colors.map(c => c + 'CC'),
+                        borderWidth: 1,
+                        borderRadius: 8,
+                        barPercentage: 0.8,
+                        categoryPercentage: 0.8,
+                    }],
+                },
+                error: null,
+            };
+        } catch (err) {
+            console.error('Error processing concern data:', err);
+            return { chartData: null, error: 'Failed to process concern frequency data.' };
+        }
     }, [entries]);
 
-    if (loading) {
-        return <div className="font-inter text-gray-700 dark:text-gray-300 text-center">Loading concerns chart...</div>;
-    }
-
-    if (error) {
-        return <div className="font-inter text-[#FF8A7A] text-center">{error}</div>;
-    }
-
-    if (concernData.labels.length === 0) {
+    if (error) return <div className="font-inter text-[#FF8A7A] text-center">{error}</div>;
+    if (!chartData || chartData.labels.length === 0) {
         return (
             <div className="h-80 w-full flex items-center justify-center font-inter text-gray-700 dark:text-gray-300">
                 No concerns detected yet. Journal more to see your patterns!
@@ -146,83 +118,48 @@ function ConcernFrequencyChart({ entries }) {
         );
     }
 
-    // Determine chart text/grid colors based on theme
-    const rootElement = document.documentElement;
-    const isDarkMode = rootElement.classList.contains('dark');
-    const chartTextColor = isDarkMode ? '#E0E0E0' : '#1E1A3E'; // Title and axis labels
-    const chartTickColor = isDarkMode ? '#A0AEC0' : 'rgb(75, 85, 99)'; // Axis ticks
-    const chartGridColor = isDarkMode ? 'rgba(100, 100, 100, 0.2)' : 'rgba(200, 200, 200, 0.2)'; // Grid lines
-
-    // Define chartOptions here, and then dynamically adjust based on theme
-    const chartOptions = {
+    // chartOptions – same as before (can also be memoized)
+    const isDark = document.documentElement.classList.contains('dark');
+    const chartOptions = useMemo(() => ({
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-            legend: {
-                display: false,
-            },
+            legend: { display: false },
             title: {
                 display: true,
                 text: 'Most Frequent Journal Concerns',
                 font: { family: 'Poppins', size: 20, weight: '600' },
-                color: chartTextColor,
+                color: isDark ? '#E0E0E0' : '#1E1A3E',
             },
             tooltip: {
-                callbacks: {
-                    label: function(context) {
-                        let label = context.dataset.label || '';
-                        if (label) {
-                            label += ': ';
-                        }
-                        if (context.parsed.y !== null) {
-                            label += context.parsed.y + ' entries';
-                        }
-                        return label;
-                    }
-                },
-                // ⭐ ADDED: Tooltip background and text color based on theme ⭐
-                backgroundColor: isDarkMode ? 'rgba(45, 55, 72, 0.9)' : 'rgba(255, 255, 255, 0.9)',
-                titleColor: chartTextColor,
-                bodyColor: chartTickColor,
-                borderColor: isDarkMode ? '#4A5568' : '#E2E8F0',
+                callbacks: { label: (ctx) => `${ctx.label}: ${ctx.parsed.y} entries` },
+                backgroundColor: isDark ? 'rgba(45,55,72,0.9)' : 'rgba(255,255,255,0.9)',
+                titleColor: isDark ? '#E0E0E0' : '#1E1A3E',
+                bodyColor: isDark ? '#A0AEC0' : 'rgb(75,85,99)',
+                borderColor: isDark ? '#4A5568' : '#E2E8F0',
                 borderWidth: 1,
                 borderRadius: 6,
-            }
+            },
         },
         scales: {
             x: {
-                title: { display: true, text: 'Concern Category', font: { family: 'Inter', size: 14 }, color: chartTextColor },
-                ticks: {
-                    color: chartTickColor,
-                    font: { family: 'Inter' },
-                    maxRotation: 45,
-                    minRotation: 45,
-                    autoSkip: false,
-                },
+                title: { display: true, text: 'Concern Category', color: isDark ? '#E0E0E0' : 'rgb(75,85,99)' },
+                ticks: { color: isDark ? '#A0AEC0' : 'rgb(75,85,99)', maxRotation: 45, minRotation: 45 },
                 grid: { display: false },
             },
             y: {
                 beginAtZero: true,
-                title: { display: true, text: 'Number of Entries', font: { family: 'Inter', size: 14 }, color: chartTextColor },
-                ticks: {
-                    color: chartTickColor,
-                    font: { family: 'Inter' },
-                    stepSize: 1,
-                    callback: function(value) { if (value % 1 === 0) return value; }
-                },
-                grid: { color: chartGridColor },
+                title: { display: true, text: 'Number of Entries', color: isDark ? '#E0E0E0' : 'rgb(75,85,99)' },
+                ticks: { color: isDark ? '#A0AEC0' : 'rgb(75,85,99)', stepSize: 1, callback: v => v % 1 === 0 ? v : '' },
+                grid: { color: isDark ? 'rgba(100,100,100,0.2)' : 'rgba(200,200,200,0.2)' },
             },
         },
-        // ⭐ ADDED: Animation for a smoother look ⭐
-        animation: {
-            duration: 1000, // milliseconds
-            easing: 'easeInOutQuart', // Smooth easing function
-        },
-    };
+        animation: { duration: 1000, easing: 'easeInOutQuart' },
+    }), [isDark]);
 
     return (
         <div className="h-80 w-full">
-            <Bar data={concernData} options={chartOptions} />
+            <Bar data={chartData} options={chartOptions} />
         </div>
     );
 }

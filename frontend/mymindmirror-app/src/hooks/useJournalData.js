@@ -2,11 +2,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { format } from 'date-fns';
+import { useState } from 'react';
 
 const API_BASE_URL = 'http://localhost:8080/api';
 // const FLASK_API_URL = 'http://localhost:5000'; // ⭐ REMOVED: No direct Flask API calls from frontend ⭐
 
 const getToken = () => localStorage.getItem('jwtToken');
+
+const clearTodayReflectionCache = () => {
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  localStorage.removeItem(`reflection_${todayStr}`);
+};
 
 // --- Query for All Journal Entries ---
 const fetchAllJournalEntries = async () => {
@@ -38,81 +44,109 @@ export const useJournalEntries = () => {
 };
 
 // --- Query for Today's Reflection (Gemini Call) ---
-const generateTodaysReflection = async (latestEntry) => {
+const generateTodaysReflection = async (todayEntries, forceRefresh = false) => {
   const token = getToken();
   if (!token) throw new Error('Not authenticated to generate reflection.');
 
-  const today = format(new Date(), 'yyyy-MM-dd');
-  if (!latestEntry || latestEntry.entryDate !== today) {
-    // If no entry or not today's entry, return a specific message
+  if (!todayEntries || todayEntries.length === 0) {
     return "Journal an entry today to get your daily reflection!";
   }
 
-  let parsedEmotions = {};
-  try {
-    parsedEmotions = typeof latestEntry.emotions === 'string' ? JSON.parse(latestEntry.emotions) : latestEntry.emotions;
-    if (typeof parsedEmotions !== 'object' || parsedEmotions === null) parsedEmotions = {};
-  } catch (e) {
-    console.error("Error parsing entry.emotions for reflection prompt:", e);
-    parsedEmotions = {};
+  const todayStr = format(new Date(), 'yyyy-MM-dd');
+  const cacheKey = `reflection_${todayStr}`;
+
+  // Check localStorage unless forced refresh
+  if (!forceRefresh) {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      return cached;
+    }
   }
 
-  let parsedCoreConcerns = [];
-  try {
-    parsedCoreConcerns = typeof latestEntry.coreConcerns === 'string' ? JSON.parse(latestEntry.coreConcerns) : latestEntry.coreConcerns;
-    if (!Array.isArray(parsedCoreConcerns)) parsedCoreConcerns = [];
-  } catch (e) {
-    console.error("Error parsing entry.coreConcerns for reflection prompt:", e);
-    parsedCoreConcerns = [];
-  }
+  // Combine all raw texts from today's entries
+  const combinedRawText = todayEntries.map(e => e.rawText).join('\n\n---\n\n');
 
-  const emotions_str = Object.entries(parsedEmotions)
+  // Aggregate emotions (average)
+  const aggregatedEmotions = {};
+  let aggregatedConcerns = new Set();
+  let totalEntries = todayEntries.length;
+
+  todayEntries.forEach(entry => {
+    let parsedEmotions = {};
+    try {
+      parsedEmotions = typeof entry.emotions === 'string' ? JSON.parse(entry.emotions) : entry.emotions;
+      if (typeof parsedEmotions !== 'object' || parsedEmotions === null) parsedEmotions = {};
+    } catch (e) { parsedEmotions = {}; }
+
+    Object.entries(parsedEmotions).forEach(([emotion, score]) => {
+      aggregatedEmotions[emotion] = (aggregatedEmotions[emotion] || 0) + score;
+    });
+
+    let concerns = [];
+    try {
+      concerns = typeof entry.coreConcerns === 'string' ? JSON.parse(entry.coreConcerns) : entry.coreConcerns;
+      if (!Array.isArray(concerns)) concerns = [];
+    } catch (e) { concerns = []; }
+    concerns.forEach(c => aggregatedConcerns.add(c));
+  });
+
+  Object.keys(aggregatedEmotions).forEach(emotion => {
+    aggregatedEmotions[emotion] = aggregatedEmotions[emotion] / totalEntries;
+  });
+
+  const emotions_str = Object.entries(aggregatedEmotions)
     .filter(([, score]) => score > 0.01)
     .map(([label, score]) => `${label} (${(score * 100).toFixed(1)}%)`)
     .join(', ') || 'No specific emotions detected.';
 
-  const concerns_str = parsedCoreConcerns.length > 0 ?
-    parsedCoreConcerns.join(', ') : 'No specific concerns identified.';
+  const concerns_str = Array.from(aggregatedConcerns).join(', ') || 'No specific concerns identified.';
 
-  const prompt = `Based on the following journal entry, its detected emotions, and core concerns,
+  const prompt = `Based on the following journal entries from today, their detected emotions, and core concerns,
     generate a concise (1-2 sentences), empathetic, and insightful "Today's Reflection" or a short, encouraging thought.
-    Focus on summarizing the emotional state and offering a gentle, positive perspective.
+    Focus on summarizing the overall emotional state and offering a gentle, positive perspective.
 
-    Journal Entry: "${latestEntry.rawText}"
-    Detected Emotions: ${emotions_str}
+    Journal Entries (combined): "${combinedRawText}"
+    Detected Emotions (averaged): ${emotions_str}
     Core Concerns: ${concerns_str}
 
     Today's Reflection:`;
 
   try {
-    // ⭐ MODIFIED: Call Spring Boot API endpoint for reflection generation ⭐
     const springBootResponse = await axios.post(`${API_BASE_URL}/reflection/generate`, { prompt_text: prompt }, {
       headers: { Authorization: `Bearer ${token}` }
     });
-    return springBootResponse.data?.reflection || "Couldn't generate a reflection today. Keep journaling!";
+    const reflection = springBootResponse.data?.reflection || "Couldn't generate a reflection today. Keep journaling!";
+    // Save to localStorage
+    localStorage.setItem(cacheKey, reflection);
+    return reflection;
   } catch (err) {
     console.error('Error generating reflection:', err.response ? err.response.data : err.message);
     throw new Error('Failed to generate reflection.');
   }
 };
 
-export const useTodaysReflection = (latestEntry) => {
-  // The query key should change only when the underlying journal entry that the reflection is based on changes.
-  // We use latestEntry.id as part of the key. If latestEntry is null, or its ID is null, we use a static key.
-  const queryKey = ['todaysReflection', latestEntry ? latestEntry.id : 'noEntry'];
+export const useTodaysReflection = (todayEntries) => {
+  const [forceRefresh, setForceRefresh] = useState(false);
 
-  return useQuery({
+  const queryKey = ['todaysReflection', format(new Date(), 'yyyy-MM-dd'), forceRefresh];
+
+  const query = useQuery({
     queryKey: queryKey,
-    queryFn: () => generateTodaysReflection(latestEntry),
-    // Only enable this query if latestEntry is provided AND it's for today's date.
-    enabled: !!latestEntry && format(new Date(), 'yyyy-MM-dd') === latestEntry.entryDate,
-    // This is a direct call to Flask (Gemini), so we want to cache its result aggressively.
-    // If the latestEntry object (by ID) doesn't change, we should use the cached reflection.
-    staleTime: Infinity, // Keep this reflection fresh indefinitely unless explicitly invalidated
-    cacheTime: 30 * 60 * 1000, // Keep in cache for 30 minutes even if no observers
-    refetchOnWindowFocus: false, // Prevent unnecessary re-runs on tab switch
-    refetchOnMount: false, // Prevent unnecessary re-runs on component remount
+    queryFn: () => generateTodaysReflection(todayEntries, forceRefresh),
+    enabled: !!todayEntries && todayEntries.length > 0,
+    staleTime: Infinity,
+    cacheTime: 30 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    onSettled: () => setForceRefresh(false),
   });
+
+  const refresh = () => {
+    setForceRefresh(true);
+    // Reset after the query completes
+  };
+
+  return { ...query, refresh };
 };
 
 
@@ -130,6 +164,8 @@ export const useAddJournalEntry = () => {
     onSuccess: () => {
       // Invalidate all relevant queries to force re-fetch on next access
       queryClient.invalidateQueries({ queryKey: ['journalEntries'] });
+
+        clearTodayReflectionCache();
       // Invalidate today's reflection because a new entry might make it the latest one
       queryClient.invalidateQueries({ queryKey: ['todaysReflection'] });
       // You might also want to invalidate 'weeklyEntries', 'moodData', etc. if they are separate queries
@@ -148,16 +184,10 @@ export const useUpdateJournalEntry = () => {
       });
     },
     onSuccess: (data, variables) => {
-      // Invalidate the main list of journal entries
       queryClient.invalidateQueries({ queryKey: ['journalEntries'] });
-      // If the updated entry is the latest one for today, invalidate today's reflection
-      // We need to check if the updated entry's ID matches the current latest entry's ID
-      // and if its date is today.
-      const latestEntryInCache = queryClient.getQueryData(['journalEntries'])?.[0];
-      if (latestEntryInCache && latestEntryInCache.id === data.data.id && // Use data.data.id from response
-          format(new Date(), 'yyyy-MM-dd') === latestEntryInCache.entryDate) {
-        queryClient.invalidateQueries({ queryKey: ['todaysReflection', latestEntryInCache.id] });
-      }
+      clearTodayReflectionCache();
+      // Invalidate the reflection query (base key)
+      queryClient.invalidateQueries({ queryKey: ['todaysReflection'] });
     },
   });
 };
@@ -177,6 +207,7 @@ export const useDeleteJournalEntry = () => {
       queryClient.setQueryData(['journalEntries'], (oldEntries) =>
         oldEntries ? oldEntries.filter((entry) => entry.id !== entryIdToDelete) : []
       );
+        clearTodayReflectionCache();
       // Invalidate today's reflection to force it to re-evaluate (it might now be based on a different entry or no entry)
       queryClient.invalidateQueries({ queryKey: ['todaysReflection'] });
     },
@@ -240,4 +271,19 @@ export const useSearchJournalEntries = (searchParams) => {
     staleTime: 5 * 60 * 1000, // Cache search results for 5 minutes
     cacheTime: 10 * 60 * 1000,
   });
+};
+
+export const useKeyPhraseFrequencies = () => {
+    return useQuery({
+        queryKey: ['keyPhraseFrequencies'],
+        queryFn: async () => {
+            const token = getToken();
+            if (!token) throw new Error('Not authenticated');
+            const response = await axios.get(`${API_BASE_URL}/journal/key-phrases`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            return response.data;
+        },
+        staleTime: 10 * 60 * 1000,
+    });
 };

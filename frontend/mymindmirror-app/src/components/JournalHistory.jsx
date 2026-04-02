@@ -8,6 +8,7 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { useTheme } from "../contexts/ThemeContext";
 // Import the mutation hooks
 import { useUpdateJournalEntry, useDeleteJournalEntry } from '../hooks/useJournalData';
+import { SkeletonCard } from './Skeleton';
 
 const TRUNCATION_LENGTH = 150; // You can adjust this value as needed
 
@@ -75,7 +76,10 @@ function JournalHistory({
   entries,
   clusterThemes,
   filterClusterId,
+    filterPhrase,
+    isLoading
 }) {
+
   const [expandedEntryId, setExpandedEntryId] = useState(null);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [editedText, setEditedText] = useState("");
@@ -90,34 +94,49 @@ function JournalHistory({
   const updateMutation = useUpdateJournalEntry();
   const deleteMutation = useDeleteJournalEntry();
 
-  // Filter entries based on selected cluster ID
-  const filteredEntries =
-    filterClusterId !== null && filterClusterId !== undefined
-      ? entries.filter((entry) => entry.clusterId === filterClusterId)
-      : entries;
 
-  // Group filtered entries by date
-  const groupedEntries = filteredEntries.reduce((acc, entry) => {
-    const dateKey = format(parseISO(entry.entryDate), "EEEE, MMMM dd, yyyy");
-    if (!acc[dateKey]) {
-      acc[dateKey] = [];
+      if (isLoading) return <SkeletonCard count={3} />;
+
+  // --- Filter entries ---
+    let filteredEntries = entries;
+
+    // 1. Cluster filter
+    if (filterClusterId !== null && filterClusterId !== undefined) {
+      filteredEntries = filteredEntries.filter(
+        (entry) => entry.clusterId === filterClusterId
+      );
     }
-    // Sort entries within each day by creation timestamp (most recent first)
-    acc[dateKey].push(entry);
-    acc[dateKey].sort(
-      (a, b) =>
-        parseISO(b.creationTimestamp).getTime() -
-        parseISO(a.creationTimestamp).getTime()
-    );
-    return acc;
-  }, {});
 
-  // Sort dates in reverse chronological order
-  const sortedDates = Object.keys(groupedEntries).sort((a, b) => {
-    const dateA = parseISO(a.split(", ")[1] + ", " + a.split(", ")[2]);
-    const dateB = parseISO(b.split(", ")[1] + ", " + b.split(", ")[2]);
-    return dateB.getTime() - dateA.getTime();
-  });
+    // 2. Phrase filter
+    if (filterPhrase) {
+      const lowerPhrase = filterPhrase.toLowerCase();
+      filteredEntries = filteredEntries.filter((entry) =>
+        Array.isArray(entry.keyPhrases) &&
+        entry.keyPhrases.some((phrase) =>
+          phrase.toLowerCase().includes(lowerPhrase)
+        )
+      );
+    }
+
+    // --- Group by date ---
+    const groupedEntries = filteredEntries.reduce((acc, entry) => {
+      const dateKey = format(parseISO(entry.entryDate), "EEEE, MMMM dd, yyyy");
+      if (!acc[dateKey]) acc[dateKey] = [];
+      acc[dateKey].push(entry);
+      acc[dateKey].sort(
+        (a, b) =>
+          parseISO(b.creationTimestamp).getTime() -
+          parseISO(a.creationTimestamp).getTime()
+      );
+      return acc;
+    }, {});
+
+    const sortedDates = Object.keys(groupedEntries).sort((a, b) => {
+      const dateA = parseISO(a.split(", ")[1] + ", " + a.split(", ")[2]);
+      const dateB = parseISO(b.split(", ")[1] + ", " + b.split(", ")[2]);
+      return dateB.getTime() - dateA.getTime();
+    });
+
 
   const toggleExpand = (id) => {
     setExpandedEntryId(expandedEntryId === id ? null : id);
@@ -299,18 +318,18 @@ function JournalHistory({
     cutout: "60%",
   };
 
-  if (filteredEntries.length === 0) {
-    return (
-      <div className="text-center py-8 text-gray-700 dark:text-gray-300 font-inter w-full">
-        {filterClusterId !== null && filterClusterId !== undefined
-          ? `No entries found for the selected theme: "${
-              clusterThemes?.[`Theme ${filterClusterId + 1}`] ||
-              `Theme ${filterClusterId + 1}`
-            }".`
-          : "No journal entries yet. Start writing your first reflection!"}
-      </div>
-    );
-  }
+//   if (filteredEntries.length === 0) {
+//     return (
+//       <div className="text-center py-8 text-gray-700 dark:text-gray-300 font-inter w-full">
+//         {filterClusterId !== null && filterClusterId !== undefined
+//           ? `No entries found for the selected theme: "${
+//               clusterThemes?.[`Theme ${filterClusterId + 1}`] ||
+//               `Theme ${filterClusterId + 1}`
+//             }".`
+//           : "No journal entries yet. Start writing your first reflection!"}
+//       </div>
+//     );
+//   }
 
   const emotionChipColors = {
     joy: "bg-green-500",
@@ -335,6 +354,21 @@ function JournalHistory({
     return `${baseColor} text-white text-xs px-2 py-1 rounded-full`;
   };
 
+ // --- Empty state message ---
+  if (filteredEntries.length === 0) {
+    let message = "No journal entries yet. Start writing your first reflection!";
+    if (filterClusterId !== null && filterClusterId !== undefined) {
+      const themeName = clusterThemes?.[`Theme ${filterClusterId + 1}`] || `Theme ${filterClusterId + 1}`;
+      message = `No entries found for the selected theme: "${themeName}".`;
+    } else if (filterPhrase) {
+      message = `No entries found containing the phrase "${filterPhrase}".`;
+    }
+    return (
+      <div className="text-center py-8 text-gray-700 dark:text-gray-300 font-inter w-full">
+        {message}
+      </div>
+    );
+  }
   return (
     <div className="font-inter w-full">
       {sortedDates.map((dateKey) => (

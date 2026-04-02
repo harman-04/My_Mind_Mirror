@@ -4,6 +4,7 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import logging
 import os
+from modules.common.gemini_api_client import GeminiAPIException   # ⭐ ADD THIS IMPORT
 
 # --- CORRECTED IMPORTS ---
 # When running as 'python -m ml_service.app', 'ml_service' is the top-level package.
@@ -60,15 +61,35 @@ def generate_reflection_app_level():
     if not prompt_text:
         return jsonify({"error": "No prompt text provided"}), 400
 
-    # Read the API key from header (may be None)
     api_key = request.headers.get('X-Gemini-Key')
 
-    # Pass the key to the helper
-    reflection_text = call_gemini_api(prompt_text, api_key=api_key)
-    if reflection_text:
-        return jsonify({"reflection": reflection_text})
-    else:
-        return jsonify({"error": "Failed to generate reflection from AI."}), 500
+    try:
+        reflection_text = call_gemini_api(prompt_text, api_key=api_key)
+        if reflection_text:
+            return jsonify({"reflection": reflection_text})
+        else:
+            # This case should not happen if call_gemini_api raises on failure,
+            # but keep it as a safety net.
+            return jsonify({
+                "error": "Failed to generate reflection from AI.",
+                "warning": "AI service returned empty response",
+                "reflection": "Unable to generate reflection at this time. Please try again later."
+            }), 200
+    except GeminiAPIException as e:
+        logger.error(f"Gemini API error in reflection: {e}")
+        # Return 200 with warning so frontend can show fallback without triggering global 500 interceptor
+        return jsonify({
+            "error": str(e),
+            "warning": "AI service temporarily unavailable",
+            "reflection": "Unable to generate reflection at this time. Please try again later."
+        }), 200
+    except Exception as e:
+        logger.error(f"Unexpected error in reflection: {e}", exc_info=True)
+        return jsonify({
+            "error": "Internal server error",
+            "warning": "An unexpected error occurred",
+            "reflection": "Unable to generate reflection at this time. Please try again later."
+        }), 500
 
 @app.route('/')
 def home():

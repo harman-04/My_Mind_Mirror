@@ -1,23 +1,42 @@
-// src/components/TodayDashboard.js
 import React from 'react';
 import TodaysReflection from './TodaysReflection';
 import DailyEmotionSnapshot from './DailyEmotionSnapshot';
-import JournalHistory from './JournalHistory'; // Assuming JournalHistory handles its own mutations now
+import JournalHistory from './JournalHistory';
+import { SkeletonCard } from './Skeleton';
 
-// ⭐ MODIFIED: Removed onEntryChange prop ⭐
-function TodayDashboard({ latestEntry, todayEntries }) {
+function TodayDashboard({ todayEntries, isLoading }) {
+    if (isLoading) {
+        return (
+            <div className="space-y-6 sm:space-y-8 w-full">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 w-full">
+                    <div className="p-6 rounded-lg bg-white/60 dark:bg-black/40 shadow-inner animate-pulse">
+                        <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-4" />
+                        <div className="h-20 bg-gray-200 dark:bg-gray-700 rounded w-full" />
+                    </div>
+                    <div className="p-6 rounded-lg bg-white/60 dark:bg-black/40 shadow-inner animate-pulse">
+                        <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-4" />
+                        <div className="h-32 bg-gray-200 dark:bg-gray-700 rounded w-full" />
+                    </div>
+                </div>
+                <div className="bg-white/60 dark:bg-black/40 p-4 sm:p-6 rounded-lg shadow-inner transition-all duration-500 w-full">
+                    <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">All Today's Entries</h3>
+                    <SkeletonCard count={2} />
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="space-y-6 sm:space-y-8 w-full">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 w-full">
-                <TodaysReflection latestEntry={latestEntry} />
-                <DailyEmotionSnapshot latestEntry={latestEntry} />
+                <TodaysReflection todayEntries={todayEntries}  />
+                <DailyEmotionSnapshot todayEntries={todayEntries} />
             </div>
 
             {todayEntries.length > 0 ? (
                 <div className="bg-white/60 dark:bg-black/40 p-4 sm:p-6 rounded-lg shadow-inner transition-all duration-500 w-full">
                     <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">All Today's Entries</h3>
-                    {/* ⭐ MODIFIED: Removed onEntryChange prop from JournalHistory ⭐ */}
-                    <JournalHistory entries={todayEntries} />
+                    <JournalHistory entries={todayEntries} isLoading={isLoading} />
                 </div>
             ) : (
                 <div className="p-6 rounded-lg bg-white/60 dark:bg-black/40 shadow-inner transition-all duration-500 w-full

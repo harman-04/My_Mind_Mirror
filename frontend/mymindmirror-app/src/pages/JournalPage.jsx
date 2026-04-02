@@ -1,10 +1,13 @@
 // src/pages/JournalPage.js
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 import { format, startOfWeek, endOfWeek, isSameDay, parseISO } from 'date-fns';
 import { useTheme } from '../contexts/ThemeContext';
+import ExportButtons from '../components/ExportButtons';
+import WritingPrompt from '../components/WritingPrompt';
+
 
 // Import the new hooks
 import { useJournalEntries } from '../hooks/useJournalData';
@@ -26,6 +29,9 @@ function JournalPage() {
     const [activeTab, setActiveTab] = useState('today');
     const navigate = useNavigate();
     const { theme } = useTheme();
+    const journalInputRef = useRef();
+//     const { data: journalEntries, isLoading } = useJournalEntries();
+
 
     // Use the Tanstack Query hook to fetch journal entries
     const {
@@ -114,80 +120,92 @@ function JournalPage() {
                                     bg-white/70 dark:bg-black/30 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/10
                                     transition-all duration-500 flex flex-col space-y-6 sm:space-y-8">
 
-                <JournalInput />
+<WritingPrompt onUsePrompt={(prompt) => {
+    if (journalInputRef.current) {
+        journalInputRef.current.setText(prompt);
+    }
+}} />
+
+<JournalInput ref={journalInputRef} />
 
                 <AnomalyAlerts />
 
-                {/* Tab Navigation */}
-                <div className="flex justify-center space-x-2 sm:space-x-4 mb-6 flex-wrap">
-                    <button
-                        onClick={() => setActiveTab('today')}
-                        className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
-                                            transition-all duration-300 shadow-md mb-2 sm:mb-0
-                                            ${activeTab === 'today'
-                                                ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
-                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                                            }`}
-                    >
-                        Today
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('weekly')}
-                        className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
-                                            transition-all duration-300 shadow-md mb-2 sm:mb-0
-                                            ${activeTab === 'weekly'
-                                                ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
-                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                                            }`}
-                    >
-                        Weekly Overview
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('all')}
-                        className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
-                                            transition-all duration-300 shadow-md mb-2 sm:mb-0
-                                            ${activeTab === 'all'
-                                                ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
-                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                                            }`}
-                    >
-                        All Entries
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('search')}
-                        className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
-                                            transition-all duration-300 shadow-md mb-2 sm:mb-0
-                                            ${activeTab === 'search'
-                                                ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
-                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                                            }`}
-                    >
-                        Search
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('milestones')}
-                        className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
-                                            transition-all duration-300 shadow-md mb-2 sm:mb-0
-                                            ${activeTab === 'milestones'
-                                                ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
-                                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
-                                            }`}
-                    >
-                        Milestones & To-Dos
-                    </button>
+                <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
+                    {/* Tab Buttons */}
+                    <div className="flex flex-wrap gap-2 sm:gap-4">
+                        <button
+                            onClick={() => setActiveTab('today')}
+                            className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
+                                        transition-all duration-300 shadow-md
+                                        ${activeTab === 'today'
+                                            ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
+                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                        }`}
+                        >
+                            Today
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('weekly')}
+                            className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
+                                        transition-all duration-300 shadow-md
+                                        ${activeTab === 'weekly'
+                                            ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
+                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                        }`}
+                        >
+                            Weekly Overview
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('all')}
+                            className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
+                                        transition-all duration-300 shadow-md
+                                        ${activeTab === 'all'
+                                            ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
+                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                        }`}
+                        >
+                            All Entries
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('search')}
+                            className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
+                                        transition-all duration-300 shadow-md
+                                        ${activeTab === 'search'
+                                            ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
+                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                        }`}
+                        >
+                            Search
+                        </button>
+                        <button
+                            onClick={() => setActiveTab('milestones')}
+                            className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
+                                        transition-all duration-300 shadow-md
+                                        ${activeTab === 'milestones'
+                                            ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
+                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                        }`}
+                        >
+                            Milestones & To-Dos
+                        </button>
+                    </div>
+
+                    {/* Export Buttons */}
+                    <ExportButtons />
                 </div>
 
                 {/* Conditional Rendering based on activeTab */}
                 {activeTab === 'today' && (
                     <TodayDashboard
-                        latestEntry={latestEntryForDashboard}
                         todayEntries={todayEntries}
+                        isLoading={isLoading}
                     />
                 )}
 
                 {activeTab === 'weekly' && (
                     <WeeklyDashboard
                         weeklyEntries={weeklyEntries}
+                        isLoading={isLoading}
                         userId={userId}
                         onClusteringComplete={handleClusteringComplete}
                         currentClusterResults={currentClusterResults}
@@ -199,6 +217,7 @@ function JournalPage() {
                 {activeTab === 'all' && (
                     <OverallDashboard
                         journalEntries={journalEntries}
+                        isLoading={isLoading}
                         userId={userId}
                         onClusteringComplete={handleClusteringComplete}
                         currentClusterResults={currentClusterResults}

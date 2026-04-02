@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: mymindmirror-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: mymindmirror_db
+      MYSQL_USER: mymindmirror
+      MYSQL_PASSWORD: mymindmirror
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend/mymindmirror-backend
+      dockerfile: Dockerfile
+    container_name: mymindmirror-backend
+    restart: unless-stopped
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/mymindmirror_db?useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: mymindmirror
+      SPRING_DATASOURCE_PASSWORD: mymindmirror
+      APP_ML_SERVICE_URL: http://ml-service:5000
+      JWT_SECRET: ${JWT_SECRET}  # Set in .env file
+    ports:
+      - "8080:8080"
+
+  ml-service:
+    build: ./ml-service
+    container_name: mymindmirror-ml
+    restart: unless-stopped
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY}  # Set in .env file
+    ports:
+      - "5000:5000"
+
+  frontend:
+    build:
+      context: ./frontend/mymindmirror-app
+      dockerfile: Dockerfile
+    container_name: mymindmirror-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+
+volumes:
+  mysql_data:

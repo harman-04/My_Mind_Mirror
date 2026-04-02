@@ -88,7 +88,7 @@ function MilestoneTracker({ userId }) {
         try {
             const response = await axios.get(`${API_BASE_URL}/milestones`, { headers });
             // Sort milestones by creationDate descending
-            const sortedMilestones = response.data.sort((a, b) => 
+            const sortedMilestones = response.data.sort((a, b) =>
                 parseISO(b.creationDate).getTime() - parseISO(a.creationDate).getTime()
             );
             setMilestones(sortedMilestones);
@@ -113,7 +113,7 @@ function MilestoneTracker({ userId }) {
         try {
             const response = await axios.get(`${API_BASE_URL}/milestones/${milestoneId}/tasks`, { headers });
             // Update the specific milestone in the state with its fetched tasks
-            setMilestones(prevMilestones => prevMilestones.map(m => 
+            setMilestones(prevMilestones => prevMilestones.map(m =>
                 m.id === milestoneId ? { ...m, tasks: response.data } : m
             ));
         } catch (err) {
@@ -456,14 +456,23 @@ const fetchMilestoneInsights = useCallback(async (milestoneId) => {
     };
 
     // --- Render Logic ---
-    if (loadingMilestones) {
-        return (
-            <div className={`p-6 rounded-lg shadow-md text-center ${theme === 'dark' ? 'bg-gray-800 text-gray-200' : 'bg-white text-gray-800'}`}>
-                <p className="text-xl font-poppins">Loading Milestones...</p>
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#B399D4] dark:border-[#5CC8C2] mx-auto mt-4"></div>
-            </div>
-        );
-    }
+ if (loadingMilestones) {
+   return (
+     <div className="p-8 rounded-[2rem] shadow-xl w-full bg-white/40 dark:bg-slate-900/40 backdrop-blur-xl border border-white/20 dark:border-slate-800 transition-all duration-500">
+       <div className="animate-pulse space-y-6">
+         {/* Title Skeleton */}
+         <div className="h-6 bg-slate-200 dark:bg-slate-700/50 rounded-full w-1/4 mb-8" />
+
+         {/* Milestone Card Skeletons */}
+         <div className="space-y-4">
+           <div className="h-24 bg-slate-200/50 dark:bg-slate-800/40 rounded-2xl w-full" />
+           <div className="h-24 bg-slate-200/50 dark:bg-slate-800/40 rounded-2xl w-full" />
+           <div className="h-24 bg-slate-200/50 dark:bg-slate-800/40 rounded-2xl w-full" />
+         </div>
+       </div>
+     </div>
+   );
+ }
 
     if (milestoneError && !loadingInsightsId) { // Show general milestone error if not currently loading insights
         return (

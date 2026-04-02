@@ -22,10 +22,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeParseException;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -147,19 +144,23 @@ public class JournalController {
             @RequestParam(required = false) String endDate) {
         logger.info("Received request for journal history.");
         User currentUser = getCurrentUser();
-        LocalDate start = LocalDate.now().minusDays(30); // Default to last 30 days
-        LocalDate end = LocalDate.now();
 
-        try {
-            if (startDate != null) {
-                start = LocalDate.parse(startDate);
+        LocalDate start;
+        LocalDate end;
+
+        if (startDate == null && endDate == null) {
+            // No filters → return all entries (use very wide range)
+            start = LocalDate.of(1900, 1, 1);
+            end = LocalDate.of(2100, 12, 31);
+            logger.info("No date range provided – fetching all entries for user: {}", currentUser.getUsername());
+        } else {
+            try {
+                start = (startDate != null) ? LocalDate.parse(startDate) : LocalDate.now().minusDays(30);
+                end = (endDate != null) ? LocalDate.parse(endDate) : LocalDate.now();
+            } catch (DateTimeParseException e) {
+                logger.error("Invalid date format: {}", e.getMessage());
+                return ResponseEntity.badRequest().build();
             }
-            if (endDate != null) {
-                end = LocalDate.parse(endDate);
-            }
-        } catch (DateTimeParseException e) {
-            logger.error("Invalid date format provided: {}. Using default date range.", e.getMessage());
-            return ResponseEntity.badRequest().build(); // Changed to build() as per your style
         }
 
         List<JournalEntry> entries = journalService.getJournalEntriesForUser(currentUser, start, end);
@@ -169,7 +170,6 @@ public class JournalController {
                 .collect(Collectors.toList());
         return ResponseEntity.ok(responses);
     }
-
     /**
      * Retrieves mood data for charts for the authenticated user.
      * This method will need to be adapted later to handle multiple entries per day for aggregation.
@@ -364,5 +364,21 @@ public class JournalController {
             logger.error("Unexpected error during mood search: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
         }
+    }
+
+    @GetMapping("/key-phrases")
+    public ResponseEntity<Map<String, Long>> getKeyPhraseFrequencies() {
+        User currentUser = getCurrentUser();
+        List<JournalEntry> entries = journalService.getAllEntriesForUser(currentUser);
+        Map<String, Long> freq = new HashMap<>();
+        for (JournalEntry entry : entries) {
+            if (entry.getKeyPhrases() != null) {
+                for (KeyPhrase kp : entry.getKeyPhrases()) {
+                    String phrase = kp.getPhrase().toLowerCase();
+                    freq.put(phrase, freq.getOrDefault(phrase, 0L) + 1);
+                }
+            }
+        }
+        return ResponseEntity.ok(freq);
     }
 }

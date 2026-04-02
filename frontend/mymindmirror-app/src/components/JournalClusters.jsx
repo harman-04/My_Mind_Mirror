@@ -3,14 +3,34 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useTheme } from '../contexts/ThemeContext';
+import { SkeletonCard } from './Skeleton';   // import the skeleton
 
-function JournalClusters({ userId, onClusteringComplete, journalEntries, currentClusterResults, onFilterCluster }) {
+function JournalClusters({ userId, onClusteringComplete, journalEntries, currentClusterResults, onFilterCluster, isLoading }) {
     const [numClusters, setNumClusters] = useState(3); // Default to 3 clusters
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
     const { theme } = useTheme();
 
+        if (isLoading) {
+                    return (
+                        <div className={`p-6 rounded-lg shadow-md transition-all duration-500 w-full
+                                         ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
+                            <div className="animate-pulse space-y-4">
+                                <div className="h-6 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mx-auto" />
+                                <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4 mx-auto" />
+                                <div className="flex justify-center space-x-4">
+                                    <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded w-32" />
+                                    <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded w-32" />
+                                </div>
+                                <div className="space-y-2">
+                                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full" />
+                                    <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6" />
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
     const handleFindMyTheme = async () => {
         setLoading(true);
         setError('');

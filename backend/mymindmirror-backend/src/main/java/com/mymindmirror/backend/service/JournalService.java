@@ -519,4 +519,8 @@ public class JournalService {
             return "Failed to generate reflection due to an internal error.";
         }
     }
+
+    public List<JournalEntry> getAllEntriesForUser(User user) {
+        return findByUser(user);
+    }
 }
