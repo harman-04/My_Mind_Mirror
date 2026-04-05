@@ -3,6 +3,9 @@ package com.mymindmirror.backend.model;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Data;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -12,6 +15,8 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "tasks")
+@Data
+@AllArgsConstructor
 public class Task {
 
     @Id
@@ -36,6 +41,9 @@ public class Task {
     @Column(nullable = false)
     private Status status; // E.g., PENDING, COMPLETED, OVERDUE
 
+    @Column(name = "roadmap_task_id")
+    private UUID roadmapTaskId;
+
     // Enum for Task status (can be same as Milestone or more granular)
     public enum Status {
         PENDING,
@@ -57,52 +65,5 @@ public class Task {
         this.dueDate = dueDate;
     }
 
-    // Getters and Setters
-    public UUID getId() {
-        return id;
-    }
 
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public Milestone getMilestone() {
-        return milestone;
-    }
-
-    public void setMilestone(Milestone milestone) {
-        this.milestone = milestone;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public LocalDateTime getCreationTimestamp() {
-        return creationTimestamp;
-    }
-
-    public void setCreationTimestamp(LocalDateTime creationTimestamp) {
-        this.creationTimestamp = creationTimestamp;
-    }
-
-    public LocalDate getDueDate() {
-        return dueDate;
-    }
-
-    public void setDueDate(LocalDate dueDate) {
-        this.dueDate = dueDate;
-    }
-
-    public Status getStatus() {
-        return status;
-    }
-
-    public void setStatus(Status status) {
-        this.status = status;
-    }
 }

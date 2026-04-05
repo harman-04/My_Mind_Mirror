@@ -93,7 +93,7 @@ class GeminiApiClient:
 
         chat_history = [{"role": "user", "parts": [{"text": prompt_text}]}]
         payload = {"contents": chat_history}
-        generation_config = {"temperature": temperature, "maxOutputTokens": 2048}
+        generation_config = {"temperature": temperature, "maxOutputTokens": 16384}
         if response_schema:
             generation_config["responseMimeType"] = "application/json"
         payload["generation_config"] = generation_config

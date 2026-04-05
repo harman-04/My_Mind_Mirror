@@ -2,8 +2,10 @@
 package com.mymindmirror.backend.service;
 
 import com.mymindmirror.backend.model.Milestone;
+import com.mymindmirror.backend.model.RoadmapTask;
 import com.mymindmirror.backend.model.Task;
 import com.mymindmirror.backend.model.User;
+import com.mymindmirror.backend.repository.RoadmapTaskRepository;
 import com.mymindmirror.backend.repository.TaskRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,10 +29,12 @@ public class TaskService {
 
     private final TaskRepository taskRepository;
     private final MilestoneService milestoneService; // To interact with Milestone logic
+    private final RoadmapTaskRepository roadmapTaskRepository; // inject
 
-    public TaskService(TaskRepository taskRepository, MilestoneService milestoneService) {
+    public TaskService(TaskRepository taskRepository, MilestoneService milestoneService, RoadmapTaskRepository roadmapTaskRepository) {
         this.taskRepository = taskRepository;
         this.milestoneService = milestoneService;
+        this.roadmapTaskRepository = roadmapTaskRepository;
     }
 
     /**
@@ -116,17 +120,28 @@ public class TaskService {
         if (newDescription != null && !newDescription.trim().isEmpty()) {
             existingTask.setDescription(newDescription);
         }
-        if (newDueDate != null) { // Allow setting to null to clear due date
+        if (newDueDate != null) {
             existingTask.setDueDate(newDueDate);
         }
         if (newStatus != null) {
+            Task.Status oldStatus = existingTask.getStatus();
             existingTask.setStatus(newStatus);
-            // If task status changes, update parent milestone's status
+            // If status changed to COMPLETED and there is a linked roadmap task, sync it
+            if (oldStatus != Task.Status.COMPLETED && newStatus == Task.Status.COMPLETED) {
+                if (existingTask.getRoadmapTaskId() != null) {
+                    syncRoadmapTaskCompletion(existingTask.getRoadmapTaskId(), true);
+                }
+            }
+            // If status changed away from COMPLETED (uncomplete), also sync
+            if (oldStatus == Task.Status.COMPLETED && newStatus != Task.Status.COMPLETED) {
+                if (existingTask.getRoadmapTaskId() != null) {
+                    syncRoadmapTaskCompletion(existingTask.getRoadmapTaskId(), false);
+                }
+            }
             milestoneService.updateMilestoneStatusBasedOnTasks(milestoneId);
         }
         return taskRepository.save(existingTask);
     }
-
     /**
      * Deletes a task.
      * Ensures that the task belongs to the specified milestone and the milestone belongs to the user.
@@ -152,4 +167,27 @@ public class TaskService {
         // Update milestone status after deletion
         milestoneService.updateMilestoneStatusBasedOnTasks(milestone.getId());
     }
+
+    @Transactional
+    public Task createTaskWithRoadmapLink(UUID milestoneId, User user, String description,
+                                          LocalDate dueDate, UUID roadmapTaskId) {
+        Milestone milestone = milestoneService.getMilestoneByIdForUser(milestoneId, user)
+                .orElseThrow(() -> new IllegalArgumentException("Milestone not found or not owned by user."));
+        Task task = new Task(milestone, description, dueDate);
+        task.setStatus(Task.Status.PENDING);
+        task.setRoadmapTaskId(roadmapTaskId);
+        Task savedTask = taskRepository.save(task);
+        milestoneService.updateMilestoneStatusBasedOnTasks(milestone.getId());
+        return savedTask;
+    }
+
+    private void syncRoadmapTaskCompletion(UUID roadmapTaskId, boolean completed) {
+        RoadmapTask roadmapTask = roadmapTaskRepository.findById(roadmapTaskId).orElse(null);
+        if (roadmapTask != null && roadmapTask.isCompleted() != completed) {
+            roadmapTask.setCompleted(completed);
+            roadmapTaskRepository.save(roadmapTask);
+            logger.info("Synced roadmap task {} completion to {}", roadmapTaskId, completed);
+        }
+    }
+
 }

@@ -5,6 +5,7 @@ from flask_cors import CORS
 import logging
 import os
 from modules.common.gemini_api_client import GeminiAPIException   # ⭐ ADD THIS IMPORT
+from modules.roadmap.routes import roadmap_bp
 
 # --- CORRECTED IMPORTS ---
 # When running as 'python -m ml_service.app', 'ml_service' is the top-level package.
@@ -24,6 +25,9 @@ logger = logging.getLogger(__name__)
 # ⭐ IMPORTANT: Set the gemini_api_client logger to DEBUG to see raw responses ⭐
 # This is crucial for debugging the data crossover issue.
 logging.getLogger('ml_service.modules.common.gemini_api_client').setLevel(logging.DEBUG)
+
+# Enable debug logging for the roadmap module to see Gemini responses
+logging.getLogger('modules.roadmap.routes').setLevel(logging.DEBUG)
 
 
 # Suppress Hugging Face Hub warnings (good practice)
@@ -48,6 +52,8 @@ if not Config.GEMINI_API_KEY:
 # Register blueprints
 app.register_blueprint(journal_bp)
 app.register_blueprint(milestone_bp)
+app.register_blueprint(roadmap_bp)
+
 
 # Endpoint kept directly in app.py for /generate_reflection path compatibility
 # This ensures it captures the OPTIONS request before blueprint-specific routing
@@ -104,4 +110,3 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False)
 
 
-# app.py

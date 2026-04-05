@@ -166,4 +166,16 @@ public class MilestoneService {
             logger.info("Milestone {} status updated to {}.", milestoneId, milestone.getStatus());
         });
     }
+
+    public Milestone getOrCreateMilestoneByTitle(User user, String title) {
+        // Check if milestone with exact title already exists
+        List<Milestone> existing = milestoneRepository.findByUserOrderByCreationDateDesc(user);
+        for (Milestone m : existing) {
+            if (m.getTitle().equals(title)) {
+                return m;
+            }
+        }
+        // Otherwise create new
+        return createMilestone(user, title, "Auto-generated from roadmap", null);
+    }
 }

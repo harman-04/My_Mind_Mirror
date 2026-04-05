@@ -13,6 +13,7 @@ import AppLogo from './components/AppLogo';
 import { useTheme } from './contexts/ThemeContext';
 import { Link } from 'react-router-dom';
 import HeaderApiKeyStatus from './components/HeaderApiKeyStatus';
+import AchievementsPage from './pages/AchievementsPage';
 
 // A simple component for a protected route
 const PrivateRoute = ({ children }) => {
@@ -33,8 +34,8 @@ function App() {
     // Show logout button only on the /journal page AND if authenticated
     // Also add a Profile link if authenticated
     const isAuthenticated = localStorage.getItem('jwtToken');
-    const showLogoutAndProfile = isAuthenticated && (location.pathname === '/journal' || location.pathname === '/profile');
-
+    const showLogoutAndProfile = isAuthenticated &&
+      (location.pathname === '/journal' || location.pathname === '/profile' || location.pathname === '/achievements');
 
     return (
         <div className="min-h-screen flex flex-col items-center p-2 sm:p-4
@@ -62,6 +63,14 @@ function App() {
                             Profile
                         </Link>
                     )}
+
+                <Link
+                  to="/achievements"
+                  className="py-1.5 px-3 sm:py-2 sm:px-4 rounded-full font-poppins font-semibold text-white text-sm sm:text-base
+                             bg-[#B399D4] hover:bg-[#9B7BBF] active:bg-[#806AA0] transition-all duration-300"
+                >
+                  Achievements
+                </Link>
                 {isAuthenticated && <HeaderApiKeyStatus />}
                     {showLogoutAndProfile && ( // Show logout if authenticated and on journal/profile page
                         <button
@@ -84,6 +93,14 @@ function App() {
                     <Route path="/" element={<HomePage />} /> 
                     <Route path="/login" element={<LoginPage />} />
                     <Route path="/register" element={<RegisterPage />} />
+                    <Route
+                      path="/achievements"
+                      element={
+                        <PrivateRoute>
+                          <AchievementsPage />
+                        </PrivateRoute>
+                      }
+                    />
                     <Route
                         path="/journal"
                         element={

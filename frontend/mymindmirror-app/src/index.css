@@ -6,3 +6,92 @@ body {
 
 
 @custom-variant dark (&:is(.dark *));
+
+/* Roadmap formatted text styles */
+.roadmap-details .roadmap-heading {
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+  line-height: 1.3;
+}
+.roadmap-details h1.roadmap-heading { font-size: 1.8rem; }
+.roadmap-details h2.roadmap-heading { font-size: 1.5rem; }
+.roadmap-details h3.roadmap-heading { font-size: 1.3rem; }
+.roadmap-details h4.roadmap-heading { font-size: 1.1rem; }
+.roadmap-details h5.roadmap-heading { font-size: 1rem; }
+.roadmap-details h6.roadmap-heading { font-size: 0.9rem; }
+
+.roadmap-details p.roadmap-paragraph {
+  margin-bottom: 0.75rem;
+  line-height: 1.5;
+}
+.roadmap-details ul.roadmap-list,
+.roadmap-details ol.roadmap-list {
+  margin: 0.5rem 0 0.75rem 1.5rem;
+  padding-left: 0;
+}
+.roadmap-details li {
+  margin-bottom: 0.25rem;
+  line-height: 1.5;
+}
+.roadmap-details strong {
+  font-weight: 700;
+  color: #B399D4;
+}
+.dark .roadmap-details strong {
+  color: #C7B3E6;
+}
+.roadmap-details em {
+  font-style: italic;
+  color: #5CC8C2;
+}
+.dark .roadmap-details em {
+  color: #8DE2DD;
+}
+.roadmap-details code {
+  background-color: #f0f0f0;
+  padding: 0.2rem 0.4rem;
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 0.9em;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.dark .roadmap-details code {
+  background-color: #2d2d2d;
+  color: #e0e0e0;
+}
+.roadmap-details pre {
+  background-color: #1e1e1e;
+  padding: 1rem;
+  border-radius: 8px;
+  overflow-x: auto;       /* Add horizontal scroll if needed */
+  white-space: pre-wrap;  /* Wrap long lines if possible */
+  word-break: break-word; /* Break long words */
+  margin: 0.75rem 0;
+  max-width: 100%;
+}
+.roadmap-details pre code {
+  background: none;
+  padding: 0;
+  color: #d4d4d4;
+}
+.roadmap-details a {
+  color: #5CC8C2;
+  text-decoration: underline;
+}
+.dark .roadmap-details a {
+  color: #8DE2DD;
+}
+.roadmap-details blockquote.roadmap-blockquote {
+  border-left: 4px solid #B399D4;
+  margin: 0.75rem 0;
+  padding: 0.5rem 1rem;
+  background-color: rgba(179, 153, 212, 0.1);
+  font-style: italic;
+}
+.roadmap-details hr.roadmap-hr {
+  margin: 1rem 0;
+  border: none;
+  height: 1px;
+  background-color: #ccc;
+}

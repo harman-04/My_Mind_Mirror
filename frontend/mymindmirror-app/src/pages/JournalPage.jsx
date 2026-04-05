@@ -7,8 +7,8 @@ import { format, startOfWeek, endOfWeek, isSameDay, parseISO } from 'date-fns';
 import { useTheme } from '../contexts/ThemeContext';
 import ExportButtons from '../components/ExportButtons';
 import WritingPrompt from '../components/WritingPrompt';
-
-
+import RoadmapPlanner from '../components/RoadmapPlanner';
+import AchievementsWidget from '../components/AchievementsWidget';
 // Import the new hooks
 import { useJournalEntries } from '../hooks/useJournalData';
 
@@ -120,6 +120,10 @@ function JournalPage() {
                                     bg-white/70 dark:bg-black/30 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/10
                                     transition-all duration-500 flex flex-col space-y-6 sm:space-y-8">
 
+
+<div className="mb-4">
+  <AchievementsWidget />
+</div>
 <WritingPrompt onUsePrompt={(prompt) => {
     if (journalInputRef.current) {
         journalInputRef.current.setText(prompt);
@@ -188,6 +192,18 @@ function JournalPage() {
                         >
                             Milestones & To-Dos
                         </button>
+
+                        <button
+                            onClick={() => setActiveTab('roadmap')}
+                            className={`py-2 px-4 sm:px-6 rounded-full font-poppins font-semibold text-sm sm:text-base
+                                        transition-all duration-300 shadow-md mb-2 sm:mb-0
+                                        ${activeTab === 'roadmap'
+                                            ? 'bg-[#B399D4] text-white dark:bg-[#5CC8C2] dark:text-gray-800'
+                                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                                        }`}
+                        >
+                            Roadmap
+                        </button>
                     </div>
 
                     {/* Export Buttons */}
@@ -233,6 +249,8 @@ function JournalPage() {
                 {activeTab === 'milestones' && (
                     <MilestoneTracker userId={userId} />
                 )}
+
+                {activeTab === 'roadmap' && <RoadmapPlanner />}
             </main>
         </div>
     );
