@@ -45,18 +45,33 @@ function App() {
 
             <header className="w-full max-w-4xl flex flex-col sm:flex-row justify-between items-center py-3 px-4 sm:px-6 mb-4 sm:mb-8 rounded-xl
                                bg-white/50 dark:bg-black/20 backdrop-blur-md shadow-lg border border-white/30 dark:border-white/10
-                               transition-all duration-500">
+                               transition-all duration-500 gap-4 sm:gap-0">
 
                 <AppLogo />
 
                 {/* Right Controls */}
-                <div className="flex items-center space-x-3 sm:space-x-4">
-                    {isAuthenticated && ( // Only show profile link if authenticated
+                <div className="flex items-center space-x-2 sm:space-x-3">
+
+                    {/* 1. Achievements - Kept as a friendly accent color */}
+                    <Link
+                        to="/achievements"
+                        className="py-1.5 px-3 sm:py-2 sm:px-4 rounded-full font-poppins font-semibold text-white text-sm
+                                   bg-[#B399D4] hover:bg-[#9B7BBF] active:bg-[#806AA0]
+                                   shadow-md hover:shadow-lg transition-all duration-300"
+                    >
+                      Achievements
+                    </Link>
+
+                    {/* 2. API Key Status - High context placement */}
+                    {isAuthenticated && <HeaderApiKeyStatus />}
+
+                    {/* 3. Profile - Shifted to a smooth teal to match your active tabs and break the purple monotony */}
+                    {isAuthenticated && (
                         <Link
                             to="/profile"
-                            className="py-1.5 px-3 sm:py-2 sm:px-4 rounded-full font-poppins font-semibold text-white text-sm sm:text-base
-                                       bg-[#B399D4] hover:bg-[#9B7BBF] active:bg-[#806AA0]
-                                       shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#B399D4] focus:ring-opacity-75
+                            className="py-1.5 px-3 sm:py-2 sm:px-4 rounded-full font-poppins font-semibold text-white text-sm
+                                       bg-[#5CC8C2] hover:bg-[#4bb3ac] active:bg-[#3da19a]
+                                       shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#5CC8C2] focus:ring-opacity-75
                                        transition-all duration-300"
                             aria-label="View Profile"
                         >
@@ -64,18 +79,11 @@ function App() {
                         </Link>
                     )}
 
-                <Link
-                  to="/achievements"
-                  className="py-1.5 px-3 sm:py-2 sm:px-4 rounded-full font-poppins font-semibold text-white text-sm sm:text-base
-                             bg-[#B399D4] hover:bg-[#9B7BBF] active:bg-[#806AA0] transition-all duration-300"
-                >
-                  Achievements
-                </Link>
-                {isAuthenticated && <HeaderApiKeyStatus />}
-                    {showLogoutAndProfile && ( // Show logout if authenticated and on journal/profile page
+                    {/* 4. Logout - Coral/Red kept for destructive actions */}
+                    {showLogoutAndProfile && (
                         <button
                             onClick={handleLogout}
-                            className="py-1.5 px-3 sm:py-2 sm:px-4 rounded-full font-poppins font-semibold text-white text-sm sm:text-base
+                            className="py-1.5 px-3 sm:py-2 sm:px-4 rounded-full font-poppins font-semibold text-white text-sm
                                        bg-[#FF8A7A] hover:bg-[#FF6C5A] active:bg-[#D45E4D]
                                        shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#FF8A7A] focus:ring-opacity-75
                                        transition-all duration-300"
@@ -84,7 +92,11 @@ function App() {
                             Logout
                         </button>
                     )}
-                    <ThemeToggle />
+
+                    {/* 5. Theme Toggle - The absolute final anchor */}
+                    <div className="pl-1 border-l border-white/20 dark:border-white/10 ml-1">
+                        <ThemeToggle />
+                    </div>
                 </div>
             </header>
 

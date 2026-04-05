@@ -13,6 +13,8 @@ import com.mymindmirror.backend.util.EncryptionUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.hibernate.Hibernate;
 import java.time.LocalDate;
@@ -522,5 +524,25 @@ public class JournalService {
 
     public List<JournalEntry> getAllEntriesForUser(User user) {
         return findByUser(user);
+    }
+
+    public Page<JournalEntry> getJournalEntriesPage(User user, LocalDate startDate, LocalDate endDate, Pageable pageable) {
+        logger.info("Fetching paginated journal entries for user: {} from {} to {}", user.getUsername(), startDate, endDate);
+        Page<JournalEntry> page = journalEntryRepository.findByUserAndEntryDateBetweenOrderByCreationTimestampDesc(
+                user, startDate, endDate, pageable);
+
+        String userSecret = user.getPasswordHash();
+        if (userSecret == null || userSecret.isEmpty()) {
+            logger.error("User {} has no password hash. Cannot decrypt journal entries.", user.getUsername());
+            // Return page with empty content? Better to throw? We'll return page with decrypted content as empty.
+        } else {
+            page.getContent().forEach(entry -> {
+                entry.setRawText(EncryptionUtil.decrypt(entry.getRawText(), userSecret));
+                if (entry.getKeyPhrases() != null) {
+                    Hibernate.initialize(entry.getKeyPhrases());
+                }
+            });
+        }
+        return page;
     }
 }

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { format } from 'date-fns';
 import { useState } from 'react';
+import { useInfiniteQuery } from '@tanstack/react-query';
 
 const API_BASE_URL = 'http://localhost:8080/api';
 // const FLASK_API_URL = 'http://localhost:5000'; // ⭐ REMOVED: No direct Flask API calls from frontend ⭐
@@ -165,6 +166,9 @@ export const useAddJournalEntry = () => {
       // Invalidate all relevant queries to force re-fetch on next access
       queryClient.invalidateQueries({ queryKey: ['journalEntries'] });
 
+            queryClient.invalidateQueries({ queryKey: ['journalEntries', 'paginated'] });
+
+
         clearTodayReflectionCache();
       // Invalidate today's reflection because a new entry might make it the latest one
       queryClient.invalidateQueries({ queryKey: ['todaysReflection'] });
@@ -185,6 +189,8 @@ export const useUpdateJournalEntry = () => {
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ['journalEntries'] });
+      queryClient.invalidateQueries({ queryKey: ['journalEntries', 'paginated'] });
+
       clearTodayReflectionCache();
       // Invalidate the reflection query (base key)
       queryClient.invalidateQueries({ queryKey: ['todaysReflection'] });
@@ -207,6 +213,8 @@ export const useDeleteJournalEntry = () => {
       queryClient.setQueryData(['journalEntries'], (oldEntries) =>
         oldEntries ? oldEntries.filter((entry) => entry.id !== entryIdToDelete) : []
       );
+            queryClient.invalidateQueries({ queryKey: ['journalEntries', 'paginated'] });
+
         clearTodayReflectionCache();
       // Invalidate today's reflection to force it to re-evaluate (it might now be based on a different entry or no entry)
       queryClient.invalidateQueries({ queryKey: ['todaysReflection'] });
@@ -286,4 +294,74 @@ export const useKeyPhraseFrequencies = () => {
         },
         staleTime: 10 * 60 * 1000,
     });
+};
+
+
+/**
+ * Fetches paginated journal entries using the new /history/paginated endpoint.
+ * @param {number} pageSize - Number of entries per page (default 20).
+ */
+export const usePaginatedJournalEntries = (pageSize = 20) => {
+  return useInfiniteQuery({
+    queryKey: ['journalEntries', 'paginated', pageSize],
+    queryFn: async ({ pageParam = 0 }) => {
+      const token = getToken();
+      if (!token) throw new Error('Not authenticated');
+      const response = await axios.get(
+        `${API_BASE_URL}/journal/history/paginated?page=${pageParam}&size=${pageSize}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.data; // expects { content: [], pageable, totalPages, ... }
+    },
+    getNextPageParam: (lastPage) => {
+      // Return next page number if available
+      if (lastPage.pageable && lastPage.pageable.pageNumber < lastPage.totalPages - 1) {
+        return lastPage.pageable.pageNumber + 1;
+      }
+      return undefined;
+    },
+    staleTime: 10 * 60 * 1000,
+    cacheTime: 15 * 60 * 1000,
+  });
+};
+
+
+/**
+ * Fetches only today's journal entries.
+ */
+export const useTodayEntries = () => {
+  const today = format(new Date(), 'yyyy-MM-dd');
+  return useQuery({
+    queryKey: ['journalEntries', 'today', today],
+    queryFn: async () => {
+      const token = getToken();
+      if (!token) throw new Error('Not authenticated');
+      const response = await axios.get(`${API_BASE_URL}/journal/history?startDate=${today}&endDate=${today}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data; // already sorted descending
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+};
+
+/**
+ * Fetches journal entries for a specific week (date range).
+ * @param {string} startDate - YYYY-MM-DD
+ * @param {string} endDate - YYYY-MM-DD
+ */
+export const useWeeklyEntries = (startDate, endDate) => {
+  return useQuery({
+    queryKey: ['journalEntries', 'weekly', startDate, endDate],
+    queryFn: async () => {
+      const token = getToken();
+      if (!token) throw new Error('Not authenticated');
+      const response = await axios.get(`${API_BASE_URL}/journal/history?startDate=${startDate}&endDate=${endDate}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return response.data;
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: !!startDate && !!endDate,
+  });
 };

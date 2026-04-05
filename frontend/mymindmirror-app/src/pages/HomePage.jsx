@@ -3,8 +3,8 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import {
-  Sparkles, Brain, AlertTriangle, Folders, Target, Lightbulb, 
-  ShieldCheck, CalendarCheck, BarChart, TrendingUp, Hand, 
+  Sparkles, Brain, AlertTriangle, Folders, Target, Lightbulb,
+  ShieldCheck, CalendarCheck, BarChart, TrendingUp, Hand,
   Feather, ArrowRight, ChevronRight, Layers, Gauge, BookOpen,
   HeartPulse, PieChart, Notebook, Shield, Zap, Clock, Hash
 } from 'lucide-react';
@@ -23,11 +23,11 @@ function HomePage() {
     cardBorder: isDarkMode ? 'border-gray-700' : 'border-gray-200',
     textPrimary: isDarkMode ? 'text-gray-100' : 'text-gray-900',
     textSecondary: isDarkMode ? 'text-gray-300' : 'text-gray-600',
-    buttonPrimary: isDarkMode ? 
-      'bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600' : 
+    buttonPrimary: isDarkMode ?
+      'bg-gradient-to-r from-purple-600 to-purple-500 hover:from-purple-700 hover:to-purple-600' :
       'bg-gradient-to-r from-purple-500 to-purple-400 hover:from-purple-600 hover:to-purple-500',
-    buttonSecondary: isDarkMode ? 
-      'bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-700 hover:to-teal-600' : 
+    buttonSecondary: isDarkMode ?
+      'bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-700 hover:to-teal-600' :
       'bg-gradient-to-r from-teal-500 to-teal-400 hover:from-teal-600 hover:to-teal-500',
     iconPrimary: isDarkMode ? 'text-purple-300' : 'text-purple-500',
     iconSecondary: isDarkMode ? 'text-teal-300' : 'text-teal-500',
@@ -120,14 +120,14 @@ function HomePage() {
 
   return (
     <div className={`min-h-screen w-full flex flex-col items-center ${colors.background} ${colors.textPrimary} transition-colors duration-300`}>
-      
+
       {/* Hero Section */}
       <section className="w-full py-24 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
         <div className="absolute inset-0 -z-10">
           <div className={`absolute inset-0 bg-gradient-to-br ${isDarkMode ? 'from-purple-900/20 via-gray-900 to-gray-900' : 'from-purple-50 via-white to-white'}`}></div>
           <div className={`absolute inset-0 opacity-20 ${isDarkMode ? 'bg-[url(/grid-dark.svg)]' : 'bg-[url(/grid-light.svg)]'}`}></div>
         </div>
-        
+
         <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-12">
           <div className="lg:w-1/2 space-y-8">
             <div className="inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r from-purple-500 to-purple-400 text-white text-sm font-medium">
@@ -138,7 +138,7 @@ function HomePage() {
               The Future of <span className="bg-gradient-to-r from-purple-400 to-teal-400 bg-clip-text text-transparent">Self-Reflection</span>
             </h1>
             <p className={`text-lg ${colors.textSecondary} max-w-2xl`}>
-              An intelligent journaling platform that helps you uncover patterns, track growth, 
+              An intelligent journaling platform that helps you uncover patterns, track growth,
               and achieve your personal goals through AI-powered insights.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 pt-4">
@@ -183,7 +183,7 @@ function HomePage() {
                       <h3 className="font-medium text-gray-200">Mood Trend</h3>
                       <div className="mt-2 h-32 bg-gradient-to-b from-gray-700/50 to-gray-800/30 rounded border border-gray-700 flex items-end">
                         {[30, 60, 45, 80, 65, 90, 75].map((height, i) => (
-                          <div 
+                          <div
                             key={i}
                             style={{ height: `${height}%` }}
                             className={`flex-1 ${i % 2 === 0 ? 'bg-teal-500' : 'bg-purple-500'} rounded-t mx-0.5`}
@@ -210,10 +210,10 @@ function HomePage() {
               Our carefully designed features work together to provide comprehensive support for your personal growth journey.
             </p>
           </div>
-          
+
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             {featureCategories.map((category, index) => (
-              <div 
+              <div
                 key={index}
                 className={`rounded-2xl ${colors.cardBg} ${colors.cardBorder} border p-6 hover:shadow-lg transition-all duration-300`}
               >
@@ -256,10 +256,10 @@ function HomePage() {
               Hear how MyMindMirror is helping people like you achieve meaningful growth.
             </p>
           </div>
-          
+
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             {testimonials.map((testimonial, index) => (
-              <div 
+              <div
                 key={index}
                 className={`rounded-2xl ${colors.cardBg} ${colors.cardBorder} border p-6 flex flex-col`}
               >
@@ -280,7 +280,7 @@ function HomePage() {
           <div className={`rounded-3xl ${colors.cardBg} ${colors.cardBorder} border p-12 relative overflow-hidden`}>
             <div className={`absolute inset-0 bg-gradient-to-br ${isDarkMode ? 'from-purple-900/20 via-gray-900/50 to-gray-900/20' : 'from-purple-50/70 via-white/90 to-white/70'} -z-10`}></div>
             <div className={`absolute -right-20 -top-20 w-64 h-64 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 opacity-10 blur-3xl -z-10`}></div>
-            
+
             <Feather className={`w-12 h-12 mx-auto mb-6 ${colors.iconPrimary}`} />
             <h2 className="text-3xl sm:text-4xl font-bold mb-6">
               Begin Your <span className="bg-gradient-to-r from-purple-400 to-teal-400 bg-clip-text text-transparent">Transformation</span> Today
@@ -296,7 +296,7 @@ function HomePage() {
                 <span>Create Free Account</span>
                 <ArrowRight className="w-4 h-4" />
               </Link>
-             
+
             </div>
           </div>
         </div>

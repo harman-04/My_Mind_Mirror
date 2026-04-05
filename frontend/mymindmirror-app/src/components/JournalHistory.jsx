@@ -1,6 +1,6 @@
 // src/components/JournalHistory.js
-
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import ReactDOM from "react-dom";
 // import axios from "axios"; // No longer needed directly
 import { format, parseISO } from "date-fns";
 import { Doughnut } from "react-chartjs-2";
@@ -9,6 +9,7 @@ import { useTheme } from "../contexts/ThemeContext";
 // Import the mutation hooks
 import { useUpdateJournalEntry, useDeleteJournalEntry } from '../hooks/useJournalData';
 import { SkeletonCard } from './Skeleton';
+import { AlertTriangle } from 'lucide-react';
 
 const TRUNCATION_LENGTH = 150; // You can adjust this value as needed
 
@@ -71,7 +72,64 @@ const EMOTION_CHART_COLORS_DARK = {
   hope: "#C0E0FF",
 };
 
-// ⭐ MODIFIED: Removed onEntryChange prop ⭐
+// ------------------------------------------------------------------
+// Portal-based Delete Confirmation Modal
+// ------------------------------------------------------------------
+const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, theme }) => {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
+  if (!isOpen || !mounted) return null;
+
+  return ReactDOM.createPortal(
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+      <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
+      <div className={`relative max-w-md w-full rounded-2xl shadow-2xl overflow-hidden transform transition-all duration-300 ${
+        theme === 'dark' ? 'bg-gray-800/95' : 'bg-white/95'
+      } backdrop-blur-md border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
+        <div className="p-6 text-center">
+          <div className="mx-auto w-12 h-12 mb-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+            <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
+          </div>
+          <h3 className="text-xl font-poppins font-semibold mb-2">Delete Journal Entry</h3>
+          <p className="text-gray-600 dark:text-gray-300 mb-6">
+            Are you sure you want to delete this entry? This action cannot be undone.
+          </p>
+          <div className="flex justify-center gap-3">
+            <button
+              onClick={onConfirm}
+              className="px-5 py-2 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition shadow-md"
+            >
+              Delete
+            </button>
+            <button
+              onClick={onClose}
+              className="px-5 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+// ------------------------------------------------------------------
+// Main JournalHistory Component
+// ------------------------------------------------------------------
 function JournalHistory({
   entries,
   clusterThemes,
@@ -84,18 +142,15 @@ function JournalHistory({
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [editedText, setEditedText] = useState("");
   const [editError, setEditError] = useState("");
-  // const [editLoading, setEditLoading] = useState(false); // Replaced by mutation hook's isPending
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteEntryId, setDeleteEntryId] = useState(null);
-  // const [deleteLoading, setDeleteLoading] = useState(false); // Replaced by mutation hook's isPending
   const { theme } = useTheme();
 
   // Initialize mutation hooks
   const updateMutation = useUpdateJournalEntry();
   const deleteMutation = useDeleteJournalEntry();
 
-
-      if (isLoading) return <SkeletonCard count={3} />;
+  if (isLoading) return <SkeletonCard count={3} />;
 
   // --- Filter entries ---
     let filteredEntries = entries;
@@ -165,13 +220,11 @@ function JournalHistory({
       console.log(
         `JournalHistory: Sending UPDATE request for ID: ${entryId} with text: "${editedText}"`
       );
-      // Call the mutation hook
       await updateMutation.mutateAsync({ entryId: entryId, updatedText: editedText });
       console.log("JournalHistory: Entry updated successfully.");
       setEditingEntryId(null);
       setEditedText("");
       setEditError("");
-      // onEntryChange(); // ⭐ REMOVED: Tanstack Query's onSuccess handles invalidation ⭐
     } catch (err) {
       console.error(
         "JournalHistory: Error updating journal entry:",
@@ -186,7 +239,6 @@ function JournalHistory({
     setEditingEntryId(null);
     setEditedText("");
     setEditError("");
-    // setEditLoading(false); // No longer needed
   };
 
   const handleDeleteClick = (id) => {
@@ -195,23 +247,17 @@ function JournalHistory({
   };
 
   const confirmDelete = async () => {
-    // setDeleteLoading(true); // No longer needed
-
     try {
       await deleteMutation.mutateAsync(deleteEntryId);
-      // onEntryChange(); // ⭐ REMOVED: Tanstack Query's onSuccess handles invalidation ⭐
     } catch (err) {
       console.error(
         "Error deleting journal entry:",
         err.response ? err.response.data : err.message
       );
-      // Optionally show a user-friendly error message
-      // Using a local state for this is better than alert()
       setEditError("Failed to delete entry. Please try again.");
     } finally {
       setShowDeleteConfirm(false);
       setDeleteEntryId(null);
-      // setDeleteLoading(false); // No longer needed
     }
   };
 
@@ -318,19 +364,6 @@ function JournalHistory({
     cutout: "60%",
   };
 
-//   if (filteredEntries.length === 0) {
-//     return (
-//       <div className="text-center py-8 text-gray-700 dark:text-gray-300 font-inter w-full">
-//         {filterClusterId !== null && filterClusterId !== undefined
-//           ? `No entries found for the selected theme: "${
-//               clusterThemes?.[`Theme ${filterClusterId + 1}`] ||
-//               `Theme ${filterClusterId + 1}`
-//             }".`
-//           : "No journal entries yet. Start writing your first reflection!"}
-//       </div>
-//     );
-//   }
-
   const emotionChipColors = {
     joy: "bg-green-500",
     sadness: "bg-blue-500",
@@ -369,6 +402,7 @@ function JournalHistory({
       </div>
     );
   }
+
   return (
     <div className="font-inter w-full">
       {sortedDates.map((dateKey) => (
@@ -488,7 +522,7 @@ function JournalHistory({
                         <button
                           onClick={() => handleSaveEdit(entry.id)}
                           className="px-4 py-2 bg-[#B399D4] text-white rounded-full hover:bg-[#9B7BBF] transition duration-300 disabled:opacity-50"
-                          disabled={updateMutation.isPending} // Use mutation hook's loading state
+                          disabled={updateMutation.isPending}
                         >
                           {updateMutation.isPending ? "Saving..." : "Save Changes"}
                         </button>
@@ -500,7 +534,7 @@ function JournalHistory({
                                     ? "bg-gray-600 text-gray-200 hover:bg-gray-500"
                                     : "bg-gray-200 text-gray-700 hover:bg-gray-300"
                                 }`}
-                          disabled={updateMutation.isPending} // Disable if saving
+                          disabled={updateMutation.isPending}
                         >
                           Cancel
                         </button>
@@ -510,7 +544,7 @@ function JournalHistory({
                     // Display full rawText and analysis when expanded (not editing)
                     <div className="mt-4 border-t border-white/20 dark:border-white/10 pt-4">
                       <p className="text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap mb-3">
-                        {entry.rawText} {/* Full rawText */}
+                        {entry.rawText}
                       </p>
 
                       {/* Summary */}
@@ -660,42 +694,23 @@ function JournalHistory({
         </div>
       ))}
 
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 flex items-center justify-center z-50 overflow-hidden px-4">
-          <div className="absolute inset-0 bg-gray-900 bg-opacity-70 backdrop-blur-sm"></div>
-          <div className="relative bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl text-center max-w-sm w-full mx-auto my-auto animate-fade-in-up">
-            <p className="text-lg font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4">
-              Are you sure you want to delete this entry? This action cannot be
-              undone.
-            </p>
-            <div className="flex justify-center space-x-4">
-              <button
-                onClick={confirmDelete}
-                className="py-2 px-4 rounded-full font-poppins font-semibold text-white bg-red-600 hover:bg-red-700 transition-all duration-300 disabled:opacity-50"
-                disabled={deleteMutation.isPending} // Use mutation hook's loading state
-              >
-                {deleteMutation.isPending ? "Deleting..." : "Delete"}
-              </button>
-              <button
-                onClick={cancelDelete}
-                className="py-2 px-4 rounded-full font-poppins font-semibold text-gray-800 bg-gray-300 hover:bg-gray-400 dark:text-gray-200 dark:bg-gray-600 dark:hover:bg-gray-700 transition-all duration-300 disabled:opacity-50"
-                disabled={deleteMutation.isPending} // Disable during loading
-              >
-                Cancel
-              </button>
-            </div>
-            {deleteMutation.isError && (
-              <p className="text-red-500 text-sm mt-2">
-                Failed to delete: {deleteMutation.error.message}
-              </p>
-            )}
-            {updateMutation.isError && ( // Also show update errors if they occur
-              <p className="text-red-500 text-sm mt-2">
-                Failed to update: {updateMutation.error.message}
-              </p>
-            )}
-          </div>
+      {/* Portal-based Delete Confirmation Modal */}
+      <DeleteConfirmationModal
+        isOpen={showDeleteConfirm}
+        onClose={cancelDelete}
+        onConfirm={confirmDelete}
+        theme={theme}
+      />
+
+      {/* Show error messages from mutations (optional) */}
+      {updateMutation.isError && (
+        <div className="fixed bottom-4 right-4 bg-red-100 dark:bg-red-900/80 text-red-800 dark:text-red-200 px-4 py-2 rounded-lg shadow-lg z-50">
+          Update failed: {updateMutation.error.message}
+        </div>
+      )}
+      {deleteMutation.isError && (
+        <div className="fixed bottom-4 right-4 bg-red-100 dark:bg-red-900/80 text-red-800 dark:text-red-200 px-4 py-2 rounded-lg shadow-lg z-50">
+          Delete failed: {deleteMutation.error.message}
         </div>
       )}
     </div>

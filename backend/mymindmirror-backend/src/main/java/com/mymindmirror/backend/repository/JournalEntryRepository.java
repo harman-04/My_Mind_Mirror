@@ -4,6 +4,8 @@ package com.mymindmirror.backend.repository;
 
 import com.mymindmirror.backend.model.JournalEntry;
 import com.mymindmirror.backend.model.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -95,4 +97,9 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID
      * @return A list of JournalEntry objects matching the criteria.
      */
     List<JournalEntry> findByUserAndMoodScoreBetweenOrderByCreationTimestampDesc(User user, Double minMoodScore, Double maxMoodScore);
+
+
+    Page<JournalEntry> findByUserAndEntryDateBetweenOrderByCreationTimestampDesc(
+            User user, LocalDate startDate, LocalDate endDate, Pageable pageable);
+
 }

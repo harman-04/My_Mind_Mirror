@@ -14,6 +14,9 @@ import com.mymindmirror.backend.service.JournalService;
 import com.mymindmirror.backend.service.UserService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -381,4 +384,32 @@ public class JournalController {
         }
         return ResponseEntity.ok(freq);
     }
+
+    @GetMapping("/history/paginated")
+    public ResponseEntity<Page<JournalEntryResponse>> getJournalHistoryPaginated(
+            @RequestParam(required = false) String startDate,
+            @RequestParam(required = false) String endDate,
+            @PageableDefault(size = 20) Pageable pageable) {
+        logger.info("Received request for paginated journal history.");
+        User currentUser = getCurrentUser();
+
+        LocalDate start, end;
+        if (startDate == null && endDate == null) {
+            start = LocalDate.of(1900, 1, 1);
+            end = LocalDate.of(2100, 12, 31);
+        } else {
+            try {
+                start = (startDate != null) ? LocalDate.parse(startDate) : LocalDate.now().minusDays(30);
+                end = (endDate != null) ? LocalDate.parse(endDate) : LocalDate.now();
+            } catch (DateTimeParseException e) {
+                logger.error("Invalid date format: {}", e.getMessage());
+                return ResponseEntity.badRequest().build();
+            }
+        }
+
+        Page<JournalEntry> entriesPage = journalService.getJournalEntriesPage(currentUser, start, end, pageable);
+        Page<JournalEntryResponse> responsePage = entriesPage.map(JournalEntryResponse::new);
+        return ResponseEntity.ok(responsePage);
+    }
+
 }
