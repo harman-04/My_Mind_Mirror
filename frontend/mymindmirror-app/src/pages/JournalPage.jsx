@@ -167,50 +167,50 @@ function JournalPage() {
         <JournalInput ref={journalInputRef} />
         <AnomalyAlerts />
 
-        {/* Main Header Container */}
-        <div className="flex flex-col items-center gap-6 mb-8 w-full">
+       {/* Main Header Container */}
+       <div className="flex flex-col items-center gap-6 mb-8 w-full">
 
-          {/* The Floating Nav Island */}
-          <div className="inline-flex p-1 bg-[#1A1625]/60 dark:bg-white/5 backdrop-blur-2xl rounded-2xl border border-white/10 shadow-2xl overflow-hidden">
-            <nav className="no-scrollbar flex flex-nowrap overflow-x-auto">
-              {[
-                { id: 'today', label: 'Today', icon: <Calendar size={18} /> },
-                { id: 'weekly', label: 'Weekly', icon: <BarChart3 size={18} /> },
-                { id: 'all', label: 'History', icon: <History size={18} /> },
-                { id: 'search', label: 'Search', icon: <Search size={18} /> },
-                { id: 'milestones', label: 'Goals', icon: <Target size={18} /> },
-                { id: 'roadmap', label: 'Roadmap', icon: <Map size={18} /> }
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-500 group ${
-                    activeTab === tab.id
-                      ? 'text-white'
-                      : 'text-gray-400 hover:text-gray-200'
-                  }`}
-                >
-                  {/* Animated Active Background */}
-                  {activeTab === tab.id && (
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#5CC8C2] to-[#2E8B85] rounded-xl shadow-[0_0_20px_rgba(92,200,194,0.3)] z-0" />
-                  )}
+         {/* Fixed Floating Nav Island - Background now adapts to Light/Dark mode */}
+         <div className="inline-flex p-1 bg-gray-200/50 dark:bg-white/5 backdrop-blur-2xl rounded-2xl border border-gray-300/50 dark:border-white/10 shadow-2xl overflow-hidden">
+           <nav className="no-scrollbar flex flex-nowrap overflow-x-auto">
+             {[
+               { id: 'today', label: 'Today', icon: <Calendar size={18} /> },
+               { id: 'weekly', label: 'Weekly', icon: <BarChart3 size={18} /> },
+               { id: 'all', label: 'History', icon: <History size={18} /> },
+               { id: 'search', label: 'Search', icon: <Search size={18} /> },
+               { id: 'milestones', label: 'Goals', icon: <Target size={18} /> },
+               { id: 'roadmap', label: 'Roadmap', icon: <Map size={18} /> }
+             ].map((tab) => (
+               <button
+                 key={tab.id}
+                 onClick={() => setActiveTab(tab.id)}
+                 className={`relative flex items-center gap-2 px-5 py-2.5 rounded-xl transition-all duration-500 group ${
+                   activeTab === tab.id
+                     ? 'text-white'
+                     : 'text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200'
+                 }`}
+               >
+                 {/* Animated Active Background */}
+                 {activeTab === tab.id && (
+                   <div className="absolute inset-0 bg-gradient-to-r from-[#5CC8C2] to-[#2E8B85] rounded-xl shadow-[0_0_20px_rgba(92,200,194,0.3)] z-0" />
+                 )}
 
-                  <span className="relative z-10 transition-transform duration-300 group-hover:scale-110">
-                    {tab.icon}
-                  </span>
-                  <span className="relative z-10 font-poppins font-bold text-sm hidden md:block">
-                    {tab.label}
-                  </span>
-                </button>
-              ))}
-            </nav>
-          </div>
+                 <span className="relative z-10 transition-transform duration-300 group-hover:scale-110">
+                   {tab.icon}
+                 </span>
+                 <span className="relative z-10 font-poppins font-bold text-sm hidden md:block">
+                   {tab.label}
+                 </span>
+               </button>
+             ))}
+           </nav>
+         </div>
 
-          {/* Separate Export Island */}
-          <div className="flex items-center gap-3 p-1.5 bg-white/5 rounded-2xl border border-white/5 backdrop-blur-md">
-            <ExportButtons />
-          </div>
-        </div>
+         {/* Separate Export Island - Adjusted background for light mode visibility */}
+         <div className="flex items-center gap-3 p-1.5 bg-gray-200/50 dark:bg-white/5 rounded-2xl border border-gray-300/50 dark:border-white/5 backdrop-blur-md">
+           <ExportButtons />
+         </div>
+       </div>
         {activeTab === 'today' && <TodayDashboard todayEntries={todayEntries} isLoading={isLoading} />}
         {activeTab === 'weekly' && (
           <WeeklyDashboard

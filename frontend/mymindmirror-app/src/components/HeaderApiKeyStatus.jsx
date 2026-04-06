@@ -17,7 +17,7 @@ const fetchApiKeyStatus = async () => {
     return res.data;
 };
 
-function HeaderApiKeyStatus() {
+function HeaderApiKeyStatus({ compact = true }) {
     const { theme } = useTheme();
     const { data, isLoading, error } = useQuery({
         queryKey: ['apiKeyStatus'],
@@ -26,28 +26,43 @@ function HeaderApiKeyStatus() {
         refetchOnWindowFocus: false,
     });
 
-    if (isLoading) return null;
-    if (error || !data) return null;
+    if (isLoading || error || !data) return null;
 
     const isUsingOwnKey = data.usingOwnKey;
-    const bgColor = isUsingOwnKey
-        ? (theme === 'dark' ? 'bg-green-900/60' : 'bg-green-100')
-        : (theme === 'dark' ? 'bg-yellow-900/60' : 'bg-yellow-100');
-    const textColor = isUsingOwnKey
-        ? (theme === 'dark' ? 'text-green-300' : 'text-green-800')
-        : (theme === 'dark' ? 'text-yellow-300' : 'text-yellow-800');
-    const icon = isUsingOwnKey ? <Key size={14} /> : <AlertTriangle size={14} />;
-    const tooltip = isUsingOwnKey ? 'Using your own Gemini API key' : 'Using shared key – add your own for privacy';
 
+    const colorClasses = isUsingOwnKey
+        ? theme === 'dark'
+            ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+            : 'bg-emerald-100 text-emerald-700'
+        : theme === 'dark'
+            ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+            : 'bg-amber-100 text-amber-700';
+
+    const icon = isUsingOwnKey ? <Key size={compact ? 14 : 18} /> : <AlertTriangle size={compact ? 14 : 18} />;
+    const tooltip = isUsingOwnKey ? 'Using your own Gemini API key' : 'Using shared key – add your own for privacy';
+    const label = isUsingOwnKey ? 'Own key' : 'Shared key';
+
+    // Desktop / compact version (pill)
+    if (compact) {
+        return (
+            <div
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold transition-colors duration-300 ${colorClasses}`}
+                title={tooltip}
+            >
+                {icon}
+                <span>{label}</span>
+            </div>
+        );
+    }
+
+    // Mobile sidebar version – full width, same as other links
     return (
         <div
-            className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${bgColor} ${textColor}`}
+            className={`flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-semibold transition-colors duration-300 w-full ${colorClasses}`}
             title={tooltip}
         >
             {icon}
-            <span className="hidden sm:inline">
-                {isUsingOwnKey ? 'Own key' : 'Shared key'}
-            </span>
+            <span>{label}</span>
         </div>
     );
 }

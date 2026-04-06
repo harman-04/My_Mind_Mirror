@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FileText } from 'lucide-react'; // 👈 add this import
+import { FileText } from 'lucide-react';
 import MoodChart from './MoodChart';
 import AverageEmotionChart from './AverageEmotionChart';
 import ConcernFrequencyChart from './ConcernFrequencyChart';
@@ -8,6 +8,7 @@ import JournalHistory from './JournalHistory';
 import KeyPhraseCloud from './KeyPhraseCloud';
 import MoodWordCountChart from './MoodWordCountChart';
 import InfiniteScrollTrigger from './InfiniteScrollTrigger';
+import EmotionRadarChart from './EmotionRadarChart';
 
 function OverallDashboard({
     journalEntries,
@@ -41,6 +42,14 @@ function OverallDashboard({
                 <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">Overall Average Emotion Intensity</h3>
                 <AverageEmotionChart entries={journalEntries} isLoading={isLoading} />
             </div>
+
+            <div className="bg-white/60 dark:bg-black/40 p-4 sm:p-6 rounded-lg shadow-inner transition-all duration-500 w-full">
+              <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">
+                Your Emotional Profile (Radar)
+              </h3>
+              <EmotionRadarChart entries={journalEntries} isLoading={isLoading} />
+            </div>
+
             <div className="bg-white/60 dark:bg-black/40 p-4 sm:p-6 rounded-lg shadow-inner transition-all duration-500 w-full">
                 <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4 text-center">Overall Most Frequent Journal Concerns</h3>
                 <ConcernFrequencyChart entries={journalEntries} isLoading={isLoading} />

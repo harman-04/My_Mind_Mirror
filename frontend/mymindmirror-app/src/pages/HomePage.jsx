@@ -1,19 +1,17 @@
-// src/pages/HomePage.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import {
-  Sparkles, Brain, AlertTriangle, Folders, Target, Lightbulb,
-  ShieldCheck, CalendarCheck, BarChart, TrendingUp, Hand,
-  Feather, ArrowRight, ChevronRight, Layers, Gauge, BookOpen,
-  HeartPulse, PieChart, Notebook, Shield, Zap, Clock, Hash
+  Sparkles, Brain, Target, Shield, Feather, ArrowRight, ChevronRight,
+  Layers, PieChart, Notebook, Hash, Clock, Zap, BookOpen, Gauge,
+  TrendingUp, Folders, HeartPulse, BarChart, Lightbulb, Trophy, Flame,
+  Cloud, LineChart, ListChecks, MapPin
 } from 'lucide-react';
 
 function HomePage() {
   const { theme } = useTheme();
   const isDarkMode = theme === 'dark';
 
-  // Enhanced color system with semantic naming
   const colors = {
     primary: isDarkMode ? 'text-purple-300' : 'text-purple-600',
     secondary: isDarkMode ? 'text-teal-300' : 'text-teal-600',
@@ -29,215 +27,138 @@ function HomePage() {
     buttonSecondary: isDarkMode ?
       'bg-gradient-to-r from-teal-600 to-teal-500 hover:from-teal-700 hover:to-teal-600' :
       'bg-gradient-to-r from-teal-500 to-teal-400 hover:from-teal-600 hover:to-teal-500',
-    iconPrimary: isDarkMode ? 'text-purple-300' : 'text-purple-500',
-    iconSecondary: isDarkMode ? 'text-teal-300' : 'text-teal-500',
   };
 
-  // Structured feature categories
-  const featureCategories = [
+  const features = [
     {
-      title: "AI-Powered Insights",
-      description: "Discover deeper understanding with our intelligent analysis",
-      icon: <Brain size={24} className={colors.iconPrimary} />,
-      features: [
-        {
-          icon: <Layers size={20} className={colors.iconPrimary} />,
-          title: "Deep Analysis",
-          description: "AI examines your entries for emotional patterns and hidden insights"
-        },
-        {
-          icon: <PieChart size={20} className={colors.iconPrimary} />,
-          title: "Sentiment Tracking",
-          description: "Visualize your emotional journey with detailed charts"
-        },
-        {
-          icon: <Notebook size={20} className={colors.iconPrimary} />,
-          title: "Smart Summaries",
-          description: "Get concise overviews of your journaling patterns"
-        }
-      ]
+      title: "AI-Powered Journal Analysis",
+      description: "Get emotion scores, key phrases, summaries, and growth tips from every entry.",
+      icon: <Brain size={28} className="text-purple-500" />,
+      gradient: "from-purple-500/20 to-pink-500/20",
     },
     {
-      title: "Productivity Tools",
-      description: "Achieve your goals with structured support",
-      icon: <Target size={24} className={colors.iconPrimary} />,
-      features: [
-        {
-          icon: <Hash size={20} className={colors.iconPrimary} />,
-          title: "Goal Tracking",
-          description: "Set and monitor personal objectives with milestones"
-        },
-        {
-          icon: <Clock size={20} className={colors.iconPrimary} />,
-          title: "Habit Formation",
-          description: "Build positive routines with our tracking system"
-        },
-        {
-          icon: <Zap size={20} className={colors.iconPrimary} />,
-          title: "Action Items",
-          description: "Turn reflections into concrete next steps"
-        }
-      ]
+      title: "Smart Roadmap Generator",
+      description: "Turn any goal into a step-by-step plan with AI-generated tasks, resources, and milestones.",
+      icon: <MapPin size={28} className="text-teal-500" />,
+      gradient: "from-teal-500/20 to-cyan-500/20",
     },
     {
-      title: "Data & Security",
-      description: "Your thoughts are always protected",
-      icon: <Shield size={24} className={colors.iconPrimary} />,
-      features: [
-        {
-          icon: <ShieldCheck size={20} className={colors.iconPrimary} />,
-          title: "End-to-End Encryption",
-          description: "Military-grade protection for your private entries"
-        },
-        {
-          icon: <BookOpen size={20} className={colors.iconPrimary} />,
-          title: "Export Options",
-          description: "Download your data anytime in multiple formats"
-        },
-        {
-          icon: <Gauge size={20} className={colors.iconPrimary} />,
-          title: "Usage Analytics",
-          description: "Understand your journaling habits with clear metrics"
-        }
-      ]
-    }
+      title: "Gamified Progress",
+      description: "Earn badges, maintain streaks, and watch your growth with visual achievements.",
+      icon: <Trophy size={28} className="text-amber-500" />,
+      gradient: "from-amber-500/20 to-orange-500/20",
+    },
+    {
+      title: "Visual Insights",
+      description: "Mood trends, emotion breakdowns, word clouds, and correlation charts.",
+      icon: <LineChart size={28} className="text-blue-500" />,
+      gradient: "from-blue-500/20 to-indigo-500/20",
+    },
+    {
+      title: "Semantic Clustering",
+      description: "Discover hidden themes in your journal entries with AI clustering.",
+      icon: <Folders size={28} className="text-rose-500" />,
+      gradient: "from-rose-500/20 to-red-500/20",
+    },
+    {
+      title: "End-to-End Encryption",
+      description: "Your private thoughts stay private with military-grade encryption.",
+      icon: <Shield size={28} className="text-green-500" />,
+      gradient: "from-green-500/20 to-emerald-500/20",
+    },
   ];
 
-  const testimonials = [
-    {
-      quote: "This app helped me recognize patterns in my thinking that I'd never noticed before. The AI insights are remarkably accurate.",
-      author: "Lisa K."
-    },
-    {
-      quote: "As someone who struggled with journaling consistency, the smart prompts and progress tracking have transformed my practice.",
-      author: "Michael T."
-    },
-    {
-      quote: "The semantic clustering feature gives me a bird's-eye view of my mental landscape that's incredibly valuable for self-growth.",
-      author: "Sarah J."
-    }
+  const stats = [
+    { value: "100%", label: "Privacy First", icon: <Shield size={20} /> },
+    { value: "24/7", label: "AI Availability", icon: <Brain size={20} /> },
+    { value: "Unlimited", label: "Journal Entries", icon: <BookOpen size={20} /> },
+    { value: "Real-time", label: "Insights", icon: <TrendingUp size={20} /> },
   ];
 
   return (
-    <div className={`min-h-screen w-full flex flex-col items-center ${colors.background} ${colors.textPrimary} transition-colors duration-300`}>
+    <div className={`min-h-screen w-full ${colors.background} ${colors.textPrimary} transition-colors duration-300`}>
 
-      {/* Hero Section */}
-      <section className="w-full py-24 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+      {/* Hero Section with Animated Background */}
+      <section className="relative w-full overflow-hidden pt-24 pb-32 px-4 sm:px-6 lg:px-8">
         <div className="absolute inset-0 -z-10">
-          <div className={`absolute inset-0 bg-gradient-to-br ${isDarkMode ? 'from-purple-900/20 via-gray-900 to-gray-900' : 'from-purple-50 via-white to-white'}`}></div>
-          <div className={`absolute inset-0 opacity-20 ${isDarkMode ? 'bg-[url(/grid-dark.svg)]' : 'bg-[url(/grid-light.svg)]'}`}></div>
+          <div className={`absolute inset-0 bg-gradient-to-br ${isDarkMode ? 'from-purple-900/30 via-gray-900 to-gray-900' : 'from-purple-50 via-white to-white'}`} />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[800px] bg-purple-500/20 rounded-full blur-[120px] animate-pulse-slow" />
+          <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-teal-500/20 rounded-full blur-[100px] animate-pulse-slow" />
         </div>
 
-        <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center gap-12">
-          <div className="lg:w-1/2 space-y-8">
-            <div className="inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r from-purple-500 to-purple-400 text-white text-sm font-medium">
-              <Sparkles className="w-4 h-4 mr-2" />
-              Introducing MyMindMirror
-            </div>
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight">
-              The Future of <span className="bg-gradient-to-r from-purple-400 to-teal-400 bg-clip-text text-transparent">Self-Reflection</span>
-            </h1>
-            <p className={`text-lg ${colors.textSecondary} max-w-2xl`}>
-              An intelligent journaling platform that helps you uncover patterns, track growth,
-              and achieve your personal goals through AI-powered insights.
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4 pt-4">
-              <Link
-                to="/register"
-                className={`${colors.buttonPrimary} text-white px-8 py-3 rounded-full font-medium flex items-center justify-center space-x-2 transition-all hover:shadow-lg`}
-              >
-                <span>Start Your Journey</span>
-                <ArrowRight className="w-4 h-4" />
-              </Link>
-              <Link
-                to="/journal"
-                className={`px-8 py-3 rounded-full font-medium flex items-center justify-center space-x-2 transition-all hover:shadow-lg border ${colors.cardBorder} ${colors.textPrimary}`}
-              >
-                <span>Explore Features</span>
-                <ChevronRight className="w-4 h-4" />
-              </Link>
-            </div>
+        <div className="max-w-7xl mx-auto text-center">
+          <div className="inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r from-purple-500/20 to-teal-500/20 border border-purple-500/30 backdrop-blur-sm mb-6">
+            <Sparkles className="w-4 h-4 text-purple-400 mr-2" />
+            <span className="text-sm font-medium">Your Mind, Mirrored & Enhanced</span>
           </div>
-          <div className="lg:w-1/2 relative">
-            <div className={`relative rounded-3xl overflow-hidden ${colors.cardBorder} border shadow-2xl`}>
-              <div className={`absolute inset-0 bg-gradient-to-br ${isDarkMode ? 'from-purple-900/30 to-gray-800' : 'from-purple-100/50 to-gray-100'}`}></div>
-              <div className="relative z-10 p-6">
-                <div className="bg-white/10 backdrop-blur-md rounded-xl p-6 shadow-inner">
-                  <div className="flex items-center space-x-3 mb-6">
-                    <div className="flex space-x-2">
-                      <div className="w-3 h-3 rounded-full bg-rose-500"></div>
-                      <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-                      <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                    </div>
-                    <div className="text-sm font-mono text-gray-400">insight_dashboard.jsx</div>
-                  </div>
-                  <div className="space-y-4">
-                    <div className="bg-gradient-to-r from-purple-500/10 to-teal-500/10 p-4 rounded-lg border border-purple-500/20">
-                      <div className="flex items-center space-x-2">
-                        <Lightbulb className="w-5 h-5 text-purple-400" />
-                        <h3 className="font-medium text-purple-300">Weekly Insight</h3>
-                      </div>
-                      <p className="mt-2 text-sm text-gray-300">You've shown consistent focus on productivity goals. Consider balancing with self-care reflections.</p>
-                    </div>
-                    <div className="bg-gray-800/50 p-4 rounded-lg">
-                      <h3 className="font-medium text-gray-200">Mood Trend</h3>
-                      <div className="mt-2 h-32 bg-gradient-to-b from-gray-700/50 to-gray-800/30 rounded border border-gray-700 flex items-end">
-                        {[30, 60, 45, 80, 65, 90, 75].map((height, i) => (
-                          <div
-                            key={i}
-                            style={{ height: `${height}%` }}
-                            className={`flex-1 ${i % 2 === 0 ? 'bg-teal-500' : 'bg-purple-500'} rounded-t mx-0.5`}
-                          ></div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
+          <h1 className="text-5xl sm:text-6xl lg:text-7xl font-bold leading-tight">
+            Reflect, Grow, and{" "}
+            <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-teal-400 bg-clip-text text-transparent">
+              Transform
+            </span>
+          </h1>
+          <p className={`text-xl max-w-3xl mx-auto mt-6 ${colors.textSecondary}`}>
+            MyMindMirror combines AI-powered journal analysis, goal roadmaps, and gamification to help you understand yourself better and achieve your dreams.
+          </p>
+          <div className="flex flex-col sm:flex-row justify-center gap-4 mt-10">
+            <Link
+              to="/register"
+              className={`${colors.buttonPrimary} text-white px-8 py-3 rounded-full font-semibold flex items-center justify-center gap-2 transition-all hover:scale-105 shadow-lg`}
+            >
+              Start Free Journey <ArrowRight className="w-4 h-4" />
+            </Link>
+
+            <Link
+              to="/features"
+              className="px-8 py-3 rounded-full font-medium flex items-center justify-center space-x-2 transition-all hover:shadow-lg border border-purple-500/30 text-purple-600 dark:text-purple-300"
+            >
+              <span>Learn More</span>
+              <ChevronRight className="w-4 h-4" />
+            </Link>
           </div>
         </div>
       </section>
 
-      {/* Features Section - Structured */}
-      <section className="w-full py-20 px-4 sm:px-6 lg:px-8">
+      {/* Stats Bar */}
+      <section className="w-full py-12 px-4 sm:px-6 lg:px-8 border-y border-white/10 bg-white/5 dark:bg-black/20 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+            {stats.map((stat, idx) => (
+              <div key={idx} className="space-y-2">
+                <div className="flex justify-center text-purple-400">{stat.icon}</div>
+                <div className="text-2xl font-bold">{stat.value}</div>
+                <div className="text-sm text-gray-500 dark:text-gray-400">{stat.label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Features Grid */}
+      <section className="w-full py-24 px-4 sm:px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Structured <span className="bg-gradient-to-r from-purple-400 to-teal-400 bg-clip-text text-transparent">Self-Discovery</span>
+              Everything You Need for{" "}
+              <span className="bg-gradient-to-r from-purple-400 to-teal-400 bg-clip-text text-transparent">
+                Personal Growth
+              </span>
             </h2>
-            <p className={`text-lg max-w-3xl mx-auto ${colors.textSecondary}`}>
-              Our carefully designed features work together to provide comprehensive support for your personal growth journey.
+            <p className={`text-lg max-w-2xl mx-auto ${colors.textSecondary}`}>
+              Powerful tools that work together to give you deep insights and keep you motivated.
             </p>
           </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {featureCategories.map((category, index) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {features.map((feature, idx) => (
               <div
-                key={index}
-                className={`rounded-2xl ${colors.cardBg} ${colors.cardBorder} border p-6 hover:shadow-lg transition-all duration-300`}
+                key={idx}
+                className={`relative p-6 rounded-2xl ${colors.cardBg} border ${colors.cardBorder} backdrop-blur-sm transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl group overflow-hidden`}
               >
-                <div className="flex items-center mb-6">
-                  <div className={`w-10 h-10 rounded-lg mr-4 flex items-center justify-center ${isDarkMode ? 'bg-gray-700/50' : 'bg-gray-100'}`}>
-                    {category.icon}
-                  </div>
-                  <div>
-                    <h3 className={`text-xl font-semibold ${colors.primary}`}>{category.title}</h3>
-                    <p className={`text-sm ${colors.textSecondary}`}>{category.description}</p>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  {category.features.map((feature, fIndex) => (
-                    <div key={fIndex} className="flex items-start">
-                      <div className={`w-8 h-8 rounded-md mr-3 mt-1 flex items-center justify-center ${isDarkMode ? 'bg-gray-700/30' : 'bg-gray-100'}`}>
-                        {feature.icon}
-                      </div>
-                      <div>
-                        <h4 className="font-medium">{feature.title}</h4>
-                        <p className={`text-sm ${colors.textSecondary}`}>{feature.description}</p>
-                      </div>
-                    </div>
-                  ))}
+                <div className={`absolute inset-0 bg-gradient-to-br ${feature.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-500`} />
+                <div className="relative z-10">
+                  <div className="mb-4">{feature.icon}</div>
+                  <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
+                  <p className={`text-sm ${colors.textSecondary}`}>{feature.description}</p>
                 </div>
               </div>
             ))}
@@ -245,62 +166,107 @@ function HomePage() {
         </div>
       </section>
 
-      {/* Testimonials Section */}
-      <section className="w-full py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-transparent to-transparent">
-        <div className="max-w-5xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl sm:text-4xl font-bold mb-4">
-              Voices from Our <span className="bg-gradient-to-r from-purple-400 to-teal-400 bg-clip-text text-transparent">Community</span>
-            </h2>
-            <p className={`text-lg max-w-3xl mx-auto ${colors.textSecondary}`}>
-              Hear how MyMindMirror is helping people like you achieve meaningful growth.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {testimonials.map((testimonial, index) => (
-              <div
-                key={index}
-                className={`rounded-2xl ${colors.cardBg} ${colors.cardBorder} border p-6 flex flex-col`}
-              >
-                <div className="mb-4">
-                  <Hand className={`w-6 h-6 ${colors.iconSecondary}`} />
-                </div>
-                <p className={`italic mb-6 flex-grow ${colors.textSecondary}`}>"{testimonial.quote}"</p>
-                <p className={`text-sm font-medium ${colors.primary}`}>{testimonial.author}</p>
+      {/* Showcase Section – Mood Chart Preview */}
+      <section className="w-full py-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-r from-purple-500/5 to-teal-500/5">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <div>
+              <h2 className="text-3xl font-bold mb-4">
+                Visualize Your Emotional Journey
+              </h2>
+              <p className={`text-lg ${colors.textSecondary} mb-6`}>
+                Track mood trends, emotion distribution, and correlations with word count. Our charts help you see patterns you might otherwise miss.
+              </p>
+              <ul className="space-y-3">
+                <li className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-purple-400" /> Mood & Emotion Trends Over Time</li>
+                <li className="flex items-center gap-2"><PieChart className="w-5 h-5 text-teal-400" /> Emotion Breakdown Charts</li>
+                <li className="flex items-center gap-2"><BarChart className="w-5 h-5 text-rose-400" /> Mood vs. Word Count Correlation</li>
+              </ul>
+            </div>
+            <div className={`rounded-2xl ${colors.cardBg} border ${colors.cardBorder} p-6 backdrop-blur-sm`}>
+              <div className="h-48 flex items-end justify-between gap-1">
+                {[40, 65, 45, 80, 70, 55, 90, 75, 60, 85].map((h, i) => (
+                  <div key={i} className="flex-1 bg-gradient-to-t from-purple-500 to-teal-500 rounded-t" style={{ height: `${h}%` }} />
+                ))}
               </div>
-            ))}
+              <div className="flex justify-between mt-4 text-xs text-gray-500">
+                <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Roadmap & Achievements Showcase */}
+      <section className="w-full py-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <div className="order-2 lg:order-1">
+              <div className={`rounded-2xl ${colors.cardBg} border ${colors.cardBorder} p-6 backdrop-blur-sm space-y-4`}>
+                <div className="flex items-center gap-3">
+                  <MapPin className="w-6 h-6 text-teal-400" />
+                  <span className="font-semibold">AI Roadmap Generator</span>
+                </div>
+                <p className="text-sm text-gray-500">"Learn React in 8 weeks" → Detailed weekly tasks, resources, milestones.</p>
+                <div className="flex items-center gap-3 pt-2">
+                  <Trophy className="w-6 h-6 text-amber-400" />
+                  <span className="font-semibold">Gamification</span>
+                </div>
+                <p className="text-sm text-gray-500">Earn badges, maintain streaks, and celebrate your progress.</p>
+                <div className="flex items-center gap-3">
+                  <Cloud className="w-6 h-6 text-purple-400" />
+                  <span className="font-semibold">Key Phrase Cloud</span>
+                </div>
+                <p className="text-sm text-gray-500">See your most frequent topics at a glance.</p>
+              </div>
+            </div>
+            <div className="order-1 lg:order-2">
+              <h2 className="text-3xl font-bold mb-4">Turn Goals into Action</h2>
+              <p className={`text-lg ${colors.textSecondary} mb-6`}>
+                Generate personalized roadmaps, import tasks to milestones, and watch your progress with streaks and badges.
+              </p>
+              <Link to="/journal" className="inline-flex items-center gap-2 text-purple-400 hover:underline">
+                Try it now <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
           </div>
         </div>
       </section>
 
       {/* Final CTA */}
-      <section className="w-full py-20 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className={`rounded-3xl ${colors.cardBg} ${colors.cardBorder} border p-12 relative overflow-hidden`}>
-            <div className={`absolute inset-0 bg-gradient-to-br ${isDarkMode ? 'from-purple-900/20 via-gray-900/50 to-gray-900/20' : 'from-purple-50/70 via-white/90 to-white/70'} -z-10`}></div>
-            <div className={`absolute -right-20 -top-20 w-64 h-64 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 opacity-10 blur-3xl -z-10`}></div>
-
-            <Feather className={`w-12 h-12 mx-auto mb-6 ${colors.iconPrimary}`} />
-            <h2 className="text-3xl sm:text-4xl font-bold mb-6">
-              Begin Your <span className="bg-gradient-to-r from-purple-400 to-teal-400 bg-clip-text text-transparent">Transformation</span> Today
-            </h2>
-            <p className={`text-lg mb-8 max-w-2xl mx-auto ${colors.textSecondary}`}>
-              Join MyMindMirror and start your journey toward deeper self-awareness and personal growth.
-            </p>
-            <div className="flex flex-col sm:flex-row justify-center gap-4">
+      <section className="w-full py-24 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-5xl mx-auto text-center">
+          <div className={`rounded-3xl ${colors.cardBg} border ${colors.cardBorder} p-12 relative overflow-hidden`}>
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 via-transparent to-teal-500/10" />
+            <div className="relative z-10">
+              <Feather className="w-12 h-12 mx-auto mb-6 text-purple-400" />
+              <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+                Ready to Start Your Journey?
+              </h2>
+              <p className={`text-lg mb-8 max-w-2xl mx-auto ${colors.textSecondary}`}>
+                Join thousands who have transformed their self-reflection practice with MyMindMirror.
+              </p>
               <Link
                 to="/register"
-                className={`${colors.buttonPrimary} text-white px-8 py-3 rounded-full font-medium flex items-center justify-center space-x-2 transition-all hover:shadow-lg`}
+                className={`${colors.buttonPrimary} text-white px-8 py-3 rounded-full font-semibold inline-flex items-center gap-2 transition-all hover:scale-105 shadow-lg`}
               >
-                <span>Create Free Account</span>
-                <ArrowRight className="w-4 h-4" />
+                Create Free Account <ArrowRight className="w-4 h-4" />
               </Link>
-
             </div>
           </div>
         </div>
       </section>
+
+      {/* Animation keyframes – add to global CSS if not present */}
+      <style>{`
+        @keyframes pulse-slow {
+          0%, 100% { opacity: 0.3; transform: scale(1); }
+          50% { opacity: 0.6; transform: scale(1.05); }
+        }
+        .animate-pulse-slow {
+          animation: pulse-slow 6s ease-in-out infinite;
+        }
+      `}</style>
     </div>
   );
 }
