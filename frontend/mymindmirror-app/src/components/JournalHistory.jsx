@@ -1,7 +1,6 @@
 // src/components/JournalHistory.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef  } from "react";
 import ReactDOM from "react-dom";
-// import axios from "axios"; // No longer needed directly
 import { format, parseISO } from "date-fns";
 import { Doughnut } from "react-chartjs-2";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
@@ -9,7 +8,8 @@ import { useTheme } from "../contexts/ThemeContext";
 // Import the mutation hooks
 import { useUpdateJournalEntry, useDeleteJournalEntry } from '../hooks/useJournalData';
 import { SkeletonCard } from './Skeleton';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Download } from 'lucide-react';
+import { downloadChartAsPng } from '../utils/downloadChart';
 
 const TRUNCATION_LENGTH = 150; // You can adjust this value as needed
 
@@ -149,7 +149,8 @@ function JournalHistory({
   // Initialize mutation hooks
   const updateMutation = useUpdateJournalEntry();
   const deleteMutation = useDeleteJournalEntry();
-
+const isDarkMode = theme === 'dark';
+const chartRefs = useRef({});
   if (isLoading) return <SkeletonCard count={3} />;
 
   // --- Filter entries ---
@@ -200,12 +201,24 @@ function JournalHistory({
     }
   };
 
+    const scrollToEditArea = (entryId) => {
+      // Wait for DOM to update (the edit mode renders)
+      setTimeout(() => {
+        const editContainer = document.getElementById(`edit-area-${entryId}`);
+        if (editContainer) {
+          editContainer.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
+    };
+
   const handleEditClick = (entry) => {
     console.log("JournalHistory: Initiating edit for entry:", entry);
     setEditingEntryId(entry.id);
     setEditedText(entry.rawText);
     setEditError("");
     setExpandedEntryId(entry.id);
+      scrollToEditArea(entry.id);
+
   };
 
   const handleSaveEdit = async (entryId) => {
@@ -498,110 +511,149 @@ function JournalHistory({
 
                 {/* Conditional Rendering for Raw Text and Expanded Details */}
                 {expandedEntryId === entry.id ? (
-                  // When entry is expanded
                   editingEntryId === entry.id ? (
-                    // Edit mode for rawText
-                    <div>
+                    // ---------- EDIT MODE ----------
+                    <div id={`edit-area-${entry.id}`} className="mt-4 border-t border-white/20 dark:border-white/10 pt-4">
                       <textarea
                         value={editedText}
                         onChange={(e) => setEditedText(e.target.value)}
-                        className={`w-full p-2 rounded border resize-y min-h-[100px]
-                            ${
-                              theme === "dark"
-                                ? "bg-gray-700 text-gray-200 border-gray-600"
-                                : "bg-gray-50 text-gray-800 border-gray-300"
-                            }`}
+                        className={`w-full p-3 rounded-xl border resize-y min-h-[120px] focus:ring-2 focus:ring-purple-500 focus:outline-none transition
+                          ${theme === "dark"
+                            ? "bg-gray-800 text-gray-200 border-gray-600"
+                            : "bg-gray-50 text-gray-800 border-gray-300"
+                          }`}
                         aria-label="Edit Journal Entry"
-                      ></textarea>
+                      />
                       {editError && (
-                        <p className="text-red-500 text-sm mt-2">
-                          {editError}
-                        </p>
+                        <p className="text-red-500 text-sm mt-2">{editError}</p>
                       )}
-                      <div className="flex justify-end space-x-2 mt-3">
+                      <div className="flex justify-end gap-3 mt-4">
                         <button
                           onClick={() => handleSaveEdit(entry.id)}
-                          className="px-4 py-2 bg-[#B399D4] text-white rounded-full hover:bg-[#9B7BBF] transition duration-300 disabled:opacity-50"
                           disabled={updateMutation.isPending}
+                          className="px-5 py-2 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 text-white font-medium hover:shadow-md transition disabled:opacity-50"
                         >
                           {updateMutation.isPending ? "Saving..." : "Save Changes"}
                         </button>
                         <button
                           onClick={handleCancelEdit}
-                          className={`px-4 py-2 rounded-full transition duration-300 disabled:opacity-50
-                                ${
-                                  theme === "dark"
-                                    ? "bg-gray-600 text-gray-200 hover:bg-gray-500"
-                                    : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                                }`}
                           disabled={updateMutation.isPending}
+                          className={`px-5 py-2 rounded-full font-medium transition
+                            ${theme === "dark"
+                              ? "bg-gray-700 text-gray-200 hover:bg-gray-600"
+                              : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                            }`}
                         >
                           Cancel
                         </button>
                       </div>
                     </div>
                   ) : (
-                    // Display full rawText and analysis when expanded (not editing)
-                    <div className="mt-4 border-t border-white/20 dark:border-white/10 pt-4">
-                      <p className="text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap mb-3">
-                        {entry.rawText}
-                      </p>
-
-                      {/* Summary */}
-                      {entry.summary && entry.summary.trim() !== "" && (
-                        <div className="mt-2 text-sm text-gray-600 dark:text-gray-400 italic">
-                          <p>
-                            <strong>Summary:</strong> {entry.summary}
-                          </p>
+                    // ---------- EXPANDED VIEW (NON‑EDITING) ----------
+                    <div className="mt-4 border-t border-white/20 dark:border-white/10 pt-4 space-y-5">
+                      {/* Raw Text */}
+                      {/* Raw Text Card – now matches other cards */}
+                      <div className={`rounded-xl p-3 ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100/80'} backdrop-blur-sm`}>
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-2 h-2 rounded-full bg-gradient-to-r from-purple-400 to-pink-400" />
+                          <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                            Journal Entry
+                          </span>
                         </div>
-                      )}
+                        <p className="text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">
+                          {entry.rawText}
+                        </p>
+                      </div>
+
+                     {/* Summary  */}
+                     {entry.summary && entry.summary.trim() !== "" && (
+                       <div className={`mt-3 p-3 rounded-xl border ${
+                         theme === 'dark'
+                           ? 'bg-gray-700/50 border-gray-600'
+                           : 'bg-purple-50/50 border-purple-100'
+                       } backdrop-blur-sm transition-all duration-300`}>
+                         <div className="flex items-start gap-2">
+                           <div className="mt-0.5">
+                             <svg className="w-4 h-4 text-purple-500 dark:text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" />
+                             </svg>
+                           </div>
+                           <div className="flex-1">
+                             <span className="text-xs font-semibold uppercase tracking-wider text-purple-600 dark:text-teal-400">
+                               Summary
+                             </span>
+                             <p className="text-sm text-gray-700 dark:text-gray-200 leading-relaxed mt-1">
+                               {entry.summary}
+                             </p>
+                           </div>
+                         </div>
+                       </div>
+                     )}
 
                       {/* Analysis Details */}
-                      <div className="mt-2 text-sm text-gray-700 dark:text-gray-300">
-                        {/* Mood Score */}
-                        <p>
-                          <strong>Mood Score:</strong>
-                          <span className="font-semibold text-[#B399D4] dark:text-[#5CC8C2]">
-                            {entry.moodScore !== null &&
-                            entry.moodScore !== undefined &&
-                            !isNaN(entry.moodScore)
-                              ? entry.moodScore.toFixed(2)
-                              : "N/A"}
-                          </span>
-                        </p>
-
-                        {/* Emotions */}
-                        {parsedEmotions &&
-                          Object.keys(parsedEmotions).length > 0 && (
-                            <div className="mt-2">
-                              <strong>Emotions:</strong>
-                              <div className="flex flex-wrap gap-2 mt-1">
-                                {Object.entries(parsedEmotions)
-                                  .filter(([, score]) => score > 0)
-                                  .sort(
-                                    ([, scoreA], [, scoreB]) => scoreB - scoreA
-                                  )
-                                  .map(([emotion, score]) => (
-                                    <span
-                                      key={emotion}
-                                      className={getChipStyle(emotion)}
-                                    >
-                                      {emotion} ({score.toFixed(2)})
-                                    </span>
-                                  ))}
-                              </div>
+                      <div className="mt-4 space-y-4">
+                        {/* Mood Score Card */}
+                        <div className={`rounded-xl p-3 ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100/80'} backdrop-blur-sm`}>
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className="w-2 h-2 rounded-full bg-gradient-to-r from-[#B399D4] to-[#5CC8C2]" />
+                              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                Mood Score
+                              </span>
                             </div>
-                          )}
+                            <span className={`font-bold text-lg ${getMoodColorClass(entry.moodScore)}`}>
+                              {entry.moodScore !== null && entry.moodScore !== undefined && !isNaN(entry.moodScore)
+                                ? entry.moodScore.toFixed(2)
+                                : 'N/A'}
+                            </span>
+                          </div>
+                          <div className="mt-1 text-right">
+                            <span className="text-xs text-gray-500 dark:text-gray-400">
+                              {getMoodLabel(entry.moodScore)}
+                            </span>
+                          </div>
+                        </div>
 
-                        {/* Concerns */}
+                        {/* Emotions Card */}
+                        {parsedEmotions && Object.keys(parsedEmotions).length > 0 && (
+                          <div className={`rounded-xl p-3 ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100/80'} backdrop-blur-sm`}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-2 h-2 rounded-full bg-gradient-to-r from-green-400 to-teal-400" />
+                              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                Emotions
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              {Object.entries(parsedEmotions)
+                                .filter(([, score]) => score > 0)
+                                .sort(([, scoreA], [, scoreB]) => scoreB - scoreA)
+                                .map(([emotion, score]) => (
+                                  <span
+                                    key={emotion}
+                                    className={`inline-flex items-center gap-1 ${getChipStyle(emotion)} px-2 py-1 rounded-full text-xs font-medium shadow-sm`}
+                                  >
+                                    {emotion}
+                                    <span className="opacity-80 text-[10px]">({score.toFixed(2)})</span>
+                                  </span>
+                                ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Concerns Card */}
                         {parsedCoreConcerns && parsedCoreConcerns.length > 0 && (
-                          <div className="mt-2">
-                            <strong>Concerns:</strong>
-                            <div className="flex flex-wrap gap-2 mt-1">
+                          <div className={`rounded-xl p-3 ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100/80'} backdrop-blur-sm`}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-2 h-2 rounded-full bg-gradient-to-r from-blue-400 to-indigo-400" />
+                              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                Core Concerns
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
                               {parsedCoreConcerns.map((concern, index) => (
                                 <span
                                   key={index}
-                                  className={`bg-blue-600 text-white text-xs px-2 py-1 rounded-full`}
+                                  className="bg-blue-500/20 dark:bg-blue-500/30 text-blue-700 dark:text-blue-200 px-2 py-1 rounded-full text-xs font-medium border border-blue-200 dark:border-blue-500/30"
                                 >
                                   {concern}
                                 </span>
@@ -610,27 +662,40 @@ function JournalHistory({
                           </div>
                         )}
 
-                        {/* Growth Tips */}
+                        {/* Growth Tips Card */}
                         {parsedGrowthTips && parsedGrowthTips.length > 0 && (
-                          <div className="mt-2">
-                            <strong>Growth Tips:</strong>
-                            <ul className="list-disc list-inside ml-2 mt-1">
+                          <div className={`rounded-xl p-3 ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100/80'} backdrop-blur-sm`}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-2 h-2 rounded-full bg-gradient-to-r from-amber-400 to-orange-400" />
+                              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                Growth Tips
+                              </span>
+                            </div>
+                            <ul className="space-y-1.5">
                               {parsedGrowthTips.map((tip, index) => (
-                                <li key={index}>{tip}</li>
+                                <li key={index} className="flex items-start gap-2 text-sm">
+                                  <span className="text-amber-500 dark:text-amber-400 text-sm">✦</span>
+                                  <span className="text-gray-700 dark:text-gray-300">{tip}</span>
+                                </li>
                               ))}
                             </ul>
                           </div>
                         )}
 
-                        {/* Key Phrases */}
+                        {/* Key Phrases Card */}
                         {parsedKeyPhrases && parsedKeyPhrases.length > 0 && (
-                          <div className="mt-2">
-                            <strong>Key Phrases:</strong>
-                            <div className="flex flex-wrap gap-2 mt-1">
+                          <div className={`rounded-xl p-3 ${theme === 'dark' ? 'bg-gray-700/50' : 'bg-gray-100/80'} backdrop-blur-sm`}>
+                            <div className="flex items-center gap-2 mb-2">
+                              <div className="w-2 h-2 rounded-full bg-gradient-to-r from-purple-400 to-pink-400" />
+                              <span className="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                                Key Phrases
+                              </span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
                               {parsedKeyPhrases.map((phrase, index) => (
                                 <span
                                   key={index}
-                                  className={`bg-purple-600 text-white text-xs px-2 py-1 rounded-full`}
+                                  className="bg-purple-500/20 dark:bg-purple-500/30 text-purple-700 dark:text-purple-200 px-2 py-1 rounded-full text-xs font-medium border border-purple-200 dark:border-purple-500/30"
                                 >
                                   {phrase}
                                 </span>
@@ -640,23 +705,79 @@ function JournalHistory({
                         )}
 
                         {/* Emotion Breakdown Chart */}
-                        {chartDataForEntry &&
-                        chartDataForEntry.datasets[0].data.length > 0 ? (
-                          <div className="mt-4 p-3 rounded-lg bg-white/50 dark:bg-black/30 border border-gray-200 dark:border-gray-700">
-                            <h4 className="text-lg font-poppins font-semibold mb-2 text-[#1E1A3E] dark:text-[#E0E0E0]">
-                              Emotion Breakdown
-                            </h4>
-                            <div className="h-48 w-full flex justify-center items-center">
-                              <Doughnut
-                                data={chartDataForEntry}
-                                options={emotionChartOptions}
-                              />
+                        {/* Emotion Breakdown Chart */}
+                        {chartDataForEntry && chartDataForEntry.datasets[0].data.length > 0 ? (
+                          <div className="rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden transition-all duration-300 mt-4">
+                            {/* Header with title and download button */}
+                            <div className="flex justify-between items-center p-3 bg-white/70 dark:bg-gray-800/50 backdrop-blur-sm">
+                              <h4 className="text-lg font-poppins font-semibold text-gray-800 dark:text-gray-200">
+                                Emotion Breakdown
+                              </h4>
+                              <button
+                                onClick={() => {
+                                  const element = chartRefs.current[entry.id];
+                                  if (element) {
+                                    downloadChartAsPng(element, `entry_emotion_breakdown_${entry.id}`, isDarkMode);
+                                  } else {
+                                    console.error('Chart element not found for entry', entry.id);
+                                  }
+                                }}
+                                className="p-1.5 rounded-full bg-white/80 dark:bg-gray-800/80 hover:bg-gray-100 dark:hover:bg-gray-700 transition shadow-sm"
+                                title="Download as PNG"
+                              >
+                                <Download size={16} className="text-gray-600 dark:text-gray-300" />
+                              </button>
+                            </div>
+                            {/* Chart container – solid background for PNG capture */}
+                            {/* Chart container – solid background for PNG capture */}
+                            <div
+                              ref={el => { chartRefs.current[entry.id] = el; }}
+                              className="p-3 flex flex-col items-center"
+                              style={{ backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }}
+                            >
+                              {/* Date label – will appear in the downloaded PNG */}
+                              <div className="text-center mb-2">
+                                <p className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                                  {format(parseISO(entry.entryDate), 'EEEE, MMMM d, yyyy')}
+                                  {entry.creationTimestamp && (
+                                    <span className="ml-2 text-gray-400 dark:text-gray-500">
+                                      • {format(parseISO(entry.creationTimestamp), 'h:mm a')}
+                                    </span>
+                                  )}
+                                </p>
+                              </div>
+                              <div className="h-48 w-full max-w-xs mx-auto">
+                                <Doughnut
+                                  data={chartDataForEntry}
+                                  options={{
+                                    ...emotionChartOptions,
+                                    plugins: {
+                                      ...emotionChartOptions.plugins,
+                                      legend: {
+                                        ...emotionChartOptions.plugins?.legend,
+                                        labels: {
+                                          color: isDarkMode ? '#E0E0E0' : '#2D3748',
+                                          font: { family: 'Inter, sans-serif', size: 10 },
+                                        },
+                                      },
+                                      tooltip: {
+                                        ...emotionChartOptions.plugins?.tooltip,
+                                        backgroundColor: isDarkMode ? '#1E293B' : '#FFFFFF',
+                                        titleColor: isDarkMode ? '#E0E0E0' : '#1E1A3E',
+                                        bodyColor: isDarkMode ? '#A0AEC0' : '#4B5563',
+                                      },
+                                    },
+                                  }}
+                                />
+                              </div>
                             </div>
                           </div>
                         ) : (
-                          <p className="text-gray-600 dark:text-gray-400 text-sm italic mt-2">
-                            No detailed emotion data for this entry.
-                          </p>
+                          <div className="mt-4 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 bg-white/70 dark:bg-gray-800/50 backdrop-blur-sm text-center">
+                            <p className="text-gray-600 dark:text-gray-400 text-sm italic">
+                              No detailed emotion data for this entry.
+                            </p>
+                          </div>
                         )}
                       </div>
 

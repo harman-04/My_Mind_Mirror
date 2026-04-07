@@ -1,4 +1,5 @@
-import React from 'react';
+// src/components/MoodCalendarHeatmap.jsx
+import React, { useRef } from 'react';
 import CalendarHeatmap from 'react-calendar-heatmap';
 import {
   format,
@@ -7,10 +8,13 @@ import {
   endOfYear,
 } from 'date-fns';
 import { useTheme } from '../contexts/ThemeContext';
+import DownloadChartButton from './DownloadChartButton';
+import { Calendar, Activity } from 'lucide-react';
 
 const MoodCalendarHeatmap = ({ journalEntries, displayYear = new Date() }) => {
   const { theme } = useTheme();
   const isDarkMode = theme === 'dark';
+  const chartContainerRef = useRef(null);
 
   const moodColors = {
     light: {
@@ -72,114 +76,142 @@ const MoodCalendarHeatmap = ({ journalEntries, displayYear = new Date() }) => {
   const startDate = startOfYear(displayYear);
   const endDate = endOfYear(displayYear);
 
-  return (
-    <div
-      className="p-6 rounded-xl shadow-lg transition-all duration-300"
-      style={{ backgroundColor: currentColors.background }}
-    >
-      <h3
-        className="text-xl font-semibold mb-4 text-center"
-        style={{ color: currentColors.text }}
-      >
-        Annual Mood Heatmap ({format(displayYear, 'yyyy')})
-      </h3>
-
-      {values.length === 0 ? (
-        <p
-          className="font-inter text-center py-4"
-          style={{ color: currentColors.secondaryText }}
+  // Empty state
+  if (values.length === 0) {
+    return (
+      <div className="rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden transition-all duration-300">
+        <div className="flex justify-between items-center p-4 bg-white/70 dark:bg-gray-800/50 backdrop-blur-sm">
+          <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200">
+            Annual Mood Heatmap
+          </h3>
+          <DownloadChartButton
+            chartRef={chartContainerRef}
+            filename="mood_heatmap"
+            darkMode={isDarkMode}
+            className="hover:scale-105 transition-transform opacity-50 pointer-events-none"
+          />
+        </div>
+        <div
+          ref={chartContainerRef}
+          className="p-8 flex flex-col items-center justify-center text-center"
+          style={{ backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }}
         >
-          No journal entries for this year to display heatmap.
-        </p>
-      ) : (
-        <>
-          <style>
-            {`
-              .react-calendar-heatmap text {
-                font-family: 'Inter', sans-serif;
-                font-size: 9px;
-                fill: ${currentColors.secondaryText};
-              }
+          <Calendar size={48} className="text-gray-400 mb-4" />
+          <p className="text-gray-600 dark:text-gray-300 font-medium">
+            No journal entries for {format(displayYear, 'yyyy')}
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
+            Start journaling to see your mood patterns throughout the year.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-              .react-calendar-heatmap .month-label {
-                font-weight: 600;
-                font-size: 11px;
-                fill: ${currentColors.text};
-              }
+  return (
+    <div className="rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden transition-all duration-300">
+      {/* Header with title and download button */}
+      <div className="flex justify-between items-center p-4 bg-white/70 dark:bg-gray-800/50 backdrop-blur-sm">
+        <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200">
+          Annual Mood Heatmap ({format(displayYear, 'yyyy')})
+        </h3>
+        <DownloadChartButton
+          chartRef={chartContainerRef}
+          filename="mood_heatmap"
+          darkMode={isDarkMode}
+          className="hover:scale-105 transition-transform"
+        />
+      </div>
 
-              .react-calendar-heatmap .weekday-label {
-                font-size: 9px;
-                fill: ${currentColors.secondaryText};
-              }
+      {/* Heatmap container – solid background for PNG capture */}
+      <div
+        ref={chartContainerRef}
+        className="p-4"
+        style={{ backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }}
+      >
+        <style>
+          {`
+            .react-calendar-heatmap text {
+              font-family: 'Inter', sans-serif;
+              font-size: 9px;
+              fill: ${currentColors.secondaryText};
+            }
 
-              .react-calendar-heatmap .day {
-                shape-rendering: crispEdges;
-                stroke: rgba(255,255,255,0.1);
-                stroke-width: 1;
-                rx: 2;
-                ry: 2;
-              }
+            .react-calendar-heatmap .month-label {
+              font-weight: 600;
+              font-size: 11px;
+              fill: ${currentColors.text};
+            }
 
-              .react-calendar-heatmap .color-empty { fill: ${currentColors.empty}; }
-              .react-calendar-heatmap .color-very-negative { fill: ${currentColors.veryNegative}; }
-              .react-calendar-heatmap .color-negative { fill: ${currentColors.negative}; }
-              .react-calendar-heatmap .color-neutral { fill: ${currentColors.neutral}; }
-              .react-calendar-heatmap .color-positive { fill: ${currentColors.positive}; }
-              .react-calendar-heatmap .color-very-positive { fill: ${currentColors.veryPositive}; }
-            `}
-          </style>
+            .react-calendar-heatmap .weekday-label {
+              font-size: 9px;
+              fill: ${currentColors.secondaryText};
+            }
 
-          <div className="flex justify-center overflow-x-auto pb-4">
-            <CalendarHeatmap
-              startDate={startDate}
-              endDate={endDate}
-              values={values}
-              classForValue={getClassForValue}
-              showWeekdayLabels={true}
-              showMonthLabels={true}
-              gutterSize={4}
-              weekdayLabels={['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']}
-              tooltipDataAttrs={(value) => {
-                if (!value || value.date === null) return { 'data-tip': 'No entries' };
-                return {
-                  'data-tip': `${format(parseISO(value.date), 'MMM d, yyyy')}: Mood ${value.count.toFixed(2)}`,
-                };
-              }}
-              transformDayElement={(element, value, index) => (
-                <g key={index}>
-                  {element}
-                  {value && value.date && (
-                    <title>{`${format(parseISO(value.date), 'MMM d, yyyy')}: Mood ${value.count.toFixed(2)}`}</title>
-                  )}
-                </g>
-              )}
-            />
-          </div>
+            .react-calendar-heatmap .day {
+              shape-rendering: crispEdges;
+              stroke: rgba(255,255,255,0.1);
+              stroke-width: 1;
+              rx: 2;
+              ry: 2;
+            }
 
-          {/* Color Legend */}
-          <div
-            className="flex flex-wrap justify-center items-center mt-4 gap-3 text-sm font-inter"
-            style={{ color: currentColors.text }}
-          >
-            <span>Mood Scale:</span>
-            {[
-              { color: currentColors.veryNegative, label: 'Very Negative' },
-              { color: currentColors.negative, label: 'Negative' },
-              { color: currentColors.neutral, label: 'Neutral' },
-              { color: currentColors.positive, label: 'Positive' },
-              { color: currentColors.veryPositive, label: 'Very Positive' },
-            ].map((item, idx) => (
-              <div key={idx} className="flex items-center space-x-1">
-                <div
-                  className="w-4 h-4 rounded-sm"
-                  style={{ backgroundColor: item.color }}
-                ></div>
-                <span>{item.label}</span>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
+            .react-calendar-heatmap .color-empty { fill: ${currentColors.empty}; }
+            .react-calendar-heatmap .color-very-negative { fill: ${currentColors.veryNegative}; }
+            .react-calendar-heatmap .color-negative { fill: ${currentColors.negative}; }
+            .react-calendar-heatmap .color-neutral { fill: ${currentColors.neutral}; }
+            .react-calendar-heatmap .color-positive { fill: ${currentColors.positive}; }
+            .react-calendar-heatmap .color-very-positive { fill: ${currentColors.veryPositive}; }
+          `}
+        </style>
+
+        <div className="flex justify-center overflow-x-auto pb-4">
+          <CalendarHeatmap
+            startDate={startDate}
+            endDate={endDate}
+            values={values}
+            classForValue={getClassForValue}
+            showWeekdayLabels={true}
+            showMonthLabels={true}
+            gutterSize={4}
+            weekdayLabels={['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']}
+            tooltipDataAttrs={(value) => {
+              if (!value || value.date === null) return { 'data-tip': 'No entries' };
+              return {
+                'data-tip': `${format(parseISO(value.date), 'MMM d, yyyy')}: Mood ${value.count.toFixed(2)}`,
+              };
+            }}
+            transformDayElement={(element, value, index) => (
+              <g key={index}>
+                {element}
+                {value && value.date && (
+                  <title>{`${format(parseISO(value.date), 'MMM d, yyyy')}: Mood ${value.count.toFixed(2)}`}</title>
+                )}
+              </g>
+            )}
+          />
+        </div>
+
+        {/* Color Legend */}
+        <div className="flex flex-wrap justify-center items-center mt-4 gap-3 text-sm font-inter text-gray-700 dark:text-gray-300">
+          <span>Mood Scale:</span>
+          {[
+            { color: currentColors.veryNegative, label: 'Very Negative' },
+            { color: currentColors.negative, label: 'Negative' },
+            { color: currentColors.neutral, label: 'Neutral' },
+            { color: currentColors.positive, label: 'Positive' },
+            { color: currentColors.veryPositive, label: 'Very Positive' },
+          ].map((item, idx) => (
+            <div key={idx} className="flex items-center space-x-1">
+              <div
+                className="w-4 h-4 rounded-sm"
+                style={{ backgroundColor: item.color }}
+              ></div>
+              <span>{item.label}</span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };

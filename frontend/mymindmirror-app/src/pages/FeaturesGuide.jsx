@@ -275,6 +275,65 @@ function FeaturesGuide() {
       `,
     },
     {
+      id: 'export-charts',
+      title: 'Download Charts as Images',
+      icon: <Download size={24} />,
+      color: 'text-emerald-400',
+      content: `
+        **How to use:**
+        - Every chart on the All Entries dashboard has a small **download button** (↓) in the top‑right corner.
+        - Click the button to save the chart as a PNG image.
+        - The image is downloaded instantly to your device with a descriptive filename (e.g., "mood_trend_chart.png").
+
+        **Which charts support this?**
+        - Mood & Emotion Trends (line chart)
+        - Average Emotion Intensity (bar chart)
+        - Most Frequent Concerns (bar chart)
+        - Mood vs. Word Count Correlation (scatter plot)
+        - Emotional Profile Radar Chart
+        - Key Phrase Cloud (optional)
+
+        **Why it's useful:**
+        - Share your emotional journey on social media, in presentations, or with a therapist.
+        - Keep a visual record of your progress over time.
+        - No need for screenshot tools – one click, and the chart is saved with a clean background.
+
+        **How it works:**
+        - Uses the \`html-to-image\` library to capture the chart's DOM element.
+        - Converts it to a PNG data URL and triggers a download.
+        - The background adapts to light/dark mode for a clean image.
+      `,
+    }{
+       id: 'export-charts',
+       title: 'Download Charts as Images',
+       icon: <Download size={24} />,
+       color: 'text-emerald-400',
+       content: `
+         **How to use:**
+         - Every chart on the All Entries dashboard has a small **download button** (↓) in the top‑right corner.
+         - Click the button to save the chart as a PNG image.
+         - The image is downloaded instantly to your device with a descriptive filename (e.g., "mood_trend_chart.png").
+
+         **Which charts support this?**
+         - Mood & Emotion Trends (line chart)
+         - Average Emotion Intensity (bar chart)
+         - Most Frequent Concerns (bar chart)
+         - Mood vs. Word Count Correlation (scatter plot)
+         - Emotional Profile Radar Chart
+         - Key Phrase Cloud (optional)
+
+         **Why it's useful:**
+         - Share your emotional journey on social media, in presentations, or with a therapist.
+         - Keep a visual record of your progress over time.
+         - No need for screenshot tools – one click, and the chart is saved with a clean background.
+
+         **How it works:**
+         - Uses the \`html-to-image\` library to capture the chart's DOM element.
+         - Converts it to a PNG data URL and triggers a download.
+         - The background adapts to light/dark mode for a clean image.
+       `,
+     },
+    {
       id: 'search',
       title: 'Search & Filter',
       icon: <Search size={24} />,

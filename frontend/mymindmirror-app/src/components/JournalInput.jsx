@@ -3,7 +3,6 @@ import React, { useState, forwardRef, useImperativeHandle } from 'react';
 import { useAddJournalEntry } from '../hooks/useJournalData';
 import { useTheme } from '../contexts/ThemeContext';
 
-// Wrap the component in forwardRef so 'ref' is defined
 const JournalInput = forwardRef((props, ref) => {
     const [text, setText] = useState('');
     const [message, setMessage] = useState('');
@@ -39,7 +38,6 @@ const JournalInput = forwardRef((props, ref) => {
         }
     };
 
-    // This now works because 'ref' is passed in by forwardRef above
     useImperativeHandle(ref, () => ({
         setText: (newText) => setText(newText),
         clearText: () => setText('')
@@ -68,6 +66,7 @@ const JournalInput = forwardRef((props, ref) => {
                 rows="10"
                 className={`w-full p-3 rounded-lg border border-gray-300 dark:border-gray-600
                             bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200
+                            placeholder-gray-400 dark:placeholder-gray-500
                             focus:outline-none focus:ring-2 focus:ring-[#B399D4] dark:focus:ring-[#5CC8C2]
                             font-inter resize-y transition-colors duration-300`}
                 aria-label="Journal Entry Text Area"
@@ -90,6 +89,6 @@ const JournalInput = forwardRef((props, ref) => {
             </div>
         </form>
     );
-}); // Don't forget to close the forwardRef parenthesis
+});
 
 export default JournalInput;
