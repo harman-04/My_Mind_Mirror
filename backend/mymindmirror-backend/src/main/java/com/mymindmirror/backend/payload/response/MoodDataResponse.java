@@ -1,6 +1,6 @@
 
 // MoodDataResponse.java (for chart data)
-package com.mymindmirror.backend.payload;
+package com.mymindmirror.backend.payload.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

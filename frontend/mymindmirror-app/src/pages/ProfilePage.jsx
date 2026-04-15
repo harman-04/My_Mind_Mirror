@@ -6,7 +6,7 @@ import { useUserProfile } from '../hooks/useUserProfile';
 import { useTheme } from '../contexts/ThemeContext';
 import {
     User, Mail, Edit, Save, X, Trash2, Loader, CheckCircle, AlertCircle,
-    KeyRound, Lock, Info, Sparkles // Added Info and Sparkles for visual flair
+    KeyRound, Lock, Info, Sparkles, Eye, EyeOff, Shield, Database
 } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
 
@@ -27,40 +27,31 @@ function ProfilePage() {
         isDeleting,
         isChangingPassword,
         apiKeyStatus,
-            updateApiKey,
+        updateApiKey,
     } = useUserProfile();
 
+    // Profile edit state
     const [isEditing, setIsEditing] = useState(false);
     const [editedUsername, setEditedUsername] = useState('');
     const [editedEmail, setEditedEmail] = useState('');
-    
+
+    // Password change state
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmNewPassword, setConfirmNewPassword] = useState('');
     const [passwordChangeError, setPasswordChangeError] = useState('');
     const [passwordChangeSuccess, setPasswordChangeSuccess] = useState('');
 
+    // API key state
+    const [newApiKey, setNewApiKey] = useState('');
+    const [showApiKey, setShowApiKey] = useState(false);
+    const [apiKeyMessage, setApiKeyMessage] = useState('');
+
+    // Feedback messages
     const [feedbackMessage, setFeedbackMessage] = useState({ type: '', text: '' });
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-//     const { apiKeyStatus, updateApiKey } = useUserProfile();
-//   const { apiKeyStatus, updateApiKey } = useUserProfile();
-  const [newApiKey, setNewApiKey] = useState('');
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [apiKeyMessage, setApiKeyMessage] = useState('');
 
-
-const handleSaveApiKey = async () => {
-    setApiKeyMessage('');
-    try {
-        await updateApiKey.mutateAsync(newApiKey);
-        setApiKeyMessage({ type: 'success', text: 'API key saved successfully.' });
-        setNewApiKey('');
-    } catch (err) {
-        setApiKeyMessage({ type: 'error', text: err.message || 'Failed to save API key.' });
-    }
-};
-
-    // Initialize form fields when profile data loads or changes
+    // Initialize form fields when profile loads
     useEffect(() => {
         if (profile) {
             setEditedUsername(profile.username || '');
@@ -68,17 +59,14 @@ const handleSaveApiKey = async () => {
         }
     }, [profile]);
 
-    // Handle feedback message display (for profile updates)
+    // Auto‑clear feedback messages
     useEffect(() => {
         if (feedbackMessage.text) {
-            const timer = setTimeout(() => {
-                setFeedbackMessage({ type: '', text: '' });
-            }, 5000);
+            const timer = setTimeout(() => setFeedbackMessage({ type: '', text: '' }), 5000);
             return () => clearTimeout(timer);
         }
     }, [feedbackMessage]);
 
-    // Effect for password change feedback messages
     useEffect(() => {
         if (passwordChangeSuccess) {
             const timer = setTimeout(() => setPasswordChangeSuccess(''), 5000);
@@ -90,6 +78,7 @@ const handleSaveApiKey = async () => {
         }
     }, [passwordChangeSuccess, passwordChangeError]);
 
+    // Handlers
     const handleEditClick = () => {
         setIsEditing(true);
         setFeedbackMessage({ type: '', text: '' });
@@ -149,15 +138,24 @@ const handleSaveApiKey = async () => {
         }
     };
 
-    const handleDeleteAccount = async () => {
-        setShowDeleteConfirm(true);
+    const handleSaveApiKey = async () => {
+        setApiKeyMessage('');
+        try {
+            await updateApiKey.mutateAsync(newApiKey);
+            setApiKeyMessage({ type: 'success', text: 'API key saved successfully.' });
+            setNewApiKey('');
+        } catch (err) {
+            setApiKeyMessage({ type: 'error', text: err.message || 'Failed to save API key.' });
+        }
     };
 
+    const handleDeleteAccount = () => setShowDeleteConfirm(true);
     const confirmDeleteAccount = async () => {
         setFeedbackMessage({ type: '', text: '' });
         try {
             await deleteProfile();
             setFeedbackMessage({ type: 'success', text: 'Account deleted successfully. Redirecting...' });
+            setTimeout(() => navigate('/'), 2000);
         } catch (err) {
             console.error("Error deleting account:", err);
             setFeedbackMessage({ type: 'error', text: err.message || 'Failed to delete account.' });
@@ -165,66 +163,42 @@ const handleSaveApiKey = async () => {
             setShowDeleteConfirm(false);
         }
     };
+    const cancelDeleteAccount = () => setShowDeleteConfirm(false);
 
-    const cancelDeleteAccount = () => {
-        setShowDeleteConfirm(false);
-    };
-
-    // Consolidated Theme-based Styling
+    // Theme styles
     const colors = {
-        // Backgrounds (consistent with App.jsx and HomePage.jsx)
-        bgMainStart: isDarkMode ? '#0A0A1A' : '#F0F4F8',
-        bgMainEnd: isDarkMode ? '#1E1E2E' : '#E6EAF0',
-
-        // Card/Glassmorphism elements
-        cardBg: isDarkMode ? 'bg-gray-900/40' : 'bg-white/90', // Main profile card
-        sectionCardBg: isDarkMode ? 'bg-gray-800/60' : 'bg-white/80', // Inner section cards
-        cardBorder: isDarkMode ? 'border-gray-700/60' : 'border-gray-200/80',
-        shadow: isDarkMode ? 'shadow-xl shadow-black/30' : 'shadow-xl shadow-gray-300/50',
-        
-        // Text colors
-        textPrimary: isDarkMode ? 'text-gray-50' : 'text-gray-900',
+        background: isDarkMode ? 'bg-gray-900' : 'bg-gray-50',
+        cardBg: isDarkMode ? 'bg-gray-800/60 backdrop-blur-md' : 'bg-white/80 backdrop-blur-md',
+        cardBorder: isDarkMode ? 'border-gray-700/50' : 'border-gray-200/50',
+        sectionBg: isDarkMode ? 'bg-gray-800/40 backdrop-blur-sm' : 'bg-white/70 backdrop-blur-sm',
+        sectionBorder: isDarkMode ? 'border-gray-700/40' : 'border-gray-200/40',
+        textPrimary: isDarkMode ? 'text-gray-100' : 'text-gray-900',
         textSecondary: isDarkMode ? 'text-gray-300' : 'text-gray-600',
-        headingGradient: 'bg-gradient-to-r from-purple-400 to-teal-400 bg-clip-text text-transparent',
-
-        // Input fields
-        inputBg: isDarkMode ? 'bg-gray-700/50' : 'bg-gray-100/50',
+        inputBg: isDarkMode ? 'bg-gray-800/80' : 'bg-white/90',
         inputBorder: isDarkMode ? 'border-gray-600' : 'border-gray-300',
-        inputFocusRing: isDarkMode ? 'focus:ring-teal-500' : 'focus:ring-purple-500',
-
-        // Buttons
-        buttonPrimary: isDarkMode ? 'bg-gradient-to-br from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700' : 'bg-gradient-to-br from-purple-600 to-purple-700 hover:from-purple-700 hover:to-purple-800',
-        buttonSecondary: isDarkMode ? 'bg-gradient-to-br from-purple-500 to-purple-600 hover:from-purple-600 hover:to-purple-700' : 'bg-gradient-to-br from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700',
-        buttonDestructive: 'bg-gradient-to-br from-red-600 to-red-700 hover:from-red-700 hover:to-red-800',
+        inputFocusRing: 'focus:ring-purple-500',
+        buttonPrimary: isDarkMode ? 'bg-gradient-to-r from-purple-500 to-teal-500 hover:from-purple-600 hover:to-teal-600' : 'bg-gradient-to-r from-purple-500 to-teal-500 hover:from-purple-600 hover:to-teal-600',
+        buttonSecondary: isDarkMode ? 'bg-gradient-to-r from-gray-700 to-gray-600 hover:from-gray-800 hover:to-gray-700' : 'bg-gradient-to-r from-gray-200 to-gray-300 hover:from-gray-300 hover:to-gray-400',
+        buttonDanger: 'bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800',
         buttonText: 'text-white',
-        buttonFocusRingPrimary: isDarkMode ? 'focus:ring-teal-500' : 'focus:ring-purple-500',
-        buttonFocusRingSecondary: isDarkMode ? 'focus:ring-purple-500' : 'focus:ring-teal-500',
-        buttonFocusRingDestructive: 'focus:ring-red-500',
-
-        // Icons
         iconPrimary: isDarkMode ? 'text-teal-300' : 'text-purple-600',
-        iconSecondary: isDarkMode ? 'text-purple-300' : 'text-teal-600',
         iconDanger: 'text-red-500',
-
-        // Feedback messages
-        feedbackSuccessBg: isDarkMode ? 'bg-green-700/30' : 'bg-green-500/20',
-        feedbackSuccessText: isDarkMode ? 'text-green-300' : 'text-green-700',
-        feedbackErrorBg: isDarkMode ? 'bg-red-700/30' : 'bg-red-500/20',
-        feedbackErrorText: isDarkMode ? 'text-red-300' : 'text-red-700',
+        feedbackSuccessBg: isDarkMode ? 'bg-green-900/30 border border-green-700/50' : 'bg-green-100/80 border border-green-300',
+        feedbackSuccessText: isDarkMode ? 'text-green-300' : 'text-green-800',
+        feedbackErrorBg: isDarkMode ? 'bg-red-900/30 border border-red-700/50' : 'bg-red-100/80 border border-red-300',
+        feedbackErrorText: isDarkMode ? 'text-red-300' : 'text-red-800',
     };
 
-    // Full-page loader
+    // ========== ELEGANT LOADER (restored from old version) ==========
     if (isLoading) {
         return (
-            <div className={`min-h-screen flex flex-col items-center justify-center w-full
-                             ${colors.bgMainGradient} ${colors.textPrimary} transition-all duration-500`}>
+            <div className={`min-h-screen w-full ${colors.background} flex flex-col items-center justify-center p-4 transition-all duration-500`}>
                 <Sparkles size={80} className={`${colors.iconPrimary} animate-pulse-slow mb-6`} />
-                <p className="text-2xl font-poppins font-semibold">Loading your profile...</p>
+                <p className="text-2xl font-poppins font-semibold text-gray-700 dark:text-gray-200">Loading your profile...</p>
                 <div className="w-64 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mt-4">
                     <div className="h-full bg-gradient-to-r from-purple-500 to-teal-500 animate-pulse-fast"></div>
                 </div>
-                <style>
-                    {`
+                <style>{`
                     @keyframes pulse-slow {
                         0%, 100% { opacity: 1; }
                         50% { opacity: 0.5; }
@@ -234,305 +208,280 @@ const handleSaveApiKey = async () => {
                         50% { transform: translateX(100%); }
                         100% { transform: translateX(-100%); }
                     }
-                    `}
-                </style>
+                    .animate-pulse-slow {
+                        animation: pulse-slow 2s ease-in-out infinite;
+                    }
+                    .animate-pulse-fast {
+                        animation: pulse-fast 1.5s ease-in-out infinite;
+                    }
+                `}</style>
             </div>
         );
     }
 
-    // Full-page error display
+    // ========== ERROR STATE (kept modern) ==========
     if (isError) {
         return (
-            <div className={`min-h-screen flex flex-col items-center justify-center w-full
-                             ${colors.bgMainGradient} ${colors.textPrimary} transition-all duration-500`}>
-                <AlertCircle size={80} className={`${colors.iconDanger} mb-6`} />
-                <h2 className="text-3xl font-poppins font-bold mb-4">Error Loading Profile</h2>
-                <p className="text-lg font-inter text-center max-w-md mb-8">
-                    {error?.message || 'An unexpected error occurred. Please try logging in again.'}
-                </p>
-                <button
-                    onClick={() => navigate('/login')}
-                    className={`py-3 px-8 rounded-full font-poppins font-semibold ${colors.buttonDestructive} ${colors.buttonText}
-                               transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 ${colors.buttonFocusRingDestructive}`}
-                >
-                    Go to Login
-                </button>
+            <div className={`min-h-screen w-full ${colors.background} flex items-center justify-center p-4`}>
+                <div className="text-center space-y-4">
+                    <AlertCircle size={48} className="text-red-500 mx-auto" />
+                    <p className="text-red-500">{error?.message || 'Failed to load profile.'}</p>
+                    <button
+                        onClick={() => navigate('/login')}
+                        className="px-4 py-2 rounded-full bg-purple-500 text-white hover:bg-purple-600 transition"
+                    >
+                        Go to Login
+                    </button>
+                </div>
             </div>
         );
     }
 
+    // ========== MAIN RENDER (glass‑morphic, fully modern) ==========
     return (
-        <div className={`min-h-screen w-full flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8
-                         ${colors.bgMainGradient} font-inter ${colors.textPrimary} transition-colors duration-700`}>
-            
-            {/* Main Profile Card */}
-            <div className={`w-full max-w-3xl mx-auto p-8 sm:p-10 rounded-[40px]
-                             ${colors.cardBg} ${colors.cardBorder} border ${colors.shadow}
-                             backdrop-blur-xl transition-all duration-500`}>
-
-                <h2 className={`text-4xl sm:text-5xl font-poppins font-bold text-center mb-10 ${colors.headingGradient}`}>
-                    Your Profile
-                </h2>
-
-                {/* Global Feedback Message */}
-                {feedbackMessage.text && (
-                    <div className={`p-4 mb-8 rounded-xl flex items-center space-x-3
-                                     ${feedbackMessage.type === 'success' ? colors.feedbackSuccessBg : colors.feedbackErrorBg}
-                                     ${feedbackMessage.type === 'success' ? colors.feedbackSuccessText : colors.feedbackErrorText}
-                                     transition-all duration-300 ease-in-out transform translate-y-0 opacity-100`}>
-                        {feedbackMessage.type === 'success' ? (
-                            <CheckCircle size={24} className="flex-shrink-0" />
-                        ) : (
-                            <AlertCircle size={24} className="flex-shrink-0" />
-                        )}
-                        <p className="text-sm font-medium flex-grow">{feedbackMessage.text}</p>
-                    </div>
-                )}
-
-                <div className="space-y-10"> {/* Increased spacing between sections */}
-                    {/* Account Details Section */}
-                    <div className={`p-6 sm:p-8 rounded-3xl ${colors.sectionCardBg} ${colors.cardBorder} border shadow-md`}>
-                        <h3 className={`text-2xl sm:text-3xl font-poppins font-semibold mb-6 ${colors.textPrimary}`}>
-                            <User size={28} className="inline-block mr-3 align-middle" /> Account Details
-                        </h3>
-                        <div className="space-y-6">
-                            {/* Username Field */}
-                            <div>
-                                <label htmlFor="username" className={`block text-sm font-medium mb-2 ${colors.textSecondary}`}>Username</label>
-                                {isEditing ? (
-                                    <input
-                                        type="text"
-                                        id="username"
-                                        value={editedUsername}
-                                        onChange={(e) => setEditedUsername(e.target.value)}
-                                        className={`w-full p-3 rounded-lg ${colors.inputBg} ${colors.inputBorder} border ${colors.inputFocusRing} focus:outline-none transition-all duration-200`}
-                                        disabled={isUpdating}
-                                    />
-                                ) : (
-                                    <p className={`text-lg sm:text-xl font-semibold ${colors.textPrimary} p-3 rounded-lg ${isDarkMode ? 'bg-gray-700/30' : 'bg-gray-100/30'}`}>{profile?.username}</p>
-                                )}
-                            </div>
-
-                            {/* Email Field */}
-                            <div>
-                                <label htmlFor="email" className={`block text-sm font-medium mb-2 ${colors.textSecondary}`}>Email</label>
-                                {isEditing ? (
-                                    <input
-                                        type="email"
-                                        id="email"
-                                        value={editedEmail}
-                                        onChange={(e) => setEditedEmail(e.target.value)}
-                                        className={`w-full p-3 rounded-lg ${colors.inputBg} ${colors.inputBorder} border ${colors.inputFocusRing} focus:outline-none transition-all duration-200`}
-                                        disabled={isUpdating}
-                                    />
-                                ) : (
-                                    <p className={`text-lg sm:text-xl font-semibold ${colors.textPrimary} p-3 rounded-lg ${isDarkMode ? 'bg-gray-700/30' : 'bg-gray-100/30'}`}>{profile?.email}</p>
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Profile Action Buttons */}
-                        <div className="pt-8 flex flex-col sm:flex-row justify-end gap-4">
-                            {isEditing ? (
-                                <>
-                                    <button
-                                        onClick={handleCancelEdit}
-                                        className={`py-2.5 px-7 rounded-full font-semibold text-sm ${colors.buttonSecondary} ${colors.buttonText}
-                                                   transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 ${colors.buttonFocusRingSecondary}`}
-                                        disabled={isUpdating}
-                                    >
-                                        <X size={20} className="inline-block mr-2 align-text-bottom" /> Cancel
-                                    </button>
-                                    <button
-                                        onClick={handleSaveProfile}
-                                        className={`py-2.5 px-7 rounded-full font-semibold text-sm ${colors.buttonPrimary} ${colors.buttonText}
-                                                   transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 ${colors.buttonFocusRingPrimary}`}
-                                        disabled={isUpdating}
-                                    >
-                                        {isUpdating ? (
-                                            <Loader size={20} className="inline-block mr-2 animate-spin align-text-bottom" />
-                                        ) : (
-                                            <Save size={20} className="inline-block mr-2 align-text-bottom" />
-                                        )}
-                                        Save Profile
-                                    </button>
-                                </>
-                            ) : (
-                                <button
-                                    onClick={handleEditClick}
-                                    className={`py-2.5 px-7 rounded-full font-semibold text-sm ${colors.buttonPrimary} ${colors.buttonText}
-                                               transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 ${colors.buttonFocusRingPrimary}`}
-                                >
-                                    <Edit size={20} className="inline-block mr-2 align-text-bottom" /> Edit Profile
-                                </button>
-                            )}
-                        </div>
-                    </div>
-
-                    {/* Change Password Section */}
-                    <div className={`p-6 sm:p-8 rounded-3xl ${colors.sectionCardBg} ${colors.cardBorder} border shadow-md`}>
-                        <h3 className={`text-2xl sm:text-3xl font-poppins font-semibold mb-6 ${colors.textPrimary}`}>
-                            <KeyRound size={28} className="inline-block mr-3 align-middle" /> Change Password
-                        </h3>
-
-                        {passwordChangeSuccess && (
-                            <div className={`p-4 mb-4 rounded-xl flex items-center space-x-3 ${colors.feedbackSuccessBg} ${colors.feedbackSuccessText}`}>
-                                <CheckCircle size={24} className="flex-shrink-0" />
-                                <p className="text-sm font-medium flex-grow">{passwordChangeSuccess}</p>
-                            </div>
-                        )}
-                        {passwordChangeError && (
-                            <div className={`p-4 mb-4 rounded-xl flex items-center space-x-3 ${colors.feedbackErrorBg} ${colors.feedbackErrorText}`}>
-                                <AlertCircle size={24} className="flex-shrink-0" />
-                                <p className="text-sm font-medium flex-grow">{passwordChangeError}</p>
-                            </div>
-                        )}
-
-                        <div className="space-y-6">
-                            {/* Current Password */}
-                            <div>
-                                <label htmlFor="currentPassword" className={`block text-sm font-medium mb-2 ${colors.textSecondary}`}>Current Password</label>
-                                <input
-                                    type="password"
-                                    id="currentPassword"
-                                    value={currentPassword}
-                                    onChange={(e) => setCurrentPassword(e.target.value)}
-                                    className={`w-full p-3 rounded-lg ${colors.inputBg} ${colors.inputBorder} border ${colors.inputFocusRing} focus:outline-none transition-all duration-200`}
-                                    disabled={isChangingPassword}
-                                />
-                            </div>
-
-                            {/* New Password */}
-                            <div>
-                                <label htmlFor="newPassword" className={`block text-sm font-medium mb-2 ${colors.textSecondary}`}>New Password</label>
-                                <input
-                                    type="password"
-                                    id="newPassword"
-                                    value={newPassword}
-                                    onChange={(e) => setNewPassword(e.target.value)}
-                                    className={`w-full p-3 rounded-lg ${colors.inputBg} ${colors.inputBorder} border ${colors.inputFocusRing} focus:outline-none transition-all duration-200`}
-                                    disabled={isChangingPassword}
-                                />
-                            </div>
-
-                            {/* Confirm New Password */}
-                            <div>
-                                <label htmlFor="confirmNewPassword" className={`block text-sm font-medium mb-2 ${colors.textSecondary}`}>Confirm New Password</label>
-                                <input
-                                    type="password"
-                                    id="confirmNewPassword"
-                                    value={confirmNewPassword}
-                                    onChange={(e) => setConfirmNewPassword(e.target.value)}
-                                    className={`w-full p-3 rounded-lg ${colors.inputBg} ${colors.inputBorder} border ${colors.inputFocusRing} focus:outline-none transition-all duration-200`}
-                                    disabled={isChangingPassword}
-                                />
-                            </div>
-                        </div>
-
-                        {/* Change Password Button */}
-                        <div className="pt-8 flex justify-end">
-                            <button
-                                onClick={handleChangePassword}
-                                className={`py-2.5 px-7 rounded-full font-semibold text-sm ${colors.buttonPrimary} ${colors.buttonText}
-                                           transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 ${colors.buttonFocusRingPrimary}`}
-                                disabled={isChangingPassword}
-                            >
-                                {isChangingPassword ? (
-                                    <Loader size={20} className="inline-block mr-2 animate-spin align-text-bottom" />
-                                ) : (
-                                    <Lock size={20} className="inline-block mr-2 align-text-bottom" />
-                                )}
-                                Change Password
-                            </button>
-                        </div>
-                    </div>
-
-
-<div className={`p-6 sm:p-8 rounded-3xl ${colors.sectionCardBg} ${colors.cardBorder} border shadow-md`}>
-    <h3 className={`text-2xl sm:text-3xl font-poppins font-semibold mb-6 ${colors.textPrimary}`}>
-        <KeyRound size={28} className="inline-block mr-3 align-middle" /> Gemini API Key
-    </h3>
-
-    {/* Status indicator */}
-    {apiKeyStatus.isLoading ? (
-        <p className="text-gray-500">Loading...</p>
-    ) : apiKeyStatus.data ? (
-        <div className={`mb-4 p-3 rounded-lg ${apiKeyStatus.data.usingOwnKey ? colors.feedbackSuccessBg : colors.feedbackErrorBg}`}>
-            <p className={`text-sm ${apiKeyStatus.data.usingOwnKey ? colors.feedbackSuccessText : colors.feedbackErrorText}`}>
-                {apiKeyStatus.data.message}
-                {apiKeyStatus.data.usingOwnKey && (
-                    <span className="ml-2 text-xs font-mono">({apiKeyStatus.data.maskedKey})</span>
-                )}
-            </p>
-        </div>
-    ) : null}
-
-    {/* Input form */}
-    <div className="flex flex-col sm:flex-row gap-4">
-        <div className="flex-1">
-            <label htmlFor="apiKey" className={`block text-sm font-medium mb-2 ${colors.textSecondary}`}>
-                Your Gemini API Key
-            </label>
-            <div className="flex">
-                <input
-                    type={showApiKey ? "text" : "password"}
-                    id="apiKey"
-                    value={newApiKey}
-                    onChange={(e) => setNewApiKey(e.target.value)}
-                    placeholder="Paste your Gemini API key here"
-                    className={`flex-1 p-3 rounded-l-lg ${colors.inputBg} ${colors.inputBorder} border ${colors.inputFocusRing} focus:outline-none`}
-                />
-                <button
-                    type="button"
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="px-3 rounded-r-lg bg-gray-200 dark:bg-gray-600"
-                >
-                    {showApiKey ? "Hide" : "Show"}
-                </button>
+        <div className={`min-h-screen w-full ${colors.background} transition-colors duration-300 relative p-4 sm:p-6`}>
+            {/* Animated Background */}
+            <div className="fixed inset-0 pointer-events-none overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-teal-500/5" />
+                <div className="absolute top-20 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse-slow" />
+                <div className="absolute bottom-20 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl animate-pulse-slow delay-1000" />
             </div>
-        </div>
-        <div className="flex items-end">
-            <button
-                onClick={handleSaveApiKey}
-                className={`py-2.5 px-7 rounded-full font-semibold text-sm ${colors.buttonPrimary} ${colors.buttonText}
-                           transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 ${colors.buttonFocusRingPrimary}`}
-                disabled={updateApiKey.isLoading}
-            >
-                {updateApiKey.isLoading ? 'Saving...' : 'Save'}
-            </button>
-        </div>
-    </div>
-    {apiKeyMessage && (
-        <div className={`mt-4 p-3 rounded-lg ${apiKeyMessage.type === 'success' ? colors.feedbackSuccessBg : colors.feedbackErrorBg}
-                        ${apiKeyMessage.type === 'success' ? colors.feedbackSuccessText : colors.feedbackErrorText}`}>
-            {apiKeyMessage.text}
-        </div>
-    )}
-    <p className={`mt-4 text-xs ${colors.textSecondary}`}>
-        Your key is encrypted and stored securely. It will only be used to call the Gemini API on your behalf.
-        You can get an API key from the{' '}
-        <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-[#5CC8C2] underline">
-            Google AI Studio
-        </a>.
-    </p>
-</div>
 
-                    {/* Danger Zone Section */}
-                    <div className={`p-6 sm:p-8 rounded-3xl ${colors.sectionCardBg} ${colors.cardBorder} border shadow-md`}>
-                        <h3 className={`text-2xl sm:text-3xl font-poppins font-semibold mb-6 ${colors.iconDanger}`}>
-                            <AlertCircle size={28} className="inline-block mr-3 align-middle" /> Danger Zone
-                        </h3>
-                        <p className={`text-md mb-6 ${colors.textSecondary}`}>
-                            Permanently delete your MyMindMirror account and all associated data. This action cannot be undone.
-                        </p>
-                        <div className="flex justify-end">
-                            <button
-                                onClick={handleDeleteAccount}
-                                className={`py-2.5 px-7 rounded-full font-semibold text-sm ${colors.buttonDestructive} ${colors.buttonText}
-                                           transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 ${colors.buttonFocusRingDestructive}`}
-                            >
-                                <Trash2 size={20} className="inline-block mr-2 align-text-bottom" /> Delete Account
-                            </button>
+            {/* Floating Icons */}
+            <div className="absolute top-32 left-5 opacity-30 animate-float hidden lg:block">
+                <User size={32} className="text-purple-400" />
+            </div>
+            <div className="absolute bottom-32 right-10 opacity-30 animate-float-delayed hidden lg:block">
+                <Shield size={32} className="text-teal-400" />
+            </div>
+
+            <div className="max-w-3xl mx-auto relative z-10 space-y-6">
+                {/* Header */}
+                <div className="text-center">
+                    <div className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-purple-500/20 to-teal-500/20 mb-4">
+                        <User className="w-8 h-8 text-purple-400" />
+                    </div>
+                    <h1 className="text-3xl sm:text-4xl font-poppins font-bold bg-gradient-to-r from-purple-400 to-teal-400 bg-clip-text text-transparent">
+                        Your Profile
+                    </h1>
+                    <p className={`text-sm ${colors.textSecondary} mt-2`}>Manage your account settings</p>
+                </div>
+
+                {/* Main Card */}
+                <div className={`rounded-2xl ${colors.cardBg} border ${colors.cardBorder} shadow-xl backdrop-blur-sm overflow-hidden`}>
+                    <div className="p-6 sm:p-8 space-y-8">
+                        {/* Global Feedback */}
+                        {feedbackMessage.text && (
+                            <div className={`p-4 rounded-xl flex items-center gap-3 ${feedbackMessage.type === 'success' ? colors.feedbackSuccessBg : colors.feedbackErrorBg}`}>
+                                {feedbackMessage.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
+                                <p className="text-sm flex-1">{feedbackMessage.text}</p>
+                            </div>
+                        )}
+
+                        {/* Account Details */}
+                        <div className={`rounded-xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 space-y-5`}>
+                            <h2 className="text-xl font-semibold flex items-center gap-2">
+                                <User size={20} className="text-purple-400" /> Account Details
+                            </h2>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Username</label>
+                                    {isEditing ? (
+                                        <input
+                                            type="text"
+                                            value={editedUsername}
+                                            onChange={(e) => setEditedUsername(e.target.value)}
+                                            className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                                            disabled={isUpdating}
+                                        />
+                                    ) : (
+                                        <div className={`p-3 rounded-xl ${colors.inputBg} border ${colors.inputBorder}`}>
+                                            <span className="font-medium">{profile?.username}</span>
+                                        </div>
+                                    )}
+                                </div>
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Email</label>
+                                    {isEditing ? (
+                                        <input
+                                            type="email"
+                                            value={editedEmail}
+                                            onChange={(e) => setEditedEmail(e.target.value)}
+                                            className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                                            disabled={isUpdating}
+                                        />
+                                    ) : (
+                                        <div className={`p-3 rounded-xl ${colors.inputBg} border ${colors.inputBorder}`}>
+                                            <span className="font-medium">{profile?.email}</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-3 pt-2">
+                                {isEditing ? (
+                                    <>
+                                        <button
+                                            onClick={handleCancelEdit}
+                                            className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonSecondary} ${colors.buttonText}`}
+                                            disabled={isUpdating}
+                                        >
+                                            <X size={16} /> Cancel
+                                        </button>
+                                        <button
+                                            onClick={handleSaveProfile}
+                                            className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
+                                            disabled={isUpdating}
+                                        >
+                                            {isUpdating ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
+                                            Save
+                                        </button>
+                                    </>
+                                ) : (
+                                    <button
+                                        onClick={handleEditClick}
+                                        className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
+                                    >
+                                        <Edit size={16} /> Edit Profile
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Change Password */}
+                        <div className={`rounded-xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 space-y-5`}>
+                            <h2 className="text-xl font-semibold flex items-center gap-2">
+                                <KeyRound size={20} className="text-teal-400" /> Change Password
+                            </h2>
+                            {passwordChangeSuccess && (
+                                <div className={`p-3 rounded-lg flex items-center gap-2 ${colors.feedbackSuccessBg}`}>
+                                    <CheckCircle size={16} /> <span className="text-sm">{passwordChangeSuccess}</span>
+                                </div>
+                            )}
+                            {passwordChangeError && (
+                                <div className={`p-3 rounded-lg flex items-center gap-2 ${colors.feedbackErrorBg}`}>
+                                    <AlertCircle size={16} /> <span className="text-sm">{passwordChangeError}</span>
+                                </div>
+                            )}
+                            <div className="space-y-4">
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Current Password</label>
+                                    <input
+                                        type="password"
+                                        value={currentPassword}
+                                        onChange={(e) => setCurrentPassword(e.target.value)}
+                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                                        placeholder="••••••••"
+                                    />
+                                </div>
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>New Password</label>
+                                    <input
+                                        type="password"
+                                        value={newPassword}
+                                        onChange={(e) => setNewPassword(e.target.value)}
+                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                                        placeholder="••••••••"
+                                    />
+                                </div>
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Confirm New Password</label>
+                                    <input
+                                        type="password"
+                                        value={confirmNewPassword}
+                                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                                        placeholder="••••••••"
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={handleChangePassword}
+                                    className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
+                                    disabled={isChangingPassword}
+                                >
+                                    {isChangingPassword ? <Loader size={16} className="animate-spin" /> : <Lock size={16} />}
+                                    Change Password
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Gemini API Key */}
+                        <div className={`rounded-xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 space-y-5`}>
+                            <h2 className="text-xl font-semibold flex items-center gap-2">
+                                <Database size={20} className="text-purple-400" /> Gemini API Key
+                            </h2>
+                            {apiKeyStatus.isLoading ? (
+                                <p className="text-gray-500">Loading...</p>
+                            ) : apiKeyStatus.data ? (
+                                <div className={`p-3 rounded-lg flex items-center gap-2 ${apiKeyStatus.data.usingOwnKey ? colors.feedbackSuccessBg : colors.feedbackErrorBg}`}>
+                                    {apiKeyStatus.data.usingOwnKey ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+                                    <span className="text-sm">{apiKeyStatus.data.message}</span>
+                                    {apiKeyStatus.data.usingOwnKey && (
+                                        <span className="text-xs font-mono ml-2">({apiKeyStatus.data.maskedKey})</span>
+                                    )}
+                                </div>
+                            ) : null}
+                            <div className="flex flex-col sm:flex-row gap-4">
+                                <div className="flex-1">
+                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Your API Key</label>
+                                    <div className="flex">
+                                        <input
+                                            type={showApiKey ? 'text' : 'password'}
+                                            value={newApiKey}
+                                            onChange={(e) => setNewApiKey(e.target.value)}
+                                            placeholder="Paste your Gemini API key here"
+                                            className={`flex-1 p-3 rounded-l-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                                        />
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowApiKey(!showApiKey)}
+                                            className="px-4 rounded-r-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+                                        >
+                                            {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                                        </button>
+                                    </div>
+                                </div>
+                                <div className="flex items-end">
+                                    <button
+                                        onClick={handleSaveApiKey}
+                                        className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
+                                        disabled={updateApiKey.isLoading}
+                                    >
+                                        {updateApiKey.isLoading ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
+                                        Save
+                                    </button>
+                                </div>
+                            </div>
+                            {apiKeyMessage && (
+                                <div className={`p-3 rounded-lg flex items-center gap-2 ${apiKeyMessage.type === 'success' ? colors.feedbackSuccessBg : colors.feedbackErrorBg}`}>
+                                    {apiKeyMessage.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
+                                    <span className="text-sm">{apiKeyMessage.text}</span>
+                                </div>
+                            )}
+                            <p className={`text-xs ${colors.textSecondary} flex items-start gap-1`}>
+                                <Info size={12} className="shrink-0 mt-0.5" />
+                                Your key is encrypted and stored securely. It will only be used to call the Gemini API on your behalf.
+                                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-teal-500 hover:underline ml-1">Get one here</a>.
+                            </p>
+                        </div>
+
+                        {/* Danger Zone */}
+                        <div className={`rounded-xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 space-y-5`}>
+                            <h2 className="text-xl font-semibold flex items-center gap-2 text-red-500">
+                                <AlertCircle size={20} /> Danger Zone
+                            </h2>
+                            <p className={`text-sm ${colors.textSecondary}`}>
+                                Permanently delete your MyMindMirror account and all associated data. This action cannot be undone.
+                            </p>
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={handleDeleteAccount}
+                                    className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonDanger} ${colors.buttonText}`}
+                                >
+                                    <Trash2 size={16} /> Delete Account
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -543,13 +492,35 @@ const handleSaveApiKey = async () => {
                 isOpen={showDeleteConfirm}
                 onClose={cancelDeleteAccount}
                 onConfirm={confirmDeleteAccount}
-                title="Confirm Account Deletion"
+                title="Delete Account"
                 message="Are you absolutely sure you want to delete your account? This action is irreversible and all your data will be permanently lost."
                 confirmText="Yes, Delete My Account"
-                cancelText="No, Keep My Account"
+                cancelText="Cancel"
                 isDestructive={true}
                 isLoading={isDeleting}
             />
+
+            {/* Global Animations */}
+            <style>{`
+                @keyframes pulse-slow {
+                    0%, 100% { opacity: 0.2; transform: scale(1); }
+                    50% { opacity: 0.4; transform: scale(1.05); }
+                }
+                @keyframes float {
+                    0% { transform: translateY(0px); }
+                    50% { transform: translateY(-10px); }
+                    100% { transform: translateY(0px); }
+                }
+                .animate-pulse-slow {
+                    animation: pulse-slow 6s ease-in-out infinite;
+                }
+                .animate-float {
+                    animation: float 4s ease-in-out infinite;
+                }
+                .animate-float-delayed {
+                    animation: float 4s ease-in-out infinite 2s;
+                }
+            `}</style>
         </div>
     );
 }

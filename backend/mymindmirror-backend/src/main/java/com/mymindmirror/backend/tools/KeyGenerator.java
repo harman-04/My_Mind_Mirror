@@ -1,8 +1,9 @@
-package com.mymindmirror.backend.util;
+package com.mymindmirror.backend.tools;
 
 import java.util.Base64;
 import java.security.SecureRandom;
 
+// Developer utility – not used in runtime. Run this main method to generate keys for application.properties / .env
 public class KeyGenerator {
     public static void main(String[] args) {
         SecureRandom random = new SecureRandom();

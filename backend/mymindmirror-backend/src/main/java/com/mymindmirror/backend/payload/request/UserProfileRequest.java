@@ -1,4 +1,4 @@
-package com.mymindmirror.backend.payload;
+package com.mymindmirror.backend.payload.request;
 
 import lombok.Data;
 import jakarta.validation.constraints.Email;
@@ -17,8 +17,4 @@ public class UserProfileRequest {
     @Size(max = 100, message = "Email must not exceed 100 characters")
     private String email;
 
-    // Password change is usually handled separately for security reasons,
-    // but can be added here if you want a single endpoint for all updates.
-    // For now, we'll omit it for simplicity and security best practices.
-    // private String newPassword;
-}
+    }

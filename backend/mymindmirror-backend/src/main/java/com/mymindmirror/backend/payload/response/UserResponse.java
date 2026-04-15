@@ -1,9 +1,9 @@
-package com.mymindmirror.backend.payload;
+package com.mymindmirror.backend.payload.response;
 
-import com.mymindmirror.backend.model.User; // Correct import for your User entity
+import com.mymindmirror.backend.model.User;
 import lombok.Data;
 import lombok.NoArgsConstructor;
-import java.util.UUID; // Correct import for UUID
+import java.util.UUID;
 
 /**
  * DTO for user details included in responses, e.g., nested in JournalEntryResponse.
@@ -25,6 +25,5 @@ public class UserResponse {
         this.id = user.getId();
         this.username = user.getUsername();
         this.email = user.getEmail();
-        // If you had other non-sensitive fields in User, you would map them here too.
     }
 }

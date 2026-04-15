@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+// src/components/FeaturesGuide.jsx
+import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
 import {
@@ -8,10 +9,11 @@ import {
   Cloud, LineChart, ListChecks, MapPin, Lock, Key, Download, Search,
   Filter, AlertTriangle, CheckCircle, RefreshCw, Calendar, HelpCircle,
   ChevronDown, ChevronUp, Activity, Smile, Frown, CircleDot, FileSpreadsheet,
-  FileText, Sparkle, Star, Award, CalendarDays, ListTree, Sigma, ScatterChart
+  FileText, Sparkle, Star, Award, CalendarDays, ListTree, Sigma, ScatterChart,
+  Menu, X
 } from 'lucide-react';
 
-// Helper to format markdown-like text (bold, italic, lists, line breaks)
+// Helper to format markdown-like text (unchanged)
 const formatText = (text) => {
   if (!text) return '';
   const escapeHtml = (str) => {
@@ -28,6 +30,7 @@ const formatText = (text) => {
   const total = lines.length;
   while (i < total) {
     const line = lines[i];
+
     const bulletMatch = line.match(/^\s*(\*|\-)\s+(.*)/);
     const numberMatch = line.match(/^\s*(\d+)\.\s+(.*)/);
     if (bulletMatch || numberMatch) {
@@ -67,19 +70,35 @@ function FeaturesGuide() {
   const { theme } = useTheme();
   const isDarkMode = theme === 'dark';
   const [openSection, setOpenSection] = useState('journal');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const sectionRefs = useRef({});
 
   const toggleSection = (section) => {
     setOpenSection(openSection === section ? null : section);
+    // On mobile, close the menu after selection
+    if (mobileMenuOpen) setMobileMenuOpen(false);
+    // Scroll to section header smoothly
+    const element = sectionRefs.current[section];
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   };
 
   const colors = {
     primary: isDarkMode ? 'text-purple-300' : 'text-purple-600',
     secondary: isDarkMode ? 'text-teal-300' : 'text-teal-600',
     background: isDarkMode ? 'bg-gray-900' : 'bg-gray-50',
-    cardBg: isDarkMode ? 'bg-gray-800/80' : 'bg-white/90',
+    cardBg: isDarkMode ? 'bg-gray-800/80 backdrop-blur-sm' : 'bg-white/90 backdrop-blur-sm',
     cardBorder: isDarkMode ? 'border-gray-700' : 'border-gray-200',
     textPrimary: isDarkMode ? 'text-gray-100' : 'text-gray-900',
     textSecondary: isDarkMode ? 'text-gray-300' : 'text-gray-600',
+    sidebarBg: isDarkMode ? 'bg-gray-900/40 backdrop-blur-sm' : 'bg-white/80 backdrop-blur-sm border-gray-200',
+        sidebarText: isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900',
+        sidebarActiveBg: isDarkMode ? 'bg-white/10' : 'bg-gray-200/70',
+        sidebarActiveText: isDarkMode ? 'text-purple-300 font-medium' : 'text-purple-700 font-medium',
+        drawerBg: isDarkMode ? 'bg-gray-900/95 backdrop-blur-xl' : 'bg-white/95 backdrop-blur-xl',
+        drawerBorder: isDarkMode ? 'border-gray-700' : 'border-gray-200',
+
   };
 
   const sections = [
@@ -303,36 +322,7 @@ function FeaturesGuide() {
         - Converts it to a PNG data URL and triggers a download.
         - The background adapts to light/dark mode for a clean image.
       `,
-    }{
-       id: 'export-charts',
-       title: 'Download Charts as Images',
-       icon: <Download size={24} />,
-       color: 'text-emerald-400',
-       content: `
-         **How to use:**
-         - Every chart on the All Entries dashboard has a small **download button** (↓) in the top‑right corner.
-         - Click the button to save the chart as a PNG image.
-         - The image is downloaded instantly to your device with a descriptive filename (e.g., "mood_trend_chart.png").
-
-         **Which charts support this?**
-         - Mood & Emotion Trends (line chart)
-         - Average Emotion Intensity (bar chart)
-         - Most Frequent Concerns (bar chart)
-         - Mood vs. Word Count Correlation (scatter plot)
-         - Emotional Profile Radar Chart
-         - Key Phrase Cloud (optional)
-
-         **Why it's useful:**
-         - Share your emotional journey on social media, in presentations, or with a therapist.
-         - Keep a visual record of your progress over time.
-         - No need for screenshot tools – one click, and the chart is saved with a clean background.
-
-         **How it works:**
-         - Uses the \`html-to-image\` library to capture the chart's DOM element.
-         - Converts it to a PNG data URL and triggers a download.
-         - The background adapts to light/dark mode for a clean image.
-       `,
-     },
+    },
     {
       id: 'search',
       title: 'Search & Filter',
@@ -422,62 +412,159 @@ function FeaturesGuide() {
     },
   ];
 
+  // Sticky Table of Contents (desktop) + mobile drawer
   return (
-    <div className={`min-h-screen w-full ${colors.background} ${colors.textPrimary} transition-colors duration-300`}>
-      {/* Hero */}
-      <section className="w-full py-20 px-4 sm:px-6 lg:px-8 text-center">
+    <div className={`min-h-screen w-full ${colors.background} ${colors.textPrimary} transition-colors duration-300 relative`}>
+      {/* Animated Background Grid */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-teal-500/5" />
+        <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse" />
+        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl animate-pulse delay-1000" />
+      </div>
+
+      {/* Hero Section */}
+      <section className="relative w-full py-20 px-4 sm:px-6 lg:px-8 text-center z-10">
         <div className="max-w-4xl mx-auto">
-          <div className="inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r from-purple-500/20 to-teal-500/20 border border-purple-500/30 mb-6">
+          <div className="inline-flex items-center px-4 py-2 rounded-full bg-gradient-to-r from-purple-500/20 to-teal-500/20 border border-purple-500/30 mb-6 animate-in fade-in slide-in-from-top-5 duration-700">
             <Sparkles className="w-4 h-4 text-purple-400 mr-2" />
             <span className="text-sm font-medium">Everything you need to know</span>
           </div>
-          <h1 className="text-4xl sm:text-5xl font-bold mb-4">
+          <h1 className="text-4xl sm:text-6xl font-bold mb-6 animate-in fade-in slide-in-from-bottom-5 duration-700">
             Features &{" "}
-            <span className="bg-gradient-to-r from-purple-400 to-teal-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-purple-400 via-pink-400 to-teal-400 bg-clip-text text-transparent">
               How It Works
             </span>
           </h1>
-          <p className={`text-xl ${colors.textSecondary}`}>
+          <p className={`text-xl ${colors.textSecondary} max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-5 duration-700 delay-100`}>
             Explore every feature in detail – from AI analysis to gamification, charts, and security.
           </p>
+
+          {/* Floating icons */}
+          <div className="absolute top-20 left-5 opacity-30 animate-float hidden lg:block">
+            <Sparkles size={32} className="text-purple-400" />
+          </div>
+          <div className="absolute top-40 right-10 opacity-30 animate-float-delayed hidden lg:block">
+            <Brain size={32} className="text-teal-400" />
+          </div>
+          <div className="absolute bottom-20 left-1/3 opacity-30 animate-float-slow hidden lg:block">
+            <Trophy size={32} className="text-amber-400" />
+          </div>
         </div>
       </section>
 
-      {/* Interactive Accordion */}
-      <section className="w-full py-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-4xl mx-auto space-y-4">
-          {sections.map((section) => (
-            <div
-              key={section.id}
-              className={`rounded-xl ${colors.cardBg} border ${colors.cardBorder} overflow-hidden transition-all duration-300`}
-            >
-              <button
-                onClick={() => toggleSection(section.id)}
-                className="w-full flex justify-between items-center p-6 text-left hover:bg-white/5 transition"
-              >
-                <div className="flex items-center gap-3">
-                  <div className={section.color}>{section.icon}</div>
-                  <h2 className="text-xl font-semibold">{section.title}</h2>
-                </div>
-                {openSection === section.id ? (
-                  <ChevronUp size={20} className="text-gray-500" />
-                ) : (
-                  <ChevronDown size={20} className="text-gray-500" />
-                )}
-              </button>
-              {openSection === section.id && (
-                <div className="p-6 pt-0 border-t border-gray-200 dark:border-gray-700">
-                  <div className="guide-content prose prose-sm dark:prose-invert max-w-none">
-                    <div dangerouslySetInnerHTML={{ __html: formatText(section.content) }} />
+      {/* Main Content with Sidebar (Desktop) */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 relative z-10">
+              <div className="flex flex-col lg:flex-row gap-8">
+                {/* Sticky Table of Contents (Desktop) – FIXED LIGHT MODE */}
+                <aside className="hidden lg:block w-80 shrink-0">
+                  <div className={`sticky top-24 rounded-xl ${colors.sidebarBg} border ${colors.cardBorder} p-5 shadow-sm`}>
+                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                      <Menu size={18} /> Contents
+                    </h3>
+                    <nav className="space-y-1 max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar">
+                      {sections.map((section) => (
+                        <button
+                          key={section.id}
+                          onClick={() => toggleSection(section.id)}
+                          className={`w-full text-left px-3 py-2 rounded-lg transition flex items-center gap-2 text-sm ${
+                            openSection === section.id
+                              ? `${colors.sidebarActiveText} ${colors.sidebarActiveBg}`
+                              : `${colors.sidebarText} hover:bg-white/5`
+                          }`}
+                        >
+                          <span className="shrink-0">{section.icon}</span>
+                          <span className="truncate">{section.title}</span>
+                        </button>
+                      ))}
+                    </nav>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
+                </aside>
 
-      {/* Global styles for guide content */}
+                {/* Mobile TOC Button – unchanged */}
+                <div className="lg:hidden fixed bottom-6 right-6 z-40">
+                  <button
+                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+                    className="p-3 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 text-white shadow-lg hover:shadow-xl transition"
+                  >
+                    {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+                  </button>
+                </div>
+
+                {/* Mobile Drawer – FIXED LIGHT MODE */}
+                {mobileMenuOpen && (
+                  <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm lg:hidden" onClick={() => setMobileMenuOpen(false)}>
+                    <div className={`absolute right-0 top-0 bottom-0 w-80 ${colors.drawerBg} border-l ${colors.drawerBorder} shadow-xl p-5 overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-semibold">Contents</h3>
+                        <button onClick={() => setMobileMenuOpen(false)} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800">
+                          <X size={20} />
+                        </button>
+                      </div>
+                      <nav className="space-y-2">
+                        {sections.map((section) => (
+                          <button
+                            key={section.id}
+                            onClick={() => toggleSection(section.id)}
+                            className={`w-full text-left px-3 py-2 rounded-lg transition flex items-center gap-2 ${
+                              openSection === section.id
+                                ? `${colors.sidebarActiveText} ${colors.sidebarActiveBg}`
+                                : `${colors.sidebarText} hover:bg-white/5`
+                            }`}
+                          >
+                            {section.icon}
+                            <span>{section.title}</span>
+                          </button>
+                        ))}
+                      </nav>
+                    </div>
+                  </div>
+                )}
+
+          {/* Accordion Sections */}
+          <div className="flex-1 space-y-5">
+            {sections.map((section) => (
+              <div
+                key={section.id}
+                ref={(el) => (sectionRefs.current[section.id] = el)}
+                className={`rounded-2xl ${colors.cardBg} border ${colors.cardBorder} overflow-hidden transition-all duration-300 hover:shadow-xl group`}
+              >
+                <button
+                  onClick={() => toggleSection(section.id)}
+                  className="w-full flex justify-between items-center p-6 text-left hover:bg-white/5 transition"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`p-2 rounded-xl bg-gradient-to-br ${section.color.replace('text', 'bg')}/20 ${section.color}`}>
+                      {section.icon}
+                    </div>
+                    <h2 className="text-xl font-semibold">{section.title}</h2>
+                  </div>
+                  <div className={`transition-transform duration-300 ${openSection === section.id ? 'rotate-180' : ''}`}>
+                    <ChevronDown size={20} className="text-gray-500" />
+                  </div>
+                </button>
+                {openSection === section.id && (
+                  <div className="p-6 pt-0 border-t border-gray-200 dark:border-gray-700 animate-in slide-in-from-top-2 duration-300">
+                    <div className="guide-content prose prose-sm dark:prose-invert max-w-none">
+                      <div dangerouslySetInnerHTML={{ __html: formatText(section.content) }} />
+                    </div>
+                    {/* Tiny anchor hint */}
+                    <div className="mt-4 text-right">
+                      <button
+                        onClick={() => toggleSection(section.id)}
+                        className="text-xs text-gray-500 hover:text-purple-400 transition"
+                      >
+                        Collapse
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Global styles */}
       <style>{`
         .guide-content p.guide-paragraph {
           margin-bottom: 1rem;
@@ -499,23 +586,56 @@ function FeaturesGuide() {
           font-style: italic;
           color: ${isDarkMode ? '#8DE2DD' : '#5CC8C2'};
         }
+
+
+        .custom-scrollbar::-webkit-scrollbar {
+                  width: 4px;
+                }
+                .custom-scrollbar::-webkit-scrollbar-track {
+                  background: ${isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'};
+                  border-radius: 10px;
+                }
+                .custom-scrollbar::-webkit-scrollbar-thumb {
+                  background: ${isDarkMode ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'};
+                  border-radius: 10px;
+                }
+        @keyframes float {
+          0% { transform: translateY(0px); }
+          50% { transform: translateY(-10px); }
+          100% { transform: translateY(0px); }
+        }
+        .animate-float {
+          animation: float 4s ease-in-out infinite;
+        }
+        .animate-float-delayed {
+          animation: float 4s ease-in-out infinite 2s;
+        }
+        .animate-float-slow {
+          animation: float 6s ease-in-out infinite 1s;
+        }
       `}</style>
 
       {/* Call to Action */}
-      <section className="w-full py-20 px-4 sm:px-6 lg:px-8">
+      <section className="relative w-full py-20 px-4 sm:px-6 lg:px-8 z-10">
         <div className="max-w-4xl mx-auto text-center">
-          <div className={`rounded-3xl ${colors.cardBg} border ${colors.cardBorder} p-12`}>
-            <Feather className="w-12 h-12 mx-auto mb-6 text-purple-400" />
-            <h2 className="text-3xl font-bold mb-4">Ready to experience it yourself?</h2>
-            <p className={`text-lg mb-8 ${colors.textSecondary}`}>
-              Start journaling today and unlock the power of AI-driven self-reflection.
-            </p>
-            <Link
-              to="/register"
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-500 to-teal-500 text-white px-8 py-3 rounded-full font-semibold hover:shadow-lg transition"
-            >
-              Create Free Account <ArrowRight className="w-4 h-4" />
-            </Link>
+          <div className={`rounded-3xl ${colors.cardBg} border ${colors.cardBorder} p-8 md:p-12 backdrop-blur-sm relative overflow-hidden group`}>
+            <div className="absolute inset-0 bg-gradient-to-r from-purple-500/10 to-teal-500/10 opacity-0 group-hover:opacity-100 transition duration-700" />
+            <div className="relative">
+              <div className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-purple-500/20 to-teal-500/20 mb-6">
+                <Feather className="w-8 h-8 text-purple-400" />
+              </div>
+              <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to experience it yourself?</h2>
+              <p className={`text-lg mb-8 ${colors.textSecondary}`}>
+                Start journaling today and unlock the power of AI-driven self-reflection.
+              </p>
+              <Link
+                to={localStorage.getItem('jwtToken') ? "/journal" : "/register"}
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-500 to-teal-500 text-white px-8 py-3 rounded-full font-semibold hover:shadow-lg hover:scale-105 transition transform"
+              >
+                {localStorage.getItem('jwtToken') ? "Go to Journal" : "Create Free Account"}
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition" />
+              </Link>
+            </div>
           </div>
         </div>
       </section>

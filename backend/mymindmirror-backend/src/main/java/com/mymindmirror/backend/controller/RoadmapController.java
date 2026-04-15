@@ -29,12 +29,6 @@ public class RoadmapController {
     private final UserService userService;
     private final ObjectMapper objectMapper;
 
-
-//    public RoadmapController(RoadmapService roadmapService, UserService userService) {
-//        this.roadmapService = roadmapService;
-//        this.userService = userService;
-//    }
-
     @PostMapping("/generate")
     public ResponseEntity<?> generateRoadmap(@AuthenticationPrincipal UserDetails userDetails,
                                              @RequestBody RoadmapGenerateRequest request) {
@@ -48,7 +42,7 @@ public class RoadmapController {
             RoadmapResponse response = roadmapService.toResponse(roadmap);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Failed to generate roadmap: " + e.getMessage());
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to generate roadmap: " + e.getMessage()));
         }
     }
 
@@ -72,7 +66,7 @@ public class RoadmapController {
             roadmapService.deleteRoadmap(id, userOpt.get());
             return ResponseEntity.ok().build();
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Failed to delete roadmap: " + e.getMessage());
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to delete roadmap: " + e.getMessage()));
         }
     }
 
@@ -87,7 +81,7 @@ public class RoadmapController {
             roadmapService.importTaskToMilestone(request.getRoadmapId(), request.getTaskId(), userOpt.get());
             return ResponseEntity.ok().body("Task imported successfully");
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Failed to import task: " + e.getMessage());
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to import roadmap: " + e.getMessage()));
         }
     }
 
@@ -102,7 +96,7 @@ public class RoadmapController {
             roadmapService.toggleTaskCompletion(taskId, userOpt.get());
             return ResponseEntity.ok().build();
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Failed to toggle task: " + e.getMessage());
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to toggle roadmap: " + e.getMessage()));
         }
     }
 
@@ -119,7 +113,7 @@ public class RoadmapController {
         } catch (IllegalStateException e) {
             return ResponseEntity.status(400).body(e.getMessage());
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Failed to continue roadmap: " + e.getMessage());
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to continue roadmap: " + e.getMessage()));
         }
     }
 
@@ -141,7 +135,7 @@ public class RoadmapController {
             );
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Failed to elaborate task: " + e.getMessage());
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to elaborated roadmap: " + e.getMessage()));
         }
     }
 
@@ -158,7 +152,7 @@ public class RoadmapController {
         } catch (IllegalStateException e) {
             return ResponseEntity.status(400).body(e.getMessage());
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Failed to reschedule: " + e.getMessage());
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to reschedule roadmap: " + e.getMessage()));
         }
     }
 }

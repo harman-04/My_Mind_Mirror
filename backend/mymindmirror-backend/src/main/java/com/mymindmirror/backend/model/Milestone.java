@@ -2,9 +2,11 @@
 package com.mymindmirror.backend.model;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.mymindmirror.backend.enums.Status;
 import jakarta.persistence.*;
+import lombok.Data;
+
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -15,10 +17,12 @@ import java.util.UUID;
  */
 @Entity
 @Table(name = "milestones")
+@Data
 public class Milestone {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY) // Keep LAZY for User to avoid circular dependency issues with User
@@ -42,19 +46,11 @@ public class Milestone {
     @Column(nullable = false)
     private Status status; // E.g., PENDING, IN_PROGRESS, COMPLETED, OVERDUE
 
-    // ⭐ CHANGE FetchType.LAZY to FetchType.EAGER for tasks ⭐
     @OneToMany(mappedBy = "milestone", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     @OrderBy("creationTimestamp ASC") // Order tasks by creation time
     private List<Task> tasks = new ArrayList<>();
 
-    // Enum for Milestone and Task status
-    public enum Status {
-        PENDING,
-        IN_PROGRESS,
-        COMPLETED,
-        OVERDUE,
-        CANCELLED
-    }
+
 
     // Constructors
     public Milestone() {
@@ -68,71 +64,6 @@ public class Milestone {
         this.title = title;
         this.description = description;
         this.dueDate = dueDate;
-    }
-
-    // Getters and Setters
-    public UUID getId() {
-        return id;
-    }
-
-    public void setId(UUID id) {
-        this.id = id;
-    }
-
-    public User getUser() {
-        return user;
-    }
-
-    public void setUser(User user) {
-        this.user = user;
-    }
-
-    public String getTitle() {
-        return title;
-    }
-
-    public void setTitle(String title) {
-        this.title = title;
-    }
-
-    public String getDescription() {
-        return description;
-    }
-
-    public void setDescription(String description) {
-        this.description = description;
-    }
-
-    public LocalDate getCreationDate() {
-        return creationDate;
-    }
-
-    public void setCreationDate(LocalDate creationDate) {
-        this.creationDate = creationDate;
-    }
-
-    public LocalDate getDueDate() {
-        return dueDate;
-    }
-
-    public void setDueDate(LocalDate dueDate) {
-        this.dueDate = dueDate;
-    }
-
-    public Status getStatus() {
-        return status;
-    }
-
-    public void setStatus(Status status) {
-        this.status = status;
-    }
-
-    public List<Task> getTasks() {
-        return tasks;
-    }
-
-    public void setTasks(List<Task> tasks) {
-        this.tasks = tasks;
     }
 
     /**
@@ -165,7 +96,7 @@ public class Milestone {
             return 0.0;
         }
         long completedTasks = tasks.stream()
-                .filter(task -> task.getStatus() == Task.Status.COMPLETED)
+                .filter(task -> task.getStatus() == Status.COMPLETED)
                 .count();
         return (double) completedTasks / tasks.size() * 100.0;
     }

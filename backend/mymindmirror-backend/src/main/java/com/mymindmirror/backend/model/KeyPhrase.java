@@ -15,7 +15,7 @@ public class KeyPhrase {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id; // This satisfies the Aiven Primary Key requirement
+    private Long id;
 
     @Column(name = "key_phrase", columnDefinition = "TEXT", nullable = false)
     private String phrase;

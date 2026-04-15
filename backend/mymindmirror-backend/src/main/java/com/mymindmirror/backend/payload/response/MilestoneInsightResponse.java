@@ -1,6 +1,7 @@
 // src/main/java/com/mymindmirror.backend/payload/response/MilestoneInsightResponse.java
 package com.mymindmirror.backend.payload.response;
 
+import com.mymindmirror.backend.enums.InsightStatus;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -20,17 +21,11 @@ public class MilestoneInsightResponse {
     private List<String> tips;
     private String encouragement;
     private List<String> suggestedNewTasks;
-
-    // ⭐ NEW: Add status field and InsightStatus enum ⭐
     private InsightStatus status; // To indicate if the insight generation was successful or an error
 
-    public enum InsightStatus {
-        SUCCESS,
-        ERROR,
-        PARTIAL // Optional: if you want to indicate some insights generated, but not all
-    }
 
-    // ⭐ NEW Constructor for error cases or simplified responses ⭐
+
+    // Constructor for error cases or simplified responses
     public MilestoneInsightResponse(String performanceAssessment, InsightStatus status, List<String> tips, String encouragement, List<String> suggestedNewTasks) {
         this.remainingWork = "N/A"; // Default for error cases
         this.performanceAssessment = performanceAssessment;

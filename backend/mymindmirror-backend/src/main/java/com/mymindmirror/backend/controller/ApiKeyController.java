@@ -1,13 +1,13 @@
 package com.mymindmirror.backend.controller;
 
 import com.mymindmirror.backend.model.User;
-import com.mymindmirror.backend.payload.ApiKeyRequest;
-import com.mymindmirror.backend.payload.ApiKeyResponse;
-import com.mymindmirror.backend.payload.ApiKeyStatusResponse;
+import com.mymindmirror.backend.payload.request.ApiKeyRequest;
+import com.mymindmirror.backend.payload.response.ApiKeyResponse;
+import com.mymindmirror.backend.payload.response.ApiKeyStatusResponse;
 import com.mymindmirror.backend.service.ApiKeyService;
 import com.mymindmirror.backend.service.UserService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -17,16 +17,12 @@ import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/users")
+@RequiredArgsConstructor
+@Slf4j
 public class ApiKeyController {
 
-    private static final Logger logger = LoggerFactory.getLogger(ApiKeyController.class);
     private final ApiKeyService apiKeyService;
     private final UserService userService;
-
-    public ApiKeyController(ApiKeyService apiKeyService, UserService userService) {
-        this.apiKeyService = apiKeyService;
-        this.userService = userService;
-    }
 
     /**
      * Get masked Gemini API key for the authenticated user.
@@ -63,10 +59,10 @@ public class ApiKeyController {
         if (newKey == null || newKey.isBlank()) {
             // Clear the key
             apiKeyService.saveApiKey(user, null);
-            logger.info("Cleared API key for user {}", user.getUsername());
+            log.info("Cleared API key for user {}", user.getUsername());
         } else {
             apiKeyService.saveApiKey(user, newKey);
-            logger.info("Updated API key for user {}", user.getUsername());
+            log.info("Updated API key for user {}", user.getUsername());
         }
         return ResponseEntity.noContent().build();
     }

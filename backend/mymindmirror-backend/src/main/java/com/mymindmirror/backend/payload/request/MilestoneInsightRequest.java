@@ -1,7 +1,6 @@
 // src/main/java/com/mymindmirror.backend/payload/request/MilestoneInsightRequest.java
-        package com.mymindmirror.backend.payload.request;
-
-import com.mymindmirror.backend.model.Milestone;
+package com.mymindmirror.backend.payload.request;
+import com.mymindmirror.backend.enums.Status;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -20,7 +19,7 @@ public class MilestoneInsightRequest {
     private String title;
     private String description;
     private LocalDate dueDate;
-    private Milestone.Status status;
+    private Status status;
     private double completionPercentage;
     private List<TaskForInsightRequest> tasks; // List of nested task DTOs
 }

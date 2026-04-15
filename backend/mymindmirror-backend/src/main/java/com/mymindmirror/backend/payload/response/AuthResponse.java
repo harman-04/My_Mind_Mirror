@@ -1,9 +1,9 @@
 // AuthResponse.java
-package com.mymindmirror.backend.payload;
+package com.mymindmirror.backend.payload.response;
 
-import lombok.AllArgsConstructor; // Lombok for all-args constructor
+import lombok.AllArgsConstructor;
 import lombok.Data;
-import lombok.NoArgsConstructor; // Lombok for no-args constructor
+import lombok.NoArgsConstructor;
 
 /**
  * DTO for authentication responses (returning JWT token).

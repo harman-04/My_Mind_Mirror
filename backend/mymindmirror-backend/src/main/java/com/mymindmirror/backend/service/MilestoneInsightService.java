@@ -6,11 +6,9 @@ import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.payload.request.MilestoneInsightRequest;
 import com.mymindmirror.backend.payload.request.TaskForInsightRequest;
 import com.mymindmirror.backend.payload.response.MilestoneInsightResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -20,19 +18,15 @@ import java.util.stream.Collectors;
  * Service to interact with the Flask ML service for Milestone insights.
  */
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class MilestoneInsightService {
 
-    private static final Logger logger = LoggerFactory.getLogger(MilestoneInsightService.class);
 
     // Inject the WebClient configured for the ML service
     private final ApiKeyService apiKeyService;
     private final MLServiceClient mlServiceClient;
 
-    // Remove the @Qualifier entirely as it is not needed for these two services
-    public MilestoneInsightService(ApiKeyService apiKeyService, MLServiceClient mlServiceClient) {
-        this.apiKeyService = apiKeyService;
-        this.mlServiceClient = mlServiceClient;
-    } 
     /**
      * Calls the Flask ML service to get AI-driven insights for a given milestone.
      *
@@ -44,7 +38,7 @@ public class MilestoneInsightService {
     public Mono<MilestoneInsightResponse> getMilestoneInsights(Milestone milestone) {
         User user = milestone.getUser();
         String apiKey = apiKeyService.getDecryptedApiKey(user);
-        logger.info("MilestoneInsightService: Requesting AI insights for milestone: {}", milestone.getTitle());
+        log.info("MilestoneInsightService: Requesting AI insights for milestone: {}", milestone.getTitle());
 
         // Map Milestone tasks to TaskForInsightRequest DTOs
         List<TaskForInsightRequest> taskRequests = milestone.getTasks().stream()

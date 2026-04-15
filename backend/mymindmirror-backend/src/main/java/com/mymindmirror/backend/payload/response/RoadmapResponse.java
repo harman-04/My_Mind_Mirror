@@ -1,5 +1,4 @@
 package com.mymindmirror.backend.payload.response;
-// ds 2
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -32,7 +31,7 @@ public class RoadmapResponse {
         private Boolean completed;
         private String taskType;
         private String details;
-        private List<String> subtasks;  // or String if you store as JSON
+        private List<String> subtasks;
         private Boolean importedToMilestone;
     }
 

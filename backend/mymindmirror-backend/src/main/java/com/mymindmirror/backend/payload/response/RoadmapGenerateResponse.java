@@ -30,8 +30,8 @@ public class RoadmapGenerateResponse {
         private Integer week;
         private String description;
         private String type; // "daily", "weekly"
-        private String details;          // ← add
-        private List<String> subtasks;    // ← add
+        private String details;
+        private List<String> subtasks;
     }
 
     @Data

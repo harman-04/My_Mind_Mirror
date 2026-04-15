@@ -7,27 +7,23 @@ import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.model.UserStats;
 import com.mymindmirror.backend.payload.response.UserStatsResponse;
 import com.mymindmirror.backend.repository.UserStatsRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class GamificationService {
 
-    private static final Logger logger = LoggerFactory.getLogger(GamificationService.class);
     private final UserStatsRepository userStatsRepository;
     private final ObjectMapper objectMapper;
 
-    public GamificationService(UserStatsRepository userStatsRepository, ObjectMapper objectMapper) {
-        this.userStatsRepository = userStatsRepository;
-        this.objectMapper = objectMapper;
-    }
 
     @Transactional
     public UserStats initializeStats(User user) {
@@ -101,7 +97,7 @@ public class GamificationService {
                 try {
                     stats.setBadgesJson(objectMapper.writeValueAsString(badges));
                 } catch (JsonProcessingException e) {
-                    logger.error("Failed to serialize badges", e);
+                    log.error("Failed to serialize badges", e);
                 }
             }
 
@@ -116,7 +112,7 @@ public class GamificationService {
                 return objectMapper.readValue(stats.getBadgesJson(), new TypeReference<Set<String>>() {});
             }
         } catch (Exception e) {
-            logger.error("Failed to parse badges JSON", e);
+            log.error("Failed to parse badges JSON", e);
         }
         return new HashSet<>();
     }
@@ -132,7 +128,7 @@ public class GamificationService {
                 stats.setBadgesJson(objectMapper.writeValueAsString(badges));
                 userStatsRepository.save(stats);
             } catch (JsonProcessingException e) {
-                logger.error("Failed to serialize badges", e);
+                log.error("Failed to serialize badges", e);
             }
         }
     }

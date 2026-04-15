@@ -1,11 +1,11 @@
 package com.mymindmirror.backend.controller;
 
-import com.mymindmirror.backend.payload.DailyAggregatedDataResponse;
+import com.mymindmirror.backend.payload.response.DailyAggregatedDataResponse;
 import com.mymindmirror.backend.service.JournalService;
 import com.mymindmirror.backend.service.UserService;
 import com.mymindmirror.backend.model.User;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -23,25 +23,20 @@ import java.util.Map;
  */
 @RestController
 @RequestMapping("/api/ml")
+@RequiredArgsConstructor
+@Slf4j
 public class MlController {
-
-    private static final Logger logger = LoggerFactory.getLogger(MlController.class);
 
     private final JournalService journalService;
     private final UserService userService;
 
-    public MlController(JournalService journalService, UserService userService) {
-        this.journalService = journalService;
-        this.userService = userService;
-    }
-
     private User getCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         String username = authentication.getName();
-        logger.debug("Attempting to retrieve current user: {}", username);
+        log.debug("Attempting to retrieve current user: {}", username);
         return userService.findByUsername(username)
                 .orElseThrow(() -> {
-                    logger.error("Authenticated user '{}' not found in database. This indicates a security misconfiguration.", username);
+                    log.error("Authenticated user '{}' not found in database. This indicates a security misconfiguration.", username);
                     return new RuntimeException("Authenticated user not found.");
                 });
     }
@@ -52,7 +47,7 @@ public class MlController {
     public ResponseEntity<List<DailyAggregatedDataResponse>> getDailyAggregatedData(
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate) {
-        logger.info("Received request for daily aggregated data.");
+        log.info("Received request for daily aggregated data.");
         User currentUser = getCurrentUser(); // Ensure user is authenticated
 
         LocalDate start = LocalDate.now().minusDays(30); // Default to last 30 days
@@ -66,12 +61,12 @@ public class MlController {
                 end = LocalDate.parse(endDate);
             }
         } catch (DateTimeParseException e) {
-            logger.error("Invalid date format provided for daily aggregated data: {}. Using default date range.", e.getMessage());
+            log.error("Invalid date format provided for daily aggregated data: {}. Using default date range.", e.getMessage());
             return ResponseEntity.badRequest().body(null);
         }
 
         List<DailyAggregatedDataResponse> data = journalService.getDailyAggregatedDataForUser(currentUser, start, end);
-        logger.info("Found {} daily aggregated data points for user {} in range {} to {}.", data.size(), currentUser.getUsername(), start, end);
+        log.info("Found {} daily aggregated data points for user {} in range {} to {}.", data.size(), currentUser.getUsername(), start, end);
         return ResponseEntity.ok(data);
     }
 
@@ -88,11 +83,11 @@ public class MlController {
         }
 
         try {
-            logger.info("Received request to run anomaly detection with {} data points.", requestBody.size());
+            log.info("Received request to run anomaly detection with {} data points.", requestBody.size());
             Map<String, Object> anomalyResults = journalService.runAnomalyDetection(requestBody);
             return ResponseEntity.ok(anomalyResults);
         } catch (Exception e) {
-            logger.error("Error running anomaly detection: {}", e.getMessage(), e);
+            log.error("Error running anomaly detection: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("error", "Failed to run anomaly detection."));
         }
     }

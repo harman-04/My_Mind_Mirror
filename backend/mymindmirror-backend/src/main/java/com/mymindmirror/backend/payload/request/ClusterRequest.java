@@ -1,6 +1,6 @@
 package com.mymindmirror.backend.payload.request;
 
-import com.fasterxml.jackson.annotation.JsonProperty; // ⭐ NEW IMPORT ⭐
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -14,7 +14,7 @@ import java.util.UUID;
 public class ClusterRequest {
     private List<String> journalTexts;
 
-    @JsonProperty("nClusters") // ⭐ ADD THIS ANNOTATION ⭐
+    @JsonProperty("nClusters")
     private Integer nClusters;
 
     private UUID userId;

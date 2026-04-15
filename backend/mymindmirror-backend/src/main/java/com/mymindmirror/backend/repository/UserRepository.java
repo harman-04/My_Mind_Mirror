@@ -20,18 +20,16 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     Optional<User> findById(UUID id);
 
     /**
-     * ⭐ NEW METHOD ⭐
      * Finds a User by their email address.
      * @param email The email to search for.
      * @return An Optional containing the User if found, or empty if not.
      */
-    Optional<User> findByEmail(String email); // ⭐ ADDED METHOD ⭐
+    Optional<User> findByEmail(String email);
 
     /**
-     * ⭐ NEW METHOD ⭐
      * Checks if a User with the given email already exists.
      * @param email The email to check.
      * @return True if a user with this email exists, false otherwise.
      */
-    Boolean existsByEmail(String email); // ⭐ ADDED METHOD ⭐
+    Boolean existsByEmail(String email);
 }

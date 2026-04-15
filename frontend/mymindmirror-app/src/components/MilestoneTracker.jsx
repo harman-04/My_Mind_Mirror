@@ -7,7 +7,10 @@ import { format, parseISO, isValid } from 'date-fns';
 import { useTheme } from '../contexts/ThemeContext';
 import { CircularProgressbar, buildStyles } from 'react-circular-progressbar';
 import 'react-circular-progressbar/dist/styles.css';
-import { Loader, Lightbulb, ThumbsUp, Target, ChevronDown, ChevronUp, MapPin } from 'lucide-react';
+import {
+  Loader, Lightbulb, ThumbsUp, Target, ChevronDown, ChevronUp, MapPin,
+  Plus, Edit2, Trash2, CheckCircle, Circle, Calendar, Clock, AlertCircle
+} from 'lucide-react';
 
 const API_BASE_URL = 'http://localhost:8080/api';
 
@@ -18,15 +21,14 @@ const getAuthHeader = () => {
 };
 
 // --------------------------------------------------------------
-// Reusable Modal Component (Portal-based)
+// Reusable Modal Component (Portal-based, glass styled)
 // --------------------------------------------------------------
-const Modal = ({ isOpen, onClose, title, message, confirmText = 'Delete', cancelText = 'Cancel', onConfirm, theme }) => {
+const Modal = ({ isOpen, onClose, title, message, confirmText = 'Delete', cancelText = 'Cancel', onConfirm, theme, isDestructive = true }) => {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
     if (isOpen) {
-      // Prevent scrolling on body when modal is open
       document.body.style.overflow = 'hidden';
     } else {
       document.body.style.overflow = 'unset';
@@ -39,37 +41,43 @@ const Modal = ({ isOpen, onClose, title, message, confirmText = 'Delete', cancel
   if (!isOpen || !mounted) return null;
 
   return ReactDOM.createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+      <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
       <div
-        className="absolute inset-0"
-        onClick={onClose}
-        aria-hidden="true"
-      />
-      <div
-        className={`relative max-w-sm w-full p-6 rounded-lg shadow-xl text-center ${
-          theme === 'dark' ? 'bg-gray-800 text-gray-200' : 'bg-white text-gray-800'
-        }`}
-        style={{ transform: 'translateY(0)' }}
+        className={`relative max-w-sm w-full rounded-2xl shadow-2xl overflow-hidden ${
+          theme === 'dark' ? 'bg-gray-800/95 backdrop-blur-md border-gray-700' : 'bg-white/95 backdrop-blur-md border-gray-200'
+        } border`}
       >
-        <h3 className="text-xl font-poppins font-semibold mb-4">{title}</h3>
-        <p className="mb-6">{message}</p>
-        <div className="flex justify-center space-x-4">
-          <button
-            onClick={onConfirm}
-            className="py-2 px-4 rounded-full font-semibold text-white bg-red-600 hover:bg-red-700 transition"
-          >
-            {confirmText}
-          </button>
-          <button
-            onClick={onClose}
-            className={`py-2 px-4 rounded-full font-semibold transition ${
-              theme === 'dark'
-                ? 'bg-gray-600 text-gray-200 hover:bg-gray-500'
-                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-            }`}
-          >
-            {cancelText}
-          </button>
+        <div className="p-6 text-center">
+          <div className={`mx-auto w-12 h-12 mb-4 rounded-full flex items-center justify-center ${
+            isDestructive ? 'bg-red-100 dark:bg-red-900/30' : 'bg-amber-100 dark:bg-amber-900/30'
+          }`}>
+            {isDestructive ? <AlertCircle className="w-6 h-6 text-red-600 dark:text-red-400" /> : <AlertCircle className="w-6 h-6 text-amber-600 dark:text-amber-400" />}
+          </div>
+          <h3 className="text-xl font-poppins font-semibold mb-2">{title}</h3>
+          <p className={`text-sm ${theme === 'dark' ? 'text-gray-300' : 'text-gray-600'} mb-6`}>{message}</p>
+          <div className="flex justify-center gap-3">
+            <button
+              onClick={onConfirm}
+              className={`px-5 py-2 rounded-full font-medium transition shadow-md ${
+                isDestructive
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-amber-600 hover:bg-amber-700 text-white'
+              }`}
+            >
+              {confirmText}
+            </button>
+            <button
+              onClick={onClose}
+              className={`px-5 py-2 rounded-full font-medium transition ${
+                theme === 'dark'
+                  ? 'bg-gray-700 text-gray-200 hover:bg-gray-600'
+                  : 'bg-gray-200 text-gray-800 hover:bg-gray-300'
+              }`}
+            >
+              {cancelText}
+            </button>
+          </div>
         </div>
       </div>
     </div>,
@@ -78,14 +86,44 @@ const Modal = ({ isOpen, onClose, title, message, confirmText = 'Delete', cancel
 };
 
 // --------------------------------------------------------------
+// Skeleton Component for Milestones
+// --------------------------------------------------------------
+const MilestoneSkeleton = ({ theme }) => {
+  const isDark = theme === 'dark';
+  return (
+    <div className={`p-5 rounded-2xl ${isDark ? 'bg-gray-800/60' : 'bg-white/70'} border ${isDark ? 'border-gray-700/50' : 'border-gray-200/50'} shadow-lg animate-pulse`}>
+      <div className="flex flex-col sm:flex-row justify-between gap-4">
+        <div className="flex-1 space-y-2">
+          <div className="h-6 bg-gray-300 dark:bg-gray-700 rounded w-3/4" />
+          <div className="h-4 bg-gray-300 dark:bg-gray-700 rounded w-1/2" />
+        </div>
+        <div className="w-16 h-16 bg-gray-300 dark:bg-gray-700 rounded-full" />
+      </div>
+    </div>
+  );
+};
+
+// --------------------------------------------------------------
 // Main MilestoneTracker Component
 // --------------------------------------------------------------
 function MilestoneTracker({ userId }) {
   const { theme } = useTheme();
+  const isDarkMode = theme === 'dark';
   const queryClient = useQueryClient();
 
   // Helper to detect temporary IDs
   const isTempId = (id) => typeof id === 'string' && id.startsWith('temp-');
+
+  // Glass‑morphic styles
+  const cardBg = isDarkMode ? 'bg-gray-800/60 backdrop-blur-md' : 'bg-white/70 backdrop-blur-md';
+  const cardBorder = isDarkMode ? 'border-gray-700/50' : 'border-gray-200/50';
+  const sectionBg = isDarkMode ? 'bg-gray-800/40 backdrop-blur-sm' : 'bg-white/80 backdrop-blur-sm';
+  const sectionBorder = isDarkMode ? 'border-gray-700/40' : 'border-gray-200/40';
+  const textPrimary = isDarkMode ? 'text-gray-100' : 'text-gray-900';
+  const textSecondary = isDarkMode ? 'text-gray-300' : 'text-gray-600';
+  const inputBg = isDarkMode ? 'bg-gray-800/80' : 'bg-white/90';
+  const inputBorder = isDarkMode ? 'border-gray-600' : 'border-gray-300';
+  const inputFocusRing = 'focus:ring-purple-500';
 
   // --- Local UI state ---
   const [expandedMilestoneId, setExpandedMilestoneId] = useState(null);
@@ -104,7 +142,7 @@ function MilestoneTracker({ userId }) {
   const [editedTaskDueDate, setEditedTaskDueDate] = useState('');
   const [editedTaskStatus, setEditedTaskStatus] = useState('');
 
-  // Modal visibility states
+  // Modal states
   const [deleteMilestoneModal, setDeleteMilestoneModal] = useState({ isOpen: false, milestoneId: null });
   const [deleteTaskModal, setDeleteTaskModal] = useState({ isOpen: false, milestoneId: null, taskId: null });
 
@@ -146,7 +184,7 @@ function MilestoneTracker({ userId }) {
     }
   }, [queryClient, userId]);
 
-  // --- Optimistic Mutations (same as before, unchanged) ---
+  // --- Optimistic Mutations (unchanged logic) ---
   const addMilestoneMutation = useMutation({
     mutationFn: (newMilestone) => {
       const headers = getAuthHeader();
@@ -466,7 +504,7 @@ function MilestoneTracker({ userId }) {
     setTimeout(() => setSuccessMessage(''), 3000);
   };
 
-  // --- Helpers (styling, expand) ---
+  // --- Helpers ---
   const getStatusColorClass = (status) => {
     switch (status) {
       case 'COMPLETED': return 'bg-green-500 text-white';
@@ -498,89 +536,83 @@ function MilestoneTracker({ userId }) {
     }
   };
 
-  // --- Loading & error states ---
+  // --- Loading skeleton ---
   if (loadingMilestones) {
     return (
-      <div className="p-8 rounded-[2rem] shadow-xl w-full bg-white/40 dark:bg-slate-900/40 backdrop-blur-xl border border-white/20 dark:border-slate-800">
-        <div className="animate-pulse space-y-6">
-          <div className="h-6 bg-slate-200 dark:bg-slate-700/50 rounded-full w-1/4 mb-8" />
-          <div className="space-y-4">
-            <div className="h-24 bg-slate-200/50 dark:bg-slate-800/40 rounded-2xl" />
-            <div className="h-24 bg-slate-200/50 dark:bg-slate-800/40 rounded-2xl" />
-            <div className="h-24 bg-slate-200/50 dark:bg-slate-800/40 rounded-2xl" />
-          </div>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center mb-4">
+          <div className="h-8 bg-gray-300 dark:bg-gray-700 rounded w-48 animate-pulse" />
+          <div className="h-10 bg-gray-300 dark:bg-gray-700 rounded-full w-28 animate-pulse" />
         </div>
+        <MilestoneSkeleton theme={theme} />
+        <MilestoneSkeleton theme={theme} />
+        <MilestoneSkeleton theme={theme} />
       </div>
     );
   }
 
   if (milestonesError) {
     return (
-      <div className={`p-6 rounded-lg shadow-md text-center ${theme === 'dark' ? 'bg-red-900/40 text-red-300' : 'bg-red-100 text-red-700'}`}>
-        <p className="text-xl font-poppins font-semibold">Error Loading Milestones</p>
-        <p className="font-inter mt-2">{milestonesError.message}</p>
+      <div className={`p-6 rounded-2xl text-center ${cardBg} border ${cardBorder} shadow-lg`}>
+        <AlertCircle size={40} className="text-red-500 mx-auto mb-3" />
+        <p className="text-red-500 font-medium">Error Loading Milestones</p>
+        <p className={`text-sm ${textSecondary} mt-1`}>{milestonesError.message}</p>
       </div>
     );
   }
 
-  // --- Main render (same as before, but modals replaced with Portal version) ---
+  // --- Main render ---
   return (
-    <div className={`p-6 rounded-lg shadow-md transition-all duration-500 w-full font-inter
-                    ${theme === 'dark' ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-gray-200'}`}>
-      <h2 className="text-3xl font-poppins font-semibold text-[#B399D4] dark:text-[#5CC8C2] mb-6 text-center">
-        My Milestones & To-Dos
-      </h2>
+    <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-xl backdrop-blur-sm p-6 transition-all duration-300`}>
+      <div className="flex justify-between items-center mb-6 flex-wrap gap-3">
+        <h2 className="text-2xl font-poppins font-bold bg-gradient-to-r from-purple-400 to-teal-400 bg-clip-text text-transparent">
+          My Milestones & To-Dos
+        </h2>
+      </div>
 
       {successMessage && (
-        <div className="bg-green-100 dark:bg-green-900/40 border border-green-400 dark:border-green-700 text-green-700 dark:text-green-300 px-4 py-3 rounded relative mb-4">
-          {successMessage}
+        <div className="mb-4 p-3 rounded-xl bg-green-100/20 dark:bg-green-900/30 border border-green-500/30 text-green-700 dark:text-green-300 text-sm flex items-center gap-2">
+          <CheckCircle size={16} /> {successMessage}
         </div>
       )}
       {errorMessage && (
-        <div className="bg-red-100 dark:bg-red-900/40 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 px-4 py-3 rounded relative mb-4">
-          {errorMessage}
-        </div>
-      )}
-
-      {insightErrorId && errorMessage && (
-        <div className="bg-yellow-100 dark:bg-yellow-900/40 border border-yellow-400 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 px-4 py-3 rounded relative mb-4">
-          <strong className="font-bold">Insight Error!</strong>
-          <span className="block sm:inline"> {errorMessage}</span>
-          <p className="text-sm mt-1">
-            Make sure your Gemini API key is set in your profile and the ML service is running.
-          </p>
+        <div className="mb-4 p-3 rounded-xl bg-red-100/20 dark:bg-red-900/30 border border-red-500/30 text-red-700 dark:text-red-300 text-sm flex items-center gap-2">
+          <AlertCircle size={16} /> {errorMessage}
         </div>
       )}
 
       {/* Add Milestone Form */}
-      <div className={`mb-8 p-4 rounded-lg shadow-inner ${theme === 'dark' ? 'bg-gray-700' : 'bg-gray-50'}`}>
-        <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200 mb-4">Add New Milestone</h3>
+      <div className={`mb-8 p-5 rounded-xl ${sectionBg} border ${sectionBorder}`}>
+        <h3 className="text-xl font-poppins font-semibold mb-4 flex items-center gap-2">
+          <Plus size={20} className="text-purple-400" /> Add New Milestone
+        </h3>
         <form onSubmit={handleAddMilestone} className="space-y-4">
           <input
             type="text"
             value={newMilestoneTitle}
             onChange={(e) => setNewMilestoneTitle(e.target.value)}
             placeholder="Title *"
-            className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 ${theme === 'dark' ? 'bg-gray-600 text-gray-200 border-gray-500 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
+            className={`w-full p-3 rounded-xl border ${inputBorder} ${inputBg} focus:outline-none focus:ring-2 ${inputFocusRing} transition`}
             required
           />
           <textarea
             value={newMilestoneDescription}
             onChange={(e) => setNewMilestoneDescription(e.target.value)}
             placeholder="Description (optional)"
-            className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 resize-y min-h-[60px] ${theme === 'dark' ? 'bg-gray-600 text-gray-200 border-gray-500 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
+            className={`w-full p-3 rounded-xl border ${inputBorder} ${inputBg} focus:outline-none focus:ring-2 ${inputFocusRing} transition resize-y min-h-[80px]`}
           />
           <input
             type="date"
             value={newMilestoneDueDate}
             onChange={(e) => setNewMilestoneDueDate(e.target.value)}
-            className={`w-full p-2 border rounded-md focus:outline-none focus:ring-2 ${theme === 'dark' ? 'bg-gray-600 text-gray-200 border-gray-500 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
+            className={`w-full p-3 rounded-xl border ${inputBorder} ${inputBg} focus:outline-none focus:ring-2 ${inputFocusRing} transition`}
           />
           <button
             type="submit"
             disabled={addMilestoneMutation.isPending}
-            className="w-full py-2 px-4 rounded-md font-poppins font-semibold text-white bg-[#B399D4] hover:bg-[#9B7BBF] active:bg-[#7F66A0] shadow-md transition-all duration-300 disabled:opacity-50"
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-teal-500 text-white font-semibold shadow-md hover:shadow-lg transition-all duration-300 disabled:opacity-50 flex items-center justify-center gap-2"
           >
+            {addMilestoneMutation.isPending ? <Loader size={18} className="animate-spin" /> : <Plus size={18} />}
             {addMilestoneMutation.isPending ? 'Adding...' : 'Add Milestone'}
           </button>
         </form>
@@ -588,37 +620,42 @@ function MilestoneTracker({ userId }) {
 
       {/* Milestones List */}
       {milestones.length === 0 ? (
-        <p className="text-center text-gray-700 dark:text-gray-300 text-lg">No milestones yet. Start by adding one above!</p>
+        <div className={`text-center py-12 rounded-xl ${sectionBg} border ${sectionBorder}`}>
+          <Target size={48} className={`mx-auto mb-3 opacity-30 ${textSecondary}`} />
+          <p className={`text-lg ${textSecondary}`}>No milestones yet.</p>
+          <p className={`text-sm ${textSecondary}`}>Create your first milestone above!</p>
+        </div>
       ) : (
-        <div className="space-y-6">
+        <div className="space-y-5">
           {milestones.map(milestone => (
-            <div key={milestone.id} className={`p-5 rounded-lg shadow-md ${theme === 'dark' ? 'bg-gray-700 border border-gray-600' : 'bg-white border border-gray-200'}`}>
+            <div key={milestone.id} className={`rounded-xl ${sectionBg} border ${sectionBorder} overflow-hidden transition-all duration-300 hover:shadow-md`}>
+              {/* Milestone Header (edit/display) */}
               {editingMilestoneId === milestone.id ? (
-                <div>
-                  <h3 className="text-xl font-poppins font-semibold mb-3">Edit Milestone</h3>
+                <div className="p-5">
+                  <h3 className="text-xl font-poppins font-semibold mb-4">Edit Milestone</h3>
                   <div className="space-y-3">
                     <input
                       type="text"
                       value={editedMilestoneTitle}
                       onChange={(e) => setEditedMilestoneTitle(e.target.value)}
-                      className={`w-full p-2 border rounded-md focus:ring-2 ${theme === 'dark' ? 'bg-gray-600 text-gray-200 border-gray-500 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
+                      className={`w-full p-3 rounded-xl border ${inputBorder} ${inputBg} focus:outline-none focus:ring-2 ${inputFocusRing} transition`}
                       required
                     />
                     <textarea
                       value={editedMilestoneDescription}
                       onChange={(e) => setEditedMilestoneDescription(e.target.value)}
-                      className={`w-full p-2 border rounded-md resize-y min-h-[60px] ${theme === 'dark' ? 'bg-gray-600 text-gray-200 border-gray-500 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
+                      className={`w-full p-3 rounded-xl border ${inputBorder} ${inputBg} focus:outline-none focus:ring-2 ${inputFocusRing} transition resize-y min-h-[80px]`}
                     />
                     <input
                       type="date"
                       value={editedMilestoneDueDate}
                       onChange={(e) => setEditedMilestoneDueDate(e.target.value)}
-                      className={`w-full p-2 border rounded-md focus:ring-2 ${theme === 'dark' ? 'bg-gray-600 text-gray-200 border-gray-500 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
+                      className={`w-full p-3 rounded-xl border ${inputBorder} ${inputBg} focus:outline-none focus:ring-2 ${inputFocusRing} transition`}
                     />
                     <select
                       value={editedMilestoneStatus}
                       onChange={(e) => setEditedMilestoneStatus(e.target.value)}
-                      className={`w-full p-2 border rounded-md focus:ring-2 ${theme === 'dark' ? 'bg-gray-600 text-gray-200 border-gray-500 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
+                      className={`w-full p-3 rounded-xl border ${inputBorder} ${inputBg} focus:outline-none focus:ring-2 ${inputFocusRing} transition`}
                     >
                       <option value="PENDING">Pending</option>
                       <option value="IN_PROGRESS">In Progress</option>
@@ -626,56 +663,50 @@ function MilestoneTracker({ userId }) {
                       <option value="OVERDUE">Overdue</option>
                       <option value="CANCELLED">Cancelled</option>
                     </select>
-                    <div className="flex justify-end space-x-2 mt-4">
-                      <button onClick={() => handleSaveMilestoneEdit(milestone.id)} className="py-2 px-4 rounded-md font-semibold text-white bg-[#B399D4] hover:bg-[#9B7BBF]">Save</button>
-                      <button onClick={() => setEditingMilestoneId(null)} className={`py-2 px-4 rounded-md font-semibold ${theme === 'dark' ? 'bg-gray-600 text-gray-200 hover:bg-gray-500' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>Cancel</button>
+                    <div className="flex justify-end gap-3 pt-2">
+                      <button onClick={() => setEditingMilestoneId(null)} className="px-5 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition">Cancel</button>
+                      <button onClick={() => handleSaveMilestoneEdit(milestone.id)} className="px-5 py-2 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 text-white font-medium hover:shadow-md transition">Save</button>
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between">
-                  <div className="flex-1 mb-4 sm:mb-0">
-                    <h3 className="text-2xl font-poppins font-semibold">{milestone.title}</h3>
-                    {milestone.description && <p className="text-sm mt-1">{milestone.description}</p>}
-                    <div className="flex items-center mt-2 text-sm">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${getStatusColorClass(milestone.status)}`}>
-                        {milestone.status.replace('_', ' ')}
-                      </span>
-                      {milestone.dueDate && isValid(parseISO(milestone.dueDate)) && (
-                        <span className="ml-3">Due: {format(parseISO(milestone.dueDate), 'MMM dd, yyyy')}</span>
-                      )}
-                      <span className="ml-3">Created: {format(parseISO(milestone.creationDate), 'MMM dd, yyyy')}</span>
+                <div className="p-5">
+                  <div className="flex flex-col sm:flex-row justify-between gap-4">
+                    <div className="flex-1">
+                      <h3 className="text-xl font-poppins font-semibold">{milestone.title}</h3>
+                      {milestone.description && <p className={`text-sm ${textSecondary} mt-1`}>{milestone.description}</p>}
+                      <div className="flex flex-wrap items-center gap-3 mt-2 text-xs">
+                        <span className={`px-2 py-1 rounded-full ${getStatusColorClass(milestone.status)}`}>
+                          {milestone.status.replace('_', ' ')}
+                        </span>
+                        {milestone.dueDate && isValid(parseISO(milestone.dueDate)) && (
+                          <span className="flex items-center gap-1 text-gray-500"><Calendar size={12} /> Due: {format(parseISO(milestone.dueDate), 'MMM dd, yyyy')}</span>
+                        )}
+                        <span className="flex items-center gap-1 text-gray-500"><Clock size={12} /> Created: {format(parseISO(milestone.creationDate), 'MMM dd, yyyy')}</span>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center space-x-4">
-                    <div className="w-16 h-16">
-                      <CircularProgressbar
-                        value={milestone.completionPercentage || 0}
-                        text={`${milestone.completionPercentage ? milestone.completionPercentage.toFixed(0) : 0}%`}
-                        styles={buildStyles({
-                          pathColor: getProgressBarColor(milestone.completionPercentage || 0),
-                          textColor: theme === 'dark' ? '#E0E0E0' : '#4B5563',
-                          trailColor: theme === 'dark' ? '#4B5563' : '#D1D5DB',
-                        })}
-                      />
-                    </div>
-                    <div className="flex flex-col space-y-2">
-                      <button onClick={() => handleEditMilestoneClick(milestone)} className="py-1 px-3 rounded-md font-semibold text-sm bg-blue-500 text-white hover:bg-blue-600">Edit</button>
-                      <button onClick={() => handleDeleteMilestoneClick(milestone.id)} className="py-1 px-3 rounded-md font-semibold text-sm bg-red-500 text-white hover:bg-red-600">Delete</button>
-                      <button
-                        onClick={() => toggleMilestoneExpand(milestone.id)}
-                        disabled={isTempId(milestone.id)}
-                        className={`py-1 px-3 rounded-md font-semibold text-sm ${isTempId(milestone.id) ? 'opacity-50 cursor-not-allowed' : theme === 'dark' ? 'bg-gray-600 text-gray-200 hover:bg-gray-500' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
-                      >
-                        {expandedMilestoneId === milestone.id ? <>Hide Tasks <ChevronUp size={16} className="inline ml-1" /></> : <>View Tasks <ChevronDown size={16} className="inline ml-1" /></>}
-                      </button>
-                      <button
-                        onClick={() => fetchMilestoneInsights(milestone.id)}
-                        disabled={loadingInsightsId === milestone.id}
-                        className={`py-1 px-3 rounded-md font-semibold text-sm ${theme === 'dark' ? 'bg-[#5CC8C2] text-gray-900 hover:bg-[#47A8A3]' : 'bg-[#B399D4] text-white hover:bg-[#9B7BBF]'} transition-all duration-300 disabled:opacity-50`}
-                      >
-                        {loadingInsightsId === milestone.id ? 'Getting Insights...' : 'Get AI Insights'}
-                      </button>
+                    <div className="flex items-center gap-3">
+                      <div className="w-16 h-16">
+                        <CircularProgressbar
+                          value={milestone.completionPercentage || 0}
+                          text={`${milestone.completionPercentage ? milestone.completionPercentage.toFixed(0) : 0}%`}
+                          styles={buildStyles({
+                            pathColor: getProgressBarColor(milestone.completionPercentage || 0),
+                            textColor: isDarkMode ? '#E0E0E0' : '#4B5563',
+                            trailColor: isDarkMode ? '#4B5563' : '#D1D5DB',
+                          })}
+                        />
+                      </div>
+                      <div className="flex flex-col gap-1.5">
+                        <button onClick={() => handleEditMilestoneClick(milestone)} className="p-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 transition" title="Edit"><Edit2 size={14} /></button>
+                        <button onClick={() => handleDeleteMilestoneClick(milestone.id)} className="p-1.5 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition" title="Delete"><Trash2 size={14} /></button>
+                        <button onClick={() => toggleMilestoneExpand(milestone.id)} disabled={isTempId(milestone.id)} className="p-1.5 rounded-lg bg-gray-500/10 text-gray-600 dark:text-gray-400 hover:bg-gray-500/20 transition disabled:opacity-50" title={expandedMilestoneId === milestone.id ? 'Hide Tasks' : 'View Tasks'}>
+                          {expandedMilestoneId === milestone.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        </button>
+                        <button onClick={() => fetchMilestoneInsights(milestone.id)} disabled={loadingInsightsId === milestone.id} className="p-1.5 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/20 transition disabled:opacity-50" title="AI Insights">
+                          {loadingInsightsId === milestone.id ? <Loader size={14} className="animate-spin" /> : <Lightbulb size={14} />}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -683,113 +714,59 @@ function MilestoneTracker({ userId }) {
 
               {/* AI Insights Display */}
               {milestoneInsights[milestone.id] && (
-                <div className={`mt-6 p-4 rounded-lg shadow-inner ${theme === 'dark' ? 'bg-gray-600 border border-gray-500' : 'bg-blue-50 border border-blue-200'}`}>
-                  <h4 className="text-xl font-poppins font-semibold mb-3 flex items-center">
-                    <Lightbulb size={20} className="mr-2 text-[#B399D4] dark:text-[#5CC8C2]" /> AI Insights
+                <div className={`mx-5 mb-4 p-4 rounded-xl ${isDarkMode ? 'bg-gray-700/50' : 'bg-blue-50/80'} border ${isDarkMode ? 'border-gray-600' : 'border-blue-200'}`}>
+                  <h4 className="font-semibold flex items-center gap-2 mb-2 text-purple-600 dark:text-purple-300">
+                    <Lightbulb size={16} /> AI Insights
                   </h4>
-                  <div className="space-y-3 text-gray-700 dark:text-gray-300">
+                  <div className="space-y-2 text-sm">
                     <p><strong>Remaining Work:</strong> {milestoneInsights[milestone.id].remainingWork}</p>
                     <p><strong>Performance:</strong> {milestoneInsights[milestone.id].performanceAssessment}</p>
-                    <div>
-                      <strong className="flex items-center"><Lightbulb size={16} className="mr-1" /> Tips:</strong>
-                      <ul className="list-disc list-inside ml-4">
-                        {milestoneInsights[milestone.id].tips.map((tip, idx) => <li key={idx}>{tip}</li>)}
-                      </ul>
-                    </div>
-                    <p><strong className="flex items-center"><ThumbsUp size={16} className="mr-1" /> Encouragement:</strong> {milestoneInsights[milestone.id].encouragement}</p>
-                    <div>
-                      <strong className="flex items-center"><Target size={16} className="mr-1" /> Suggested Next Steps:</strong>
-                      <ul className="list-disc list-inside ml-4">
-                        {milestoneInsights[milestone.id].suggestedNewTasks.map((task, idx) => <li key={idx}>{task}</li>)}
-                      </ul>
-                    </div>
+                    <div><strong>Tips:</strong> <ul className="list-disc list-inside ml-2">{milestoneInsights[milestone.id].tips.map((t,i)=><li key={i}>{t}</li>)}</ul></div>
+                    <p><strong>Encouragement:</strong> {milestoneInsights[milestone.id].encouragement}</p>
+                    <div><strong>Next Steps:</strong> <ul className="list-disc list-inside ml-2">{milestoneInsights[milestone.id].suggestedNewTasks.map((t,i)=><li key={i}>{t}</li>)}</ul></div>
                   </div>
                 </div>
               )}
 
-              {/* Tasks Section (expanded) */}
+              {/* Tasks Section */}
               {expandedMilestoneId === milestone.id && (
-                <div className="mt-6 border-t border-gray-300 dark:border-gray-600 pt-6">
-                  <h4 className="text-xl font-poppins font-semibold mb-4">Tasks</h4>
+                <div className="px-5 pb-5 pt-2 border-t border-gray-200 dark:border-gray-700">
+                  <h4 className="font-semibold mb-3 flex items-center gap-2 text-teal-600 dark:text-teal-300">Tasks</h4>
                   {milestone.tasks && milestone.tasks.length > 0 ? (
-                    <ul className="space-y-3">
+                    <ul className="space-y-2">
                       {milestone.tasks.map(task => (
-                        <li key={task.id} className={`p-3 rounded-md flex flex-col sm:flex-row items-start sm:items-center justify-between ${theme === 'dark' ? 'bg-gray-600 border border-gray-500' : 'bg-gray-100 border border-gray-300'}`}>
+                        <li key={task.id} className={`p-3 rounded-xl ${isDarkMode ? 'bg-gray-700/50' : 'bg-gray-100/80'} flex flex-col sm:flex-row sm:items-center justify-between gap-2`}>
                           {editingTaskId === task.id ? (
                             <div className="w-full space-y-2">
-                              <input
-                                type="text"
-                                value={editedTaskDescription}
-                                onChange={(e) => setEditedTaskDescription(e.target.value)}
-                                className={`w-full p-2 border rounded-md focus:ring-2 ${theme === 'dark' ? 'bg-gray-500 text-gray-200 border-gray-400 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
-                                required
-                              />
-                              <input
-                                type="date"
-                                value={editedTaskDueDate}
-                                onChange={(e) => setEditedTaskDueDate(e.target.value)}
-                                className={`w-full p-2 border rounded-md focus:ring-2 ${theme === 'dark' ? 'bg-gray-500 text-gray-200 border-gray-400 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
-                              />
-                              <select
-                                value={editedTaskStatus}
-                                onChange={(e) => setEditedTaskStatus(e.target.value)}
-                                className={`w-full p-2 border rounded-md focus:ring-2 ${theme === 'dark' ? 'bg-gray-500 text-gray-200 border-gray-400 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
-                              >
-                                <option value="PENDING">Pending</option>
-                                <option value="COMPLETED">Completed</option>
-                                <option value="OVERDUE">Overdue</option>
-                                <option value="CANCELLED">Cancelled</option>
+                              <input type="text" value={editedTaskDescription} onChange={e=>setEditedTaskDescription(e.target.value)} className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`} required />
+                              <input type="date" value={editedTaskDueDate} onChange={e=>setEditedTaskDueDate(e.target.value)} className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`} />
+                              <select value={editedTaskStatus} onChange={e=>setEditedTaskStatus(e.target.value)} className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}>
+                                <option value="PENDING">Pending</option><option value="COMPLETED">Completed</option><option value="OVERDUE">Overdue</option><option value="CANCELLED">Cancelled</option>
                               </select>
-                              <div className="flex justify-end space-x-2">
-                                <button onClick={() => handleSaveTaskEdit(milestone.id, task.id)} className="py-1 px-3 rounded-md font-semibold text-sm bg-[#B399D4] text-white hover:bg-[#9B7BBF]">Save</button>
-                                <button onClick={() => setEditingTaskId(null)} className={`py-1 px-3 rounded-md font-semibold text-sm ${theme === 'dark' ? 'bg-gray-500 text-gray-200 hover:bg-gray-400' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>Cancel</button>
+                              <div className="flex justify-end gap-2">
+                                <button onClick={()=>setEditingTaskId(null)} className="px-3 py-1 rounded-lg bg-gray-200 dark:bg-gray-600 text-sm">Cancel</button>
+                                <button onClick={()=>handleSaveTaskEdit(milestone.id, task.id)} className="px-3 py-1 rounded-lg bg-purple-500 text-white text-sm">Save</button>
                               </div>
                             </div>
                           ) : (
                             <>
-                              <div className="flex-1 mb-2 sm:mb-0">
-                                <p className={`text-lg font-medium ${task.status === 'COMPLETED' ? 'line-through text-gray-500 dark:text-gray-400' : 'text-gray-800 dark:text-gray-200'}`}>
+                              <div className="flex-1">
+                                <p className={`text-sm ${task.status === 'COMPLETED' ? 'line-through text-gray-500' : ''}`}>
                                   {task.description}
-                                  {task.roadmapTaskId && (
-                                    <span className="ml-2 inline-flex items-center gap-1 text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 px-2 py-0.5 rounded-full">
-                                      <MapPin size={12} /> from Roadmap
-                                    </span>
-                                  )}
+                                  {task.roadmapTaskId && <span className="ml-2 inline-flex items-center gap-1 text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 px-2 py-0.5 rounded-full"><MapPin size={10} /> from Roadmap</span>}
                                 </p>
-                                <div className="flex items-center mt-1 text-xs">
-                                  <span className={`px-2 py-0.5 rounded-full ${getStatusColorClass(task.status)}`}>
-                                    {task.status.replace('_', ' ')}
-                                  </span>
-                                  {task.dueDate && isValid(parseISO(task.dueDate)) && (
-                                    <span className="ml-2">Due: {format(parseISO(task.dueDate), 'MMM dd, yyyy')}</span>
-                                  )}
+                                <div className="flex items-center gap-2 mt-1 text-xs">
+                                  <span className={`px-2 py-0.5 rounded-full ${getStatusColorClass(task.status)}`}>{task.status.replace('_',' ')}</span>
+                                  {task.dueDate && isValid(parseISO(task.dueDate)) && <span className="flex items-center gap-1"><Calendar size={10} /> {format(parseISO(task.dueDate), 'MMM dd')}</span>}
                                 </div>
                               </div>
                               {isTempId(task.id) ? (
-                                <div className="flex items-center justify-center mt-2 sm:mt-0">
-                                  <Loader className="w-4 h-4 animate-spin text-gray-500" />
-                                  <span className="ml-1 text-xs text-gray-500">Adding...</span>
-                                </div>
+                                <div className="flex items-center gap-1"><Loader size={14} className="animate-spin" /><span className="text-xs">Adding...</span></div>
                               ) : (
-                                <div className="flex space-x-2 mt-2 sm:mt-0">
-                                  <button
-                                    onClick={() => handleToggleTaskStatus(milestone.id, task)}
-                                    className={`py-1 px-3 rounded-md font-semibold text-xs ${task.status === 'COMPLETED' ? 'bg-orange-500 hover:bg-orange-600' : 'bg-green-500 hover:bg-green-600'} text-white`}
-                                  >
-                                    {task.status === 'COMPLETED' ? 'Mark Pending' : 'Mark Complete'}
-                                  </button>
-                                  <button
-                                    onClick={() => handleEditTaskClick(task)}
-                                    className="py-1 px-3 rounded-md font-semibold text-xs bg-blue-500 text-white hover:bg-blue-600"
-                                  >
-                                    Edit
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteTaskClick(milestone.id, task.id)}
-                                    className="py-1 px-3 rounded-md font-semibold text-xs bg-red-500 text-white hover:bg-red-600"
-                                  >
-                                    Delete
-                                  </button>
+                                <div className="flex items-center gap-1">
+                                  <button onClick={()=>handleToggleTaskStatus(milestone.id, task)} className="p-1.5 rounded-lg bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20" title="Toggle Complete"><CheckCircle size={14} /></button>
+                                  <button onClick={()=>handleEditTaskClick(task)} className="p-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20" title="Edit"><Edit2 size={14} /></button>
+                                  <button onClick={()=>handleDeleteTaskClick(milestone.id, task.id)} className="p-1.5 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20" title="Delete"><Trash2 size={14} /></button>
                                 </div>
                               )}
                             </>
@@ -798,39 +775,21 @@ function MilestoneTracker({ userId }) {
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-center text-gray-600 dark:text-gray-400">No tasks for this milestone yet.</p>
+                    <p className="text-center text-sm text-gray-500">No tasks yet. Add one below.</p>
                   )}
 
                   {/* Add Task Form */}
-                  <div className={`mt-6 p-4 rounded-lg shadow-inner ${theme === 'dark' ? 'bg-gray-700 border border-gray-600' : 'bg-gray-50 border border-gray-200'}`}>
-                    <h5 className="text-lg font-poppins font-semibold mb-3">Add New Task</h5>
+                  <div className={`mt-4 p-4 rounded-xl ${isDarkMode ? 'bg-gray-700/30' : 'bg-gray-100/50'}`}>
+                    <h5 className="font-medium mb-2">Add New Task</h5>
                     {isTempId(milestone.id) ? (
-                      <div className="flex items-center justify-center py-4 text-gray-500">
-                        <Loader className="w-5 h-5 animate-spin mr-2" />
-                        <span>Milestone is being created... Please wait.</span>
-                      </div>
+                      <div className="flex items-center justify-center py-2 text-gray-500"><Loader size={16} className="animate-spin mr-2" /> Milestone being created...</div>
                     ) : (
-                      <form onSubmit={(e) => handleAddTask(e, milestone.id)} className="space-y-3">
-                        <input
-                          type="text"
-                          value={newTaskDescription}
-                          onChange={(e) => setNewTaskDescription(e.target.value)}
-                          placeholder="Description *"
-                          className={`w-full p-2 border rounded-md focus:ring-2 ${theme === 'dark' ? 'bg-gray-600 text-gray-200 border-gray-500 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
-                          required
-                        />
-                        <input
-                          type="date"
-                          value={newTaskDueDate}
-                          onChange={(e) => setNewTaskDueDate(e.target.value)}
-                          className={`w-full p-2 border rounded-md focus:ring-2 ${theme === 'dark' ? 'bg-gray-600 text-gray-200 border-gray-500 focus:ring-[#5CC8C2]' : 'bg-white text-gray-800 border-gray-300 focus:ring-[#B399D4]'}`}
-                        />
-                        <button
-                          type="submit"
-                          disabled={addTaskMutation.isPending}
-                          className="w-full py-2 px-4 rounded-md font-poppins font-semibold text-white bg-[#5CC8C2] hover:bg-[#47A8A3] transition-all duration-300 disabled:opacity-50"
-                        >
-                          {addTaskMutation.isPending ? 'Adding...' : 'Add Task'}
+                      <form onSubmit={(e)=>handleAddTask(e, milestone.id)} className="space-y-3">
+                        <input type="text" value={newTaskDescription} onChange={e=>setNewTaskDescription(e.target.value)} placeholder="Description *" className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`} required />
+                        <input type="date" value={newTaskDueDate} onChange={e=>setNewTaskDueDate(e.target.value)} className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`} />
+                        <button type="submit" disabled={addTaskMutation.isPending} className="w-full py-2 rounded-lg bg-gradient-to-r from-teal-500 to-cyan-500 text-white font-medium hover:shadow-md transition disabled:opacity-50">
+                          {addTaskMutation.isPending ? <Loader size={16} className="animate-spin inline mr-1" /> : <Plus size={16} className="inline mr-1" />}
+                          Add Task
                         </button>
                       </form>
                     )}
@@ -842,28 +801,9 @@ function MilestoneTracker({ userId }) {
         </div>
       )}
 
-      {/* Portal-based Delete Modals */}
-      <Modal
-        isOpen={deleteMilestoneModal.isOpen}
-        onClose={() => setDeleteMilestoneModal({ isOpen: false, milestoneId: null })}
-        title="Delete Milestone"
-        message="Delete this milestone and all its tasks? This cannot be undone."
-        confirmText="Delete"
-        cancelText="Cancel"
-        onConfirm={confirmDeleteMilestone}
-        theme={theme}
-      />
-
-      <Modal
-        isOpen={deleteTaskModal.isOpen}
-        onClose={() => setDeleteTaskModal({ isOpen: false, milestoneId: null, taskId: null })}
-        title="Delete Task"
-        message="Delete this task?"
-        confirmText="Delete"
-        cancelText="Cancel"
-        onConfirm={confirmDeleteTask}
-        theme={theme}
-      />
+      {/* Delete Modals */}
+      <Modal isOpen={deleteMilestoneModal.isOpen} onClose={()=>setDeleteMilestoneModal({isOpen:false,milestoneId:null})} title="Delete Milestone" message="Delete this milestone and all its tasks? This cannot be undone." onConfirm={confirmDeleteMilestone} theme={theme} />
+      <Modal isOpen={deleteTaskModal.isOpen} onClose={()=>setDeleteTaskModal({isOpen:false,milestoneId:null,taskId:null})} title="Delete Task" message="Delete this task?" onConfirm={confirmDeleteTask} theme={theme} />
     </div>
   );
 }

@@ -17,11 +17,12 @@ public class RoadmapMilestone {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "roadmap_id", nullable = false)
-    @JsonIgnore   // 👈 add this
+    @JsonIgnore
     private Roadmap roadmap;
 
     @Column(nullable = false)

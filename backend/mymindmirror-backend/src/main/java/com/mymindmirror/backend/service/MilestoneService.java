@@ -1,13 +1,13 @@
 // src/main/java/com/mymindmirror.backend/service/MilestoneService.java
 package com.mymindmirror.backend.service;
 
+import com.mymindmirror.backend.enums.Status;
 import com.mymindmirror.backend.model.Milestone;
-import com.mymindmirror.backend.model.Task; // ⭐ Import Task to access Task.Status ⭐
 import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.repository.MilestoneRepository;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.hibernate.Hibernate;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,17 +22,15 @@ import java.util.UUID;
  * ensuring proper user ownership and data integrity.
  */
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class MilestoneService {
 
-    private static final Logger logger = LoggerFactory.getLogger(MilestoneService.class);
 
     private final MilestoneRepository milestoneRepository;
     private final UserService userService; // To fetch User entities
 
-    public MilestoneService(MilestoneRepository milestoneRepository, UserService userService) {
-        this.milestoneRepository = milestoneRepository;
-        this.userService = userService;
-    }
+
 
     /**
      * Creates a new milestone for a specific user.
@@ -44,9 +42,9 @@ public class MilestoneService {
      */
     @Transactional
     public Milestone createMilestone(User user, String title, String description, LocalDate dueDate) {
-        logger.info("Creating new milestone for user {}: {}", user.getUsername(), title);
+        log.info("Creating new milestone for user {}: {}", user.getUsername(), title);
         Milestone milestone = new Milestone(user, title, description, dueDate);
-        milestone.setStatus(Milestone.Status.PENDING); // New milestones start as PENDING
+        milestone.setStatus(Status.PENDING); // New milestones start as PENDING
         return milestoneRepository.save(milestone);
     }
 
@@ -56,7 +54,7 @@ public class MilestoneService {
      * @return A list of Milestone entities.
      */
     public List<Milestone> getAllMilestonesForUser(User user) {
-        logger.info("Fetching all milestones for user: {}", user.getUsername());
+        log.info("Fetching all milestones for user: {}", user.getUsername());
         return milestoneRepository.findByUserOrderByCreationDateDesc(user);
     }
 
@@ -69,10 +67,10 @@ public class MilestoneService {
      */
     @Transactional(readOnly = true)
     public Optional<Milestone> getMilestoneByIdForUser(UUID milestoneId, User user) {
-        logger.info("Fetching milestone {} for user {}", milestoneId, user.getUsername());
+        log.info("Fetching milestone {} for user {}", milestoneId, user.getUsername());
         List<Milestone> milestones = milestoneRepository.findByIdAndUser(milestoneId, user);
         if (milestones.isEmpty()) {
-            logger.warn("Milestone {} not found or not owned by user {}", milestoneId, user.getUsername());
+            log.warn("Milestone {} not found or not owned by user {}", milestoneId, user.getUsername());
             return Optional.empty();
         }
         Milestone milestone = milestones.get(0);
@@ -97,8 +95,8 @@ public class MilestoneService {
     @Transactional
     public Milestone updateMilestone(UUID milestoneId, User user,
                                      String newTitle, String newDescription,
-                                     LocalDate newDueDate, Milestone.Status newStatus) {
-        logger.info("Updating milestone {} for user {}", milestoneId, user.getUsername());
+                                     LocalDate newDueDate, Status newStatus) {
+        log.info("Updating milestone {} for user {}", milestoneId, user.getUsername());
         Milestone existingMilestone = getMilestoneByIdForUser(milestoneId, user)
                 .orElseThrow(() -> new IllegalArgumentException("Milestone not found or not owned by user."));
 
@@ -126,12 +124,12 @@ public class MilestoneService {
      */
     @Transactional
     public void deleteMilestone(UUID milestoneId, User user) {
-        logger.info("Deleting milestone {} for user {}", milestoneId, user.getUsername());
+        log.info("Deleting milestone {} for user {}", milestoneId, user.getUsername());
         Milestone existingMilestone = getMilestoneByIdForUser(milestoneId, user)
                 .orElseThrow(() -> new IllegalArgumentException("Milestone not found or not owned by user."));
 
         milestoneRepository.delete(existingMilestone);
-        logger.info("Milestone {} deleted successfully.", milestoneId);
+        log.info("Milestone {} deleted successfully.", milestoneId);
     }
 
     /**
@@ -145,25 +143,25 @@ public class MilestoneService {
         milestoneOptional.ifPresent(milestone -> {
             long totalTasks = milestone.getTasks().size();
             long completedTasks = milestone.getTasks().stream()
-                    .filter(task -> task.getStatus() == Task.Status.COMPLETED) // ⭐ FIXED HERE ⭐
+                    .filter(task -> task.getStatus() == Status.COMPLETED)
                     .count();
 
             if (totalTasks == 0) {
-                milestone.setStatus(Milestone.Status.PENDING); // Or PENDING_NO_TASKS
+                milestone.setStatus(Status.PENDING); // Or PENDING_NO_TASKS
             } else if (completedTasks == totalTasks) {
-                milestone.setStatus(Milestone.Status.COMPLETED);
+                milestone.setStatus(Status.COMPLETED);
             } else if (completedTasks > 0) {
-                milestone.setStatus(Milestone.Status.IN_PROGRESS);
+                milestone.setStatus(Status.IN_PROGRESS);
             } else {
-                milestone.setStatus(Milestone.Status.PENDING);
+                milestone.setStatus(Status.PENDING);
             }
 
             // Check for overdue status
-            if (milestone.getDueDate() != null && milestone.getDueDate().isBefore(LocalDate.now()) && milestone.getStatus() != Milestone.Status.COMPLETED) {
-                milestone.setStatus(Milestone.Status.OVERDUE);
+            if (milestone.getDueDate() != null && milestone.getDueDate().isBefore(LocalDate.now()) && milestone.getStatus() != Status.COMPLETED) {
+                milestone.setStatus(Status.OVERDUE);
             }
             milestoneRepository.save(milestone);
-            logger.info("Milestone {} status updated to {}.", milestoneId, milestone.getStatus());
+            log.info("Milestone {} status updated to {}.", milestoneId, milestone.getStatus());
         });
     }
 

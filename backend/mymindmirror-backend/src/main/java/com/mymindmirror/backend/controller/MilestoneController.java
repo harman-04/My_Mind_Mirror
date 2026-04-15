@@ -2,6 +2,7 @@ package com.mymindmirror.backend.controller;
 
 import com.mymindmirror.backend.model.Milestone;
 import com.mymindmirror.backend.model.User;
+import com.mymindmirror.backend.payload.request.MilestoneRequest;
 import com.mymindmirror.backend.payload.response.MessageResponse;
 import com.mymindmirror.backend.payload.response.MilestoneInsightResponse;
 import com.mymindmirror.backend.security.services.UserDetailsImpl;
@@ -9,38 +10,26 @@ import com.mymindmirror.backend.service.MilestoneInsightService;
 import com.mymindmirror.backend.service.MilestoneService;
 import com.mymindmirror.backend.service.UserService;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.core.context.ReactiveSecurityContextHolder;
-import org.springframework.security.core.context.SecurityContext;
 import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
-
-import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/milestones")
+@RequiredArgsConstructor
+@Slf4j
 public class MilestoneController {
-
-    private static final Logger logger = LoggerFactory.getLogger(MilestoneController.class);
 
     private final MilestoneService milestoneService;
     private final UserService userService;
     private final MilestoneInsightService milestoneInsightService;
 
-    public MilestoneController(MilestoneService milestoneService, UserService userService,
-                               MilestoneInsightService milestoneInsightService) {
-        this.milestoneService = milestoneService;
-        this.userService = userService;
-        this.milestoneInsightService = milestoneInsightService;
-    }
 
     @PostMapping
     public ResponseEntity<?> createMilestone(@AuthenticationPrincipal UserDetailsImpl authenticatedUser,
@@ -113,7 +102,7 @@ public class MilestoneController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
         } catch (Exception e) {
-            logger.error("Error updating milestone: {}", e.getMessage(), e);
+            log.error("Error updating milestone: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal Server Error");
         }
     }
@@ -133,7 +122,7 @@ public class MilestoneController {
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(new MessageResponse(e.getMessage()));
         } catch (Exception e) {
-            logger.error("Error deleting milestone: {}", e.getMessage(), e);
+            log.error("Error deleting milestone: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(new MessageResponse("Internal Server Error"));
         }
     }
@@ -156,28 +145,8 @@ public class MilestoneController {
             MilestoneInsightResponse insights = milestoneInsightService.getMilestoneInsights(milestoneOpt.get()).block();
             return ResponseEntity.ok(insights);
         } catch (Exception e) {
-            logger.error("Error fetching insights: {}", e.getMessage(), e);
+            log.error("Error fetching insights: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to generate milestone insights.");
         }
-    }
-
-    // --- Request DTO ---
-    public static class MilestoneRequest {
-        private String title;
-        private String description;
-        private LocalDate dueDate;
-        private Milestone.Status status;
-
-        public String getTitle() { return title; }
-        public void setTitle(String title) { this.title = title; }
-
-        public String getDescription() { return description; }
-        public void setDescription(String description) { this.description = description; }
-
-        public LocalDate getDueDate() { return dueDate; }
-        public void setDueDate(LocalDate dueDate) { this.dueDate = dueDate; }
-
-        public Milestone.Status getStatus() { return status; }
-        public void setStatus(Milestone.Status status) { this.status = status; }
     }
 }

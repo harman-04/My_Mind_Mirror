@@ -17,6 +17,7 @@ public class RoadmapTask {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -28,10 +29,10 @@ public class RoadmapTask {
     private String description;
 
     @Column(columnDefinition = "TEXT")
-    private String details;          // NEW: longer instructions, tips, resources per task
+    private String details;          //  longer instructions, tips, resources per task
 
     @Column(columnDefinition = "TEXT")
-    private String subtasks;         // NEW: JSON array of strings, e.g. ["subtask1", "subtask2"]
+    private String subtasks;         //  JSON array of strings, e.g. ["subtask1", "subtask2"]
 
     @Column(name = "day_number")
     private Integer dayNumber;

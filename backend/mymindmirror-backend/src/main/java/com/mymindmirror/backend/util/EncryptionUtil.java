@@ -1,7 +1,6 @@
 package com.mymindmirror.backend.util;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKeyFactory;
@@ -19,9 +18,9 @@ import java.util.Arrays; // Import Arrays for Arrays.copyOf
  * Uses AES/CBC/PKCS5Padding for encryption with a key derived from the user's password hash
  * and a randomly generated IV for each encryption.
  */
+@Slf4j
 public class EncryptionUtil {
 
-    private static final Logger logger = LoggerFactory.getLogger(EncryptionUtil.class);
 
     private static final String ALGORITHM = "AES";
     private static final String TRANSFORMATION = "AES/CBC/PKCS5Padding"; // Changed from ECB to CBC
@@ -66,7 +65,7 @@ public class EncryptionUtil {
         String actualPlaintext = (plaintext != null) ? plaintext : "";
 
         if (userSecret == null || userSecret.isEmpty()) {
-            logger.error("Encryption failed: userSecret is null or empty. Cannot encrypt.");
+            log.error("Encryption failed: userSecret is null or empty. Cannot encrypt.");
             return null; // Critical error: cannot encrypt without a secret
         }
 
@@ -94,7 +93,7 @@ public class EncryptionUtil {
             return Base64.getEncoder().encodeToString(combined);
 
         } catch (Exception e) {
-            logger.error("Encryption failed for plaintext (first 20 chars): '{}'. Error: {}",
+            log.error("Encryption failed for plaintext (first 20 chars): '{}'. Error: {}",
                     actualPlaintext.length() > 20 ? actualPlaintext.substring(0, 20) + "..." : actualPlaintext,
                     e.getMessage(), e);
             return null; // Return null on encryption failure
@@ -115,7 +114,7 @@ public class EncryptionUtil {
             return ciphertextBase64; // Nothing to decrypt, return as is.
         }
         if (userSecret == null || userSecret.isEmpty()) {
-            logger.error("Decryption failed: userSecret is null or empty. Cannot decrypt.");
+            log.error("Decryption failed: userSecret is null or empty. Cannot decrypt.");
             return ciphertextBase64; // Cannot decrypt without a secret
         }
 
@@ -123,7 +122,7 @@ public class EncryptionUtil {
             byte[] combined = Base64.getDecoder().decode(ciphertextBase64);
 
             if (combined.length < IV_LENGTH) {
-                logger.warn("Decryption failed: Combined data too short to contain IV. Returning original string. Data (first 20 chars): {}",
+                log.warn("Decryption failed: Combined data too short to contain IV. Returning original string. Data (first 20 chars): {}",
                         ciphertextBase64.length() > 20 ? ciphertextBase64.substring(0, 20) + "..." : ciphertextBase64);
                 return ciphertextBase64; // Data is too short to be valid encrypted data with IV
             }
@@ -147,7 +146,7 @@ public class EncryptionUtil {
         } catch (IllegalArgumentException e) {
             // This catches "Illegal base64 character" errors.
             // Occurs when trying to decode a string that is not valid Base64 (e.g., old plain text entries).
-            logger.warn("IllegalArgumentException (invalid Base64) during decryption. Returning original string. Error: {}. Data (first 20 chars): {}",
+            log.warn("IllegalArgumentException (invalid Base64) during decryption. Returning original string. Error: {}. Data (first 20 chars): {}",
                     e.getMessage(), ciphertextBase64.length() > 20 ? ciphertextBase64.substring(0, 20) + "..." : ciphertextBase64);
             return ciphertextBase64;
         } catch (javax.crypto.BadPaddingException | javax.crypto.IllegalBlockSizeException e) {
@@ -155,12 +154,12 @@ public class EncryptionUtil {
             // 1. The data was not encrypted with the expected padding/mode.
             // 2. The data is corrupted.
             // 3. The wrong key/IV was used.
-            logger.warn("BadPaddingException or IllegalBlockSizeException during decryption. Likely unencrypted, corrupted data, or wrong key/IV. Returning original string. Error: {}. Data (first 20 chars): {}",
+            log.warn("BadPaddingException or IllegalBlockSizeException during decryption. Likely unencrypted, corrupted data, or wrong key/IV. Returning original string. Error: {}. Data (first 20 chars): {}",
                     e.getMessage(), ciphertextBase64.length() > 20 ? ciphertextBase64.substring(0, 20) + "..." : ciphertextBase64);
             return ciphertextBase64;
         } catch (Exception e) {
             // Catch any other unexpected exceptions during the decryption process.
-            logger.error("Generic error during decryption for ciphertext (first 20 chars): '{}'. Error: {}",
+            log.error("Generic error during decryption for ciphertext (first 20 chars): '{}'. Error: {}",
                     ciphertextBase64.length() > 20 ? ciphertextBase64.substring(0, 20) + "..." : ciphertextBase64,
                     e.getMessage(), e);
             return ciphertextBase64; // Fallback: return original string if any other error occurs

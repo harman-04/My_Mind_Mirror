@@ -1,4 +1,4 @@
-package com.mymindmirror.backend.payload;
+package com.mymindmirror.backend.payload.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -15,5 +15,4 @@ public class UserProfileResponse {
     private UUID id;
     private String username;
     private String email;
-    // Do NOT include passwordHash here for security reasons
 }

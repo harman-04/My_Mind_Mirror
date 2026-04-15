@@ -1,4 +1,4 @@
-package com.mymindmirror.backend.payload;
+package com.mymindmirror.backend.payload.request;
 
 import lombok.Data;
 import jakarta.validation.constraints.NotBlank;

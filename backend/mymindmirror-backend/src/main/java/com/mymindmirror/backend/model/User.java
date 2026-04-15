@@ -12,6 +12,7 @@ public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
     @Column(nullable = false, unique = true)
@@ -23,7 +24,6 @@ public class User {
     @Column(nullable = false)
     private String passwordHash;
 
-    // New field: stores encrypted Gemini API key
     @Column(name = "gemini_api_key", length = 512)
     private String geminiApiKeyEncrypted; // encrypted with master key
 }

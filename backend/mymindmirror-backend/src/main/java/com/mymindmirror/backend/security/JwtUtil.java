@@ -5,8 +5,7 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Component;
@@ -15,12 +14,12 @@ import java.security.Key;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.UUID; // Import UUID
+import java.util.UUID;
 
 @Component
+@Slf4j
 public class JwtUtil {
 
-    private static final Logger logger = LoggerFactory.getLogger(JwtUtil.class);
 
     @Value("${jwt.secret}")
     private String secret;
@@ -33,7 +32,7 @@ public class JwtUtil {
     @PostConstruct
     public void init() {
         this.key = Keys.hmacShaKeyFor(secret.getBytes());
-        logger.info("JWT Secret Key initialized.");
+        log.info("JWT Secret Key initialized.");
     }
 
     /**
@@ -88,7 +87,6 @@ public class JwtUtil {
     }
 
     /**
-     * ⭐ MODIFIED METHOD ⭐
      * Extracts the user's UUID from the JWT token claims.
      * @param token The JWT token string.
      * @return The user's UUID.
@@ -97,13 +95,13 @@ public class JwtUtil {
     public UUID extractUserId(String token) {
         String userIdStr = extractAllClaims(token).get("userId", String.class);
         if (userIdStr == null) {
-            logger.error("JWT token missing 'userId' claim.");
+            log.error("JWT token missing 'userId' claim.");
             throw new IllegalArgumentException("JWT token is missing 'userId' claim.");
         }
         try {
             return UUID.fromString(userIdStr);
         } catch (IllegalArgumentException e) {
-            logger.error("Invalid UUID format for 'userId' claim in JWT: {}", userIdStr);
+            log.error("Invalid UUID format for 'userId' claim in JWT: {}", userIdStr);
             throw new IllegalArgumentException("Invalid UUID format in JWT 'userId' claim.", e);
         }
     }
@@ -127,13 +125,13 @@ public class JwtUtil {
             Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(authToken);
             return true;
         } catch (io.jsonwebtoken.security.SecurityException | io.jsonwebtoken.MalformedJwtException e) {
-            logger.error("Invalid JWT signature: {}", e.getMessage());
+            log.error("Invalid JWT signature: {}", e.getMessage());
         } catch (io.jsonwebtoken.ExpiredJwtException e) {
-            logger.error("JWT token is expired: {}", e.getMessage());
+            log.error("JWT token is expired: {}", e.getMessage());
         } catch (io.jsonwebtoken.UnsupportedJwtException e) {
-            logger.error("JWT token is unsupported: {}", e.getMessage());
+            log.error("JWT token is unsupported: {}", e.getMessage());
         } catch (java.lang.IllegalArgumentException e) {
-            logger.error("JWT claims string is empty: {}", e.getMessage());
+            log.error("JWT claims string is empty: {}", e.getMessage());
         }
         return false;
     }

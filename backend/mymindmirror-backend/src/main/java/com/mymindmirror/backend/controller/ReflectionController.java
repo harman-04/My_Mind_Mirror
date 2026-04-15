@@ -3,8 +3,8 @@ package com.mymindmirror.backend.controller;
 import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.service.JournalService;
 import com.mymindmirror.backend.service.UserService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -16,17 +16,13 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/api")
+@RequiredArgsConstructor
+@Slf4j
 public class ReflectionController {
 
-    private static final Logger logger = LoggerFactory.getLogger(ReflectionController.class);
-
     private final JournalService journalService;
-    private final UserService userService; // Assuming you need UserService to get the User object
+    private final UserService userService;
 
-    public ReflectionController(JournalService journalService, UserService userService) {
-        this.journalService = journalService;
-        this.userService = userService;
-    }
 
     /**
      * Endpoint to generate a daily reflection using the ML service.
@@ -41,7 +37,7 @@ public class ReflectionController {
             @RequestBody Map<String, String> requestBody) {
 
         if (userDetails == null) {
-            logger.warn("Unauthorized attempt to generate reflection: No user details.");
+            log.warn("Unauthorized attempt to generate reflection: No user details.");
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Collections.singletonMap("error", "Authentication required."));
         }
 
@@ -49,7 +45,7 @@ public class ReflectionController {
                 .orElse(null);
 
         if (user == null) {
-            logger.error("User not found for username: {}", userDetails.getUsername());
+            log.error("User not found for username: {}", userDetails.getUsername());
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Collections.singletonMap("error", "User not found."));
         }
 
@@ -58,13 +54,13 @@ public class ReflectionController {
             return ResponseEntity.badRequest().body(Collections.singletonMap("error", "Prompt text is required."));
         }
 
-        logger.info("Received request to generate reflection for user: {}", user.getUsername());
+        log.info("Received request to generate reflection for user: {}", user.getUsername());
 
         try {
             String reflection = journalService.generateReflectionFromMlService(promptText, user);
             return ResponseEntity.ok(Collections.singletonMap("reflection", reflection));
         } catch (Exception e) {
-            logger.error("Error generating reflection for user {}: {}", user.getUsername(), e.getMessage(), e);
+            log.error("Error generating reflection for user {}: {}", user.getUsername(), e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Collections.singletonMap("error", "Failed to generate reflection: " + e.getMessage()));
         }

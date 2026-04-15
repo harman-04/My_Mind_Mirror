@@ -5,8 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.web.access.AccessDeniedHandler;
@@ -17,9 +16,9 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Component
+@Slf4j
 public class JwtAccessDeniedHandler implements AccessDeniedHandler {
 
-    private static final Logger logger = LoggerFactory.getLogger(JwtAccessDeniedHandler.class);
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -27,7 +26,7 @@ public class JwtAccessDeniedHandler implements AccessDeniedHandler {
     public void handle(HttpServletRequest request, HttpServletResponse response,
                        AccessDeniedException accessDeniedException) throws IOException, ServletException {
         // This log will tell us exactly why access was denied
-        logger.error("Access Denied Error: {} to URI: {}", accessDeniedException.getMessage(), request.getRequestURI(), accessDeniedException); // Log the full stack trace
+        log.error("Access Denied Error: {} to URI: {}", accessDeniedException.getMessage(), request.getRequestURI(), accessDeniedException); // Log the full stack trace
 
         response.setStatus(HttpStatus.FORBIDDEN.value());
         response.setContentType("application/json");

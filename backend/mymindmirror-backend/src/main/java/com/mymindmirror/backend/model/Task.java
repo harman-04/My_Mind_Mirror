@@ -2,6 +2,7 @@
 package com.mymindmirror.backend.model;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.mymindmirror.backend.enums.Status;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -20,7 +21,8 @@ import java.util.UUID;
 public class Task {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.AUTO)
+    @GeneratedValue(strategy = GenerationType.UUID)
+    @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -44,13 +46,6 @@ public class Task {
     @Column(name = "roadmap_task_id")
     private UUID roadmapTaskId;
 
-    // Enum for Task status (can be same as Milestone or more granular)
-    public enum Status {
-        PENDING,
-        COMPLETED,
-        OVERDUE,
-        CANCELLED
-    }
 
     // Constructors
     public Task() {

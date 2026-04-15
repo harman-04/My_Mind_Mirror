@@ -2,35 +2,27 @@ package com.mymindmirror.backend.controller;
 
 import com.mymindmirror.backend.model.Task;
 import com.mymindmirror.backend.model.User;
+import com.mymindmirror.backend.payload.request.TaskRequest;
 import com.mymindmirror.backend.payload.response.MessageResponse;
 import com.mymindmirror.backend.security.JwtUtil;
 import com.mymindmirror.backend.service.TaskService;
 import com.mymindmirror.backend.service.UserService;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/milestones/{milestoneId}/tasks")
+@RequiredArgsConstructor
 public class TaskController {
-
-    private static final Logger logger = LoggerFactory.getLogger(TaskController.class);
 
     private final TaskService taskService;
     private final UserService userService;
     private final JwtUtil jwtUtil;
-
-    public TaskController(TaskService taskService, UserService userService, JwtUtil jwtUtil) {
-        this.taskService = taskService;
-        this.userService = userService;
-        this.jwtUtil = jwtUtil;
-    }
 
     private User getCurrentUserFromToken(String authorizationHeader) {
         if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
@@ -38,7 +30,6 @@ public class TaskController {
         }
         String jwt = authorizationHeader.substring(7);
 
-        // ⭐ FIX HERE: Directly use UUID returned by jwtUtil.extractUserId ⭐
         UUID userId = jwtUtil.extractUserId(jwt);
 
         if (userId == null) { // This check is technically redundant if extractUserId throws on null
@@ -102,16 +93,4 @@ public class TaskController {
         return ResponseEntity.ok(new MessageResponse("Task deleted successfully!"));
     }
 
-    public static class TaskRequest {
-        private String description;
-        private LocalDate dueDate;
-        private Task.Status status;
-
-        public String getDescription() { return description; }
-        public void setDescription(String description) { this.description = description; }
-        public LocalDate getDueDate() { return dueDate; }
-        public void setDueDate(LocalDate dueDate) { this.dueDate = dueDate; }
-        public Task.Status getStatus() { return status; }
-        public void setStatus(Task.Status status) { this.status = status; }
-    }
 }

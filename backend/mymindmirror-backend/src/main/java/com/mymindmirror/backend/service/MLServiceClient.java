@@ -1,10 +1,10 @@
 package com.mymindmirror.backend.service;
 
-import com.mymindmirror.backend.payload.ClusterResult;
+import com.mymindmirror.backend.enums.InsightStatus;
+import com.mymindmirror.backend.payload.response.ClusterResult;
 import com.mymindmirror.backend.payload.response.MilestoneInsightResponse;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
@@ -15,9 +15,9 @@ import java.util.List;
 import java.util.Map;
 
 @Service
+@Slf4j
 public class MLServiceClient {
 
-    private static final Logger logger = LoggerFactory.getLogger(MLServiceClient.class);
     private final WebClient mlServiceWebClient;
 
     public MLServiceClient(@Qualifier("mlServiceWebClient") WebClient mlServiceWebClient) {
@@ -37,7 +37,7 @@ public class MLServiceClient {
                     Object error = response.get("error");
                     boolean hasError = (warning != null && !"null".equals(warning) && !"".equals(warning)) || error != null;
                     if (hasError) {
-                        logger.warn("ML service returned warning/error: {}", response);
+                        log.warn("ML service returned warning/error: {}", response);
                         return Mono.error(new RuntimeException("ML service error: " + response));
                     }
                     return Mono.just(response);
@@ -45,7 +45,7 @@ public class MLServiceClient {
     }
 
     private Mono<Map<String, Object>> fallbackJournalAnalysis(String journalText, String apiKey, Throwable t) {
-        logger.warn("Fallback for analyzeJournal: {}", t.getMessage());
+        log.warn("Fallback for analyzeJournal: {}", t.getMessage());
         return Mono.just(Map.of(
                 "moodScore", 0.0,
                 "emotions", Map.of(),
@@ -69,7 +69,7 @@ public class MLServiceClient {
                     Object error = response.get("error");
                     boolean hasError = (warning != null && !"null".equals(warning) && !"".equals(warning)) || error != null;
                     if (hasError) {
-                        logger.warn("ML service returned warning/error in anomaly detection: {}", response);
+                        log.warn("ML service returned warning/error in anomaly detection: {}", response);
                         return Mono.error(new RuntimeException("ML service error: " + response));
                     }
                     return Mono.just(response);
@@ -77,7 +77,7 @@ public class MLServiceClient {
     }
 
     private Mono<Map<String, Object>> fallbackAnomalyDetection(Object requestBody, String apiKey, Throwable t) {
-        logger.warn("Fallback for anomaly detection: {}", t.getMessage());
+        log.warn("Fallback for anomaly detection: {}", t.getMessage());
         return Mono.just(Map.of("anomalies", List.of(), "message", "Anomaly detection unavailable."));
     }
 
@@ -91,7 +91,7 @@ public class MLServiceClient {
                 .bodyToMono(ClusterResult.class)
                 .flatMap(response -> {
                     if (response.getNumClusters() == 0 && response.getEntryClusters().isEmpty()) {
-                        logger.warn("Clustering returned empty result (possibly due to error): {}", response);
+                        log.warn("Clustering returned empty result (possibly due to error): {}", response);
                         return Mono.error(new RuntimeException("Clustering failed"));
                     }
                     return Mono.just(response);
@@ -99,7 +99,7 @@ public class MLServiceClient {
     }
 
     private Mono<ClusterResult> fallbackClustering(Object requestBody, String apiKey, Throwable t) {
-        logger.warn("Fallback for clustering: {}", t.getMessage());
+        log.warn("Fallback for clustering: {}", t.getMessage());
         return Mono.just(new ClusterResult(0, Map.of(), List.of()));
     }
 
@@ -115,7 +115,7 @@ public class MLServiceClient {
                     Object error = response.get("error");
                     Object reflection = response.get("reflection");
                     if (error != null || reflection == null) {
-                        logger.warn("Reflection generation returned error or null reflection: {}", response);
+                        log.warn("Reflection generation returned error or null reflection: {}", response);
                         return Mono.error(new RuntimeException("Reflection generation failed"));
                     }
                     return Mono.just(response);
@@ -123,7 +123,7 @@ public class MLServiceClient {
     }
 
     private Mono<Map<String, String>> fallbackReflection(String promptText, String apiKey, Throwable t) {
-        logger.warn("Fallback for reflection: {}", t.getMessage());
+        log.warn("Fallback for reflection: {}", t.getMessage());
         return Mono.just(Map.of("reflection", "Unable to generate reflection at this time. Please try again later."));
     }
 
@@ -136,8 +136,8 @@ public class MLServiceClient {
                 .retrieve()
                 .bodyToMono(MilestoneInsightResponse.class)
                 .flatMap(response -> {
-                    if (response.getStatus() == MilestoneInsightResponse.InsightStatus.ERROR) {
-                        logger.warn("Milestone insights returned ERROR status: {}", response);
+                    if (response.getStatus() == InsightStatus.ERROR) {
+                        log.warn("Milestone insights returned ERROR status: {}", response);
                         return Mono.error(new RuntimeException("Milestone insights failed"));
                     }
                     return Mono.just(response);
@@ -145,14 +145,14 @@ public class MLServiceClient {
     }
 
     private Mono<MilestoneInsightResponse> fallbackMilestoneInsights(Object requestPayload, String apiKey, Throwable t) {
-        logger.warn("Fallback for milestone insights: {}", t.getMessage());
+        log.warn("Fallback for milestone insights: {}", t.getMessage());
         return Mono.just(new MilestoneInsightResponse(
                 "Insights currently unavailable.",
                 "Cannot assess performance at this moment.",
                 List.of("Check network connection to ML service or ML service logs."),
                 "Keep up the great work!",
                 List.of("Review milestone details."),
-                MilestoneInsightResponse.InsightStatus.ERROR
+                InsightStatus.ERROR
         ));
     }
 }

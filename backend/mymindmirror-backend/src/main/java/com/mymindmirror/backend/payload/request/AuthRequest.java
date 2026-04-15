@@ -1,5 +1,5 @@
 // AuthRequest.java
-package com.mymindmirror.backend.payload;
+package com.mymindmirror.backend.payload.request;
 
 import lombok.Data;
 

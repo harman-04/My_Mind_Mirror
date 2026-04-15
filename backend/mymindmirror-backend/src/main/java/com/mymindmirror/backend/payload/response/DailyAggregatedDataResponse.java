@@ -1,4 +1,4 @@
-package com.mymindmirror.backend.payload;
+package com.mymindmirror.backend.payload.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -13,5 +13,4 @@ public class DailyAggregatedDataResponse {
     private LocalDate date;
     private Double averageMood;
     private Long totalWords;
-    // You could add more aggregated fields here if needed, e.g., dominant emotion for the day
 }

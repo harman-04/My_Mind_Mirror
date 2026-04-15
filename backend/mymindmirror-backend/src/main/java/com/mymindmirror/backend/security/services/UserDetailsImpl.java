@@ -2,13 +2,14 @@ package com.mymindmirror.backend.security.services;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.mymindmirror.backend.model.User;
+import lombok.Data;
 import org.springframework.security.core.GrantedAuthority;
-import org.springframework.security.core.authority.SimpleGrantedAuthority; // Import this
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
 import java.util.Collections;
-import java.util.List; // Import List
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -16,17 +17,19 @@ import java.util.UUID;
  * Custom implementation of Spring Security's UserDetails.
  * Wraps our User entity to provide user information to Spring Security.
  */
+
+@Data
 public class UserDetailsImpl implements UserDetails {
     private static final long serialVersionUID = 1L;
 
-    private UUID id;
-    private String username;
-    private String email;
+    private final UUID id;
+    private final String username;
+    private final String email;
 
     @JsonIgnore
-    private String password;
+    private final String password;
 
-    private Collection<? extends GrantedAuthority> authorities;
+    private final Collection<? extends GrantedAuthority> authorities;
 
     public UserDetailsImpl(UUID id, String username, String email, String password,
                            Collection<? extends GrantedAuthority> authorities) {
@@ -44,12 +47,8 @@ public class UserDetailsImpl implements UserDetails {
      * @return A UserDetailsImpl instance.
      */
     public static UserDetailsImpl build(User user) {
-        // ⭐ MODIFICATION HERE: Assign a default role/authority ⭐
+        //  Assign a default role/authority
         List<GrantedAuthority> authorities = Collections.singletonList(new SimpleGrantedAuthority("ROLE_USER"));
-        // If you had actual roles in your User model, you would map them:
-        // List<GrantedAuthority> authorities = user.getRoles().stream()
-        //     .map(role -> new SimpleGrantedAuthority(role.getName().name())) // Assuming Role.Name is an Enum or String
-        //     .collect(Collectors.toList());
 
         return new UserDetailsImpl(
                 user.getId(),
@@ -75,13 +74,7 @@ public class UserDetailsImpl implements UserDetails {
         return username;
     }
 
-    public UUID getId() {
-        return id;
-    }
 
-    public String getEmail() {
-        return email;
-    }
 
     @Override
     public boolean isAccountNonExpired() {

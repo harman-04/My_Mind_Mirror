@@ -2,14 +2,14 @@ package com.mymindmirror.backend.service;
 
 import com.mymindmirror.backend.model.JournalEntry;
 import com.mymindmirror.backend.model.User;
-import com.mymindmirror.backend.payload.UserProfileRequest;
+import com.mymindmirror.backend.payload.request.UserProfileRequest;
 import com.mymindmirror.backend.repository.JournalEntryRepository;
 import com.mymindmirror.backend.repository.UserRepository;
 import com.mymindmirror.backend.util.EncryptionUtil;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Optional;
@@ -20,31 +20,23 @@ import org.springframework.transaction.annotation.Transactional;
  * Service class for managing User-related business logic.
  */
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class UserService {
-
-    private static final Logger logger = LoggerFactory.getLogger(UserService.class);
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JournalEntryRepository journalEntryRepository;
 
 
-    public UserService(UserRepository userRepository,
-                       PasswordEncoder passwordEncoder,
-                       JournalEntryRepository journalEntryRepository) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.journalEntryRepository = journalEntryRepository;
-    }
-
     public User registerNewUser(String username, String email, String password) {
-        logger.info("Attempting to register new user: {}", username);
+        log.info("Attempting to register new user: {}", username);
         if (userRepository.existsByUsername(username)) {
-            logger.warn("Registration failed: Username '{}' already exists.", username);
+            log.warn("Registration failed: Username '{}' already exists.", username);
             throw new IllegalArgumentException("Username already exists.");
         }
         if (userRepository.findByEmail(email).isPresent()) {
-            logger.warn("Registration failed: Email '{}' already exists.", email);
+            log.warn("Registration failed: Email '{}' already exists.", email);
             throw new IllegalArgumentException("Email already exists.");
         }
 
@@ -54,22 +46,22 @@ public class UserService {
         user.setPasswordHash(passwordEncoder.encode(password));
 
         User savedUser = userRepository.save(user);
-        logger.info("User '{}' registered successfully with ID: {}", username, savedUser.getId());
+        log.info("User '{}' registered successfully with ID: {}", username, savedUser.getId());
         return savedUser;
     }
 
     public Optional<User> findByUsername(String username) {
-        logger.debug("Attempting to find user by username: {}", username);
+        log.debug("Attempting to find user by username: {}", username);
         return userRepository.findByUsername(username);
     }
 
     public Optional<User> findById(UUID id) {
-        logger.debug("Attempting to find user by ID: {}", id);
+        log.debug("Attempting to find user by ID: {}", id);
         return userRepository.findById(id);
     }
 
     public List<User> findAllUsers() {
-        logger.debug("Attempting to find all users.");
+        log.debug("Attempting to find all users.");
         return userRepository.findAll();
     }
 
@@ -78,10 +70,10 @@ public class UserService {
     }
 
     public User updateUser(UUID userId, UserProfileRequest request) {
-        logger.info("Attempting to update user with ID: {}", userId);
+        log.info("Attempting to update user with ID: {}", userId);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> {
-                    logger.warn("User update failed: User with ID {} not found.", userId);
+                    log.warn("User update failed: User with ID {} not found.", userId);
                     return new IllegalArgumentException("User not found.");
                 });
 
@@ -89,48 +81,47 @@ public class UserService {
 
         if (request.getUsername() != null && !request.getUsername().trim().isEmpty() && !request.getUsername().equals(user.getUsername())) {
             if (userRepository.existsByUsername(request.getUsername())) {
-                logger.warn("User update failed: New username '{}' already exists.", request.getUsername());
+                log.warn("User update failed: New username '{}' already exists.", request.getUsername());
                 throw new IllegalArgumentException("Username already taken.");
             }
             user.setUsername(request.getUsername());
             changed = true;
-            logger.debug("Updated username to: {}", request.getUsername());
+            log.debug("Updated username to: {}", request.getUsername());
         }
 
         if (request.getEmail() != null && !request.getEmail().trim().isEmpty() && !request.getEmail().equals(user.getEmail())) {
             // Check if the new email exists for another user (not the current one)
             Optional<User> existingUserWithEmail = userRepository.findByEmail(request.getEmail());
             if (existingUserWithEmail.isPresent() && !existingUserWithEmail.get().getId().equals(userId)) {
-                logger.warn("User update failed: New email '{}' already exists for another user.", request.getEmail());
+                log.warn("User update failed: New email '{}' already exists for another user.", request.getEmail());
                 throw new IllegalArgumentException("Email already taken by another user.");
             }
             user.setEmail(request.getEmail());
             changed = true;
-            logger.debug("Updated email to: {}", request.getEmail());
+            log.debug("Updated email to: {}", request.getEmail());
         }
 
         if (changed) {
             User updatedUser = userRepository.save(user);
-            logger.info("User with ID {} updated successfully.", userId);
+            log.info("User with ID {} updated successfully.", userId);
             return updatedUser;
         } else {
-            logger.info("No changes detected for user with ID {}. Returning existing user.", userId);
+            log.info("No changes detected for user with ID {}. Returning existing user.", userId);
             return user;
         }
     }
 
     public void deleteUser(UUID userId) {
-        logger.info("Attempting to delete user with ID: {}", userId);
+        log.info("Attempting to delete user with ID: {}", userId);
         if (!userRepository.existsById(userId)) {
-            logger.warn("User deletion failed: User with ID {} not found.", userId);
+            log.warn("User deletion failed: User with ID {} not found.", userId);
             throw new IllegalArgumentException("User not found.");
         }
         userRepository.deleteById(userId);
-        logger.info("User with ID {} deleted successfully.", userId);
+        log.info("User with ID {} deleted successfully.", userId);
     }
 
     /**
-     * ⭐ NEW METHOD ⭐
      * Changes a user's password after verifying the current password.
      * @param userId The ID of the user whose password is to be changed.
      * @param currentPassword The user's current raw password.
@@ -140,7 +131,7 @@ public class UserService {
      */
     @Transactional
     public void changeUserPassword(UUID userId, String currentPassword, String newPassword) {
-        logger.info("Attempting to change password for user ID: {}", userId);
+        log.info("Attempting to change password for user ID: {}", userId);
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found."));
 
@@ -156,7 +147,7 @@ public class UserService {
 
         // --- Re-encrypt all journal entries with the new password hash ---
         List<JournalEntry> userEntries = journalEntryRepository.findByUser(user);
-        logger.info("Re-encrypting {} journal entries for user: {}", userEntries.size(), user.getUsername());
+        log.info("Re-encrypting {} journal entries for user: {}", userEntries.size(), user.getUsername());
 
         String oldPasswordHash = user.getPasswordHash(); // current hash (before change)
         String newPasswordHash = passwordEncoder.encode(newPassword);
@@ -166,13 +157,13 @@ public class UserService {
             String decryptedText = EncryptionUtil.decrypt(entry.getRawText(), oldPasswordHash);
             if (decryptedText == null) {
                 // If decryption fails (e.g., corrupted data), log and skip
-                logger.warn("Failed to decrypt entry {} for user {}. Skipping re-encryption.", entry.getId(), user.getUsername());
+                log.warn("Failed to decrypt entry {} for user {}. Skipping re-encryption.", entry.getId(), user.getUsername());
                 continue;
             }
             // Encrypt with new password hash
             String newEncryptedText = EncryptionUtil.encrypt(decryptedText, newPasswordHash);
             if (newEncryptedText == null) {
-                logger.error("Failed to encrypt entry {} for user {}. Aborting password change.", entry.getId(), user.getUsername());
+                log.error("Failed to encrypt entry {} for user {}. Aborting password change.", entry.getId(), user.getUsername());
                 throw new RuntimeException("Failed to re-encrypt journal entries. Password change aborted.");
             }
             entry.setRawText(newEncryptedText);
@@ -180,13 +171,13 @@ public class UserService {
 
         // Save all updated entries
         journalEntryRepository.saveAll(userEntries);
-        logger.info("Successfully re-encrypted {} entries for user: {}", userEntries.size(), user.getUsername());
+        log.info("Successfully re-encrypted {} entries for user: {}", userEntries.size(), user.getUsername());
 
         // Update password hash
         user.setPasswordHash(newPasswordHash);
         userRepository.save(user);
 
-        logger.info("Password changed successfully for user ID: {}", userId);
+        log.info("Password changed successfully for user ID: {}", userId);
     }
 
     public User save(User user) {

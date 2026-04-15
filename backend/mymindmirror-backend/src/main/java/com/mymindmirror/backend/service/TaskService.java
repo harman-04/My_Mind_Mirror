@@ -1,14 +1,15 @@
 // src/main/java/com/mymindmirror.backend/service/TaskService.java
 package com.mymindmirror.backend.service;
 
+import com.mymindmirror.backend.enums.Status;
 import com.mymindmirror.backend.model.Milestone;
 import com.mymindmirror.backend.model.RoadmapTask;
 import com.mymindmirror.backend.model.Task;
 import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.repository.RoadmapTaskRepository;
 import com.mymindmirror.backend.repository.TaskRepository;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,19 +24,14 @@ import java.util.UUID;
  * ensuring proper milestone and user ownership.
  */
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class TaskService {
-
-    private static final Logger logger = LoggerFactory.getLogger(TaskService.class);
 
     private final TaskRepository taskRepository;
     private final MilestoneService milestoneService; // To interact with Milestone logic
     private final RoadmapTaskRepository roadmapTaskRepository; // inject
 
-    public TaskService(TaskRepository taskRepository, MilestoneService milestoneService, RoadmapTaskRepository roadmapTaskRepository) {
-        this.taskRepository = taskRepository;
-        this.milestoneService = milestoneService;
-        this.roadmapTaskRepository = roadmapTaskRepository;
-    }
 
     /**
      * Creates a new task for a specific milestone.
@@ -49,12 +45,12 @@ public class TaskService {
      */
     @Transactional
     public Task createTask(UUID milestoneId, User user, String description, LocalDate dueDate) {
-        logger.info("Creating new task for milestone {} for user {}", milestoneId, user.getUsername());
+        log.info("Creating new task for milestone {} for user {}", milestoneId, user.getUsername());
         Milestone milestone = milestoneService.getMilestoneByIdForUser(milestoneId, user)
                 .orElseThrow(() -> new IllegalArgumentException("Milestone not found or not owned by user."));
 
         Task task = new Task(milestone, description, dueDate);
-        task.setStatus(Task.Status.PENDING); // New tasks start as PENDING
+        task.setStatus(Status.PENDING); // New tasks start as PENDING
         Task savedTask = taskRepository.save(task);
 
         // Update milestone status after adding a new task
@@ -71,7 +67,7 @@ public class TaskService {
      * @throws IllegalArgumentException if the milestone is not found or not owned by the user.
      */
     public List<Task> getAllTasksForMilestone(UUID milestoneId, User user) {
-        logger.info("Fetching all tasks for milestone {} for user {}", milestoneId, user.getUsername());
+        log.info("Fetching all tasks for milestone {} for user {}", milestoneId, user.getUsername());
         Milestone milestone = milestoneService.getMilestoneByIdForUser(milestoneId, user)
                 .orElseThrow(() -> new IllegalArgumentException("Milestone not found or not owned by user."));
         return taskRepository.findByMilestoneOrderByCreationTimestampAsc(milestone);
@@ -86,13 +82,13 @@ public class TaskService {
      * @return An Optional containing the Task if found and owned correctly.
      */
     public Optional<Task> getTaskByIdForMilestoneAndUser(UUID taskId, UUID milestoneId, User user) {
-        logger.info("Fetching task {} for milestone {} for user {}", taskId, milestoneId, user.getUsername());
+        log.info("Fetching task {} for milestone {} for user {}", taskId, milestoneId, user.getUsername());
         Milestone milestone = milestoneService.getMilestoneByIdForUser(milestoneId, user)
                 .orElseThrow(() -> new IllegalArgumentException("Milestone not found or not owned by user."));
 
         List<Task> tasks = taskRepository.findByIdAndMilestone(taskId, milestone);
         if (tasks.isEmpty()) {
-            logger.warn("Task {} not found or not part of milestone {} for user {}", taskId, milestoneId, user.getUsername());
+            log.warn("Task {} not found or not part of milestone {} for user {}", taskId, milestoneId, user.getUsername());
             return Optional.empty();
         }
         return Optional.of(tasks.get(0)); // Should be at most one result
@@ -112,8 +108,8 @@ public class TaskService {
      */
     @Transactional
     public Task updateTask(UUID taskId, UUID milestoneId, User user,
-                           String newDescription, LocalDate newDueDate, Task.Status newStatus) {
-        logger.info("Updating task {} for milestone {} for user {}", taskId, milestoneId, user.getUsername());
+                           String newDescription, LocalDate newDueDate, Status newStatus) {
+        log.info("Updating task {} for milestone {} for user {}", taskId, milestoneId, user.getUsername());
         Task existingTask = getTaskByIdForMilestoneAndUser(taskId, milestoneId, user)
                 .orElseThrow(() -> new IllegalArgumentException("Task not found or not owned by user/milestone."));
 
@@ -124,16 +120,16 @@ public class TaskService {
             existingTask.setDueDate(newDueDate);
         }
         if (newStatus != null) {
-            Task.Status oldStatus = existingTask.getStatus();
+            Status oldStatus = existingTask.getStatus();
             existingTask.setStatus(newStatus);
             // If status changed to COMPLETED and there is a linked roadmap task, sync it
-            if (oldStatus != Task.Status.COMPLETED && newStatus == Task.Status.COMPLETED) {
+            if (oldStatus != Status.COMPLETED && newStatus == Status.COMPLETED) {
                 if (existingTask.getRoadmapTaskId() != null) {
                     syncRoadmapTaskCompletion(existingTask.getRoadmapTaskId(), true);
                 }
             }
             // If status changed away from COMPLETED (uncomplete), also sync
-            if (oldStatus == Task.Status.COMPLETED && newStatus != Task.Status.COMPLETED) {
+            if (oldStatus == Status.COMPLETED && newStatus != Status.COMPLETED) {
                 if (existingTask.getRoadmapTaskId() != null) {
                     syncRoadmapTaskCompletion(existingTask.getRoadmapTaskId(), false);
                 }
@@ -152,7 +148,7 @@ public class TaskService {
      */
     @Transactional
     public void deleteTask(UUID taskId, UUID milestoneId, User user) {
-        logger.info("Deleting task {} for milestone {} for user {}", taskId, milestoneId, user.getUsername());
+        log.info("Deleting task {} for milestone {} for user {}", taskId, milestoneId, user.getUsername());
         Task existingTask = getTaskByIdForMilestoneAndUser(taskId, milestoneId, user)
                 .orElseThrow(() -> new IllegalArgumentException("Task not found or not owned by user/milestone."));
 
@@ -162,7 +158,7 @@ public class TaskService {
 
         // Now delete the task
         taskRepository.delete(existingTask);
-        logger.info("Task {} deleted successfully.", taskId);
+        log.info("Task {} deleted successfully.", taskId);
 
         // Update milestone status after deletion
         milestoneService.updateMilestoneStatusBasedOnTasks(milestone.getId());
@@ -174,7 +170,7 @@ public class TaskService {
         Milestone milestone = milestoneService.getMilestoneByIdForUser(milestoneId, user)
                 .orElseThrow(() -> new IllegalArgumentException("Milestone not found or not owned by user."));
         Task task = new Task(milestone, description, dueDate);
-        task.setStatus(Task.Status.PENDING);
+        task.setStatus(Status.PENDING);
         task.setRoadmapTaskId(roadmapTaskId);
         Task savedTask = taskRepository.save(task);
         milestoneService.updateMilestoneStatusBasedOnTasks(milestone.getId());
@@ -186,7 +182,7 @@ public class TaskService {
         if (roadmapTask != null && roadmapTask.isCompleted() != completed) {
             roadmapTask.setCompleted(completed);
             roadmapTaskRepository.save(roadmapTask);
-            logger.info("Synced roadmap task {} completion to {}", roadmapTaskId, completed);
+            log.info("Synced roadmap task {} completion to {}", roadmapTaskId, completed);
         }
     }
 

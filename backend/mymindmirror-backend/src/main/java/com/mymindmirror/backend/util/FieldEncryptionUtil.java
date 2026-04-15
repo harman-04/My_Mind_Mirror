@@ -1,7 +1,6 @@
 package com.mymindmirror.backend.util;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -13,9 +12,9 @@ import java.security.SecureRandom;
 import java.util.Base64;
 
 @Component
+@Slf4j
 public class FieldEncryptionUtil {
 
-    private static final Logger logger = LoggerFactory.getLogger(FieldEncryptionUtil.class);
     private static final String ALGORITHM = "AES/GCM/NoPadding";
     private static final int GCM_TAG_LENGTH = 128; // bits
     private static final int GCM_IV_LENGTH = 12;   // bytes
@@ -27,7 +26,7 @@ public class FieldEncryptionUtil {
             throw new IllegalArgumentException("Master key must be 32 bytes (256 bits) for AES-256");
         }
         this.secretKey = new SecretKeySpec(keyBytes, "AES");
-        logger.info("FieldEncryptionUtil initialized with AES-256 master key");
+        log.info("FieldEncryptionUtil initialized with AES-256 master key");
     }
 
     public String encrypt(String plaintext) {
@@ -45,7 +44,7 @@ public class FieldEncryptionUtil {
             System.arraycopy(ciphertext, 0, combined, iv.length, ciphertext.length);
             return Base64.getEncoder().encodeToString(combined);
         } catch (Exception e) {
-            logger.error("Encryption failed", e);
+            log.error("Encryption failed", e);
             throw new RuntimeException("Failed to encrypt field", e);
         }
     }
@@ -67,7 +66,7 @@ public class FieldEncryptionUtil {
             byte[] plaintext = cipher.doFinal(ciphertext);
             return new String(plaintext, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            logger.error("Decryption failed", e);
+            log.error("Decryption failed", e);
             throw new RuntimeException("Failed to decrypt field", e);
         }
     }

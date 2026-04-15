@@ -69,7 +69,6 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID
                                                              @Param("startDate") LocalDate startDate,
                                                              @Param("endDate") LocalDate endDate);
 
-    // ⭐ NEW METHOD FOR SEARCH FUNCTIONALITY ⭐
     /**
      * Finds journal entries for a user that contain a specific keyword in their raw text.
      * The search is case-insensitive.

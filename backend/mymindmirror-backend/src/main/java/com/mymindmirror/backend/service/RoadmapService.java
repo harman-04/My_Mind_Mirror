@@ -7,11 +7,11 @@ import com.mymindmirror.backend.payload.response.RoadmapGenerateResponse;
 import com.mymindmirror.backend.payload.response.RoadmapResponse;
 import com.mymindmirror.backend.repository.RoadmapRepository;
 import com.mymindmirror.backend.repository.RoadmapTaskRepository;
-import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
 import java.util.ArrayList;
@@ -21,6 +21,8 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
+@Slf4j
 public class RoadmapService {
 
     private final WebClient mlServiceWebClient;
@@ -33,28 +35,6 @@ public class RoadmapService {
     private final RoadmapTaskRepository taskRepository;
     private final GamificationService gamificationService;
 
-
-    public RoadmapService(WebClient mlServiceWebClient,
-                          RoadmapRepository roadmapRepository,
-                          ApiKeyService apiKeyService,
-                          UserService userService,
-                          ObjectMapper objectMapper,
-                          MilestoneService milestoneService,
-                          TaskService taskService,
-                          RoadmapTaskRepository taskRepository,
-                          GamificationService gamificationService) {
-        this.mlServiceWebClient = mlServiceWebClient;
-        this.roadmapRepository = roadmapRepository;
-        this.apiKeyService = apiKeyService;
-        this.userService = userService;
-        this.objectMapper = objectMapper;               // ← assign it
-        this.milestoneService = milestoneService;
-        this.taskService = taskService;
-        this.taskRepository = taskRepository;
-        this.gamificationService = gamificationService;
-    }
-
-
     @Transactional
     public Roadmap generateRoadmap(User user, String goal, Integer timeframeWeeks) {
         String apiKey = apiKeyService.getDecryptedApiKey(user);
@@ -62,22 +42,30 @@ public class RoadmapService {
         request.setGoal(goal);
         request.setTimeframeWeeks(timeframeWeeks);
 
-        RoadmapGenerateResponse aiResponse = mlServiceWebClient.post()
-                .uri("/ml/roadmap/generate")
-                .header("X-Gemini-Key", apiKey != null ? apiKey : "")
-                .bodyValue(request)
-                .retrieve()
-                .bodyToMono(RoadmapGenerateResponse.class)
-                .block();
-
-        if (aiResponse == null) {
-            throw new RuntimeException("Failed to generate roadmap from AI");
+        RoadmapGenerateResponse aiResponse = null;
+        try {
+            aiResponse = mlServiceWebClient.post()
+                    .uri("/ml/roadmap/generate")
+                    .header("X-Gemini-Key", apiKey != null ? apiKey : "")
+                    .bodyValue(request)
+                    .retrieve()
+                    .bodyToMono(RoadmapGenerateResponse.class)
+                    .block();
+        } catch (Exception e) {
+            log.error("ML service call failed, using fallback roadmap: {}", e.getMessage());
         }
 
+        // If AI response is null (failed), create a fallback response
+        if (aiResponse == null) {
+            aiResponse = createFallbackRoadmapResponse(goal, timeframeWeeks);
+        }
+
+        // Ensure collections are not null
         if (aiResponse.getTasks() == null) aiResponse.setTasks(new ArrayList<>());
         if (aiResponse.getResources() == null) aiResponse.setResources(new ArrayList<>());
         if (aiResponse.getMilestones() == null) aiResponse.setMilestones(new ArrayList<>());
         if (aiResponse.getPhases() == null) aiResponse.setPhases(new ArrayList<>());
+
         Roadmap roadmap = new Roadmap(user, aiResponse.getTitle(), goal, aiResponse.getDurationWeeks());
 
         // Map tasks
@@ -128,11 +116,63 @@ public class RoadmapService {
         return roadmapRepository.save(roadmap);
     }
 
-//    @Transactional(readOnly = true)   // 👈 add this annotation
-//    public List<Roadmap> getUserRoadmaps(User user) {
-//        return roadmapRepository.findByUserOrderByCreatedAtDesc(user);
-//    }
+    private RoadmapGenerateResponse createFallbackRoadmapResponse(String goal, Integer timeframeWeeks) {
+        RoadmapGenerateResponse fallback = new RoadmapGenerateResponse();
+        fallback.setTitle("Your Personalized Roadmap to " + goal);
+        fallback.setDurationWeeks(timeframeWeeks != null ? timeframeWeeks : 4);
 
+        // Create simple tasks
+        List<RoadmapGenerateResponse.Task> tasks = new ArrayList<>();
+        tasks.add(createTask(1, 1, "Research the best resources for " + goal, "daily", "Explore official docs and tutorials.", List.of("Find 3 resources", "Bookmark them")));
+        tasks.add(createTask(2, 1, "Set up your learning environment", "daily", "Install required software.", List.of()));
+        tasks.add(createTask(3, 1, "Complete first module on " + goal, "daily", "Follow a structured course.", List.of()));
+        tasks.add(createTask(4, 1, "Practice with a small exercise", "daily", "Apply what you learned.", List.of()));
+        tasks.add(createTask(5, 1, "Review and plan next week", "daily", "Reflect on progress.", List.of()));
+        fallback.setTasks(tasks);
+
+        // Simple resources
+        List<RoadmapGenerateResponse.Resource> resources = new ArrayList<>();
+        resources.add(createResource("Google: " + goal + " tutorials", "https://www.google.com/search?q=" + goal.replace(" ", "+") + "+tutorial", "search"));
+        resources.add(createResource("YouTube: " + goal + " for beginners", "https://www.youtube.com/results?search_query=" + goal.replace(" ", "+") + "+beginner", "video"));
+        resources.add(createResource("Coursera: " + goal + " courses", "https://www.coursera.org/search?query=" + goal.replace(" ", "+"), "course"));
+        fallback.setResources(resources);
+
+        // Simple milestones
+        int weeks = timeframeWeeks != null ? timeframeWeeks : 4;
+        List<RoadmapGenerateResponse.Milestone> milestones = new ArrayList<>();
+        milestones.add(createMilestone("Foundation of " + goal + " completed", Math.max(1, weeks / 3)));
+        milestones.add(createMilestone("First project finished", Math.max(1, 2 * weeks / 3)));
+        milestones.add(createMilestone("Ready to advance in " + goal, weeks));
+        fallback.setMilestones(milestones);
+
+        return fallback;
+    }
+
+    private RoadmapGenerateResponse.Task createTask(Integer day, Integer week, String description, String type, String details, List<String> subtasks) {
+        RoadmapGenerateResponse.Task task = new RoadmapGenerateResponse.Task();
+        task.setDay(day);
+        task.setWeek(week);
+        task.setDescription(description);
+        task.setType(type);
+        task.setDetails(details);
+        task.setSubtasks(subtasks);
+        return task;
+    }
+
+    private RoadmapGenerateResponse.Resource createResource(String name, String url, String type) {
+        RoadmapGenerateResponse.Resource resource = new RoadmapGenerateResponse.Resource();
+        resource.setName(name);
+        resource.setUrl(url);
+        resource.setType(type);
+        return resource;
+    }
+
+    private RoadmapGenerateResponse.Milestone createMilestone(String name, Integer week) {
+        RoadmapGenerateResponse.Milestone milestone = new RoadmapGenerateResponse.Milestone();
+        milestone.setName(name);
+        milestone.setWeek(week);
+        return milestone;
+    }
 
 
 
@@ -447,15 +487,4 @@ public class RoadmapService {
         roadmap = roadmapRepository.save(roadmap);
         return toResponse(roadmap);
     }
-
-//    @PostConstruct
-//    public void migrateImportedFlag() {
-//        List<RoadmapTask> tasks = taskRepository.findAll();
-//        for (RoadmapTask task : tasks) {
-//            if (task.getImportedToMilestone() == null) {
-//                task.setImportedToMilestone(false);
-//                taskRepository.save(task);
-//            }
-//        }
-//    }
 }

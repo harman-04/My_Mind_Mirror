@@ -5,8 +5,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mymindmirror.backend.model.JournalEntry;
-import com.mymindmirror.backend.model.KeyPhrase; // ⭐ IMPORT THE NEW MODEL
-import com.mymindmirror.backend.payload.UserResponse;
+import com.mymindmirror.backend.model.KeyPhrase;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
@@ -16,7 +15,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors; // ⭐ IMPORT FOR STREAMING
+import java.util.stream.Collectors;
 
 @Data
 @NoArgsConstructor
@@ -52,7 +51,7 @@ public class JournalEntryResponse {
         this.summary = journalEntry.getSummary();
         this.clusterId = journalEntry.getClusterId();
 
-        // ⭐ FIX: Map the KeyPhrase entity back to a simple String for the frontend
+        // Map the KeyPhrase entity back to a simple String for the frontend
         this.keyPhrases = (journalEntry.getKeyPhrases() != null)
                 ? journalEntry.getKeyPhrases().stream()
                 .map(KeyPhrase::getPhrase)

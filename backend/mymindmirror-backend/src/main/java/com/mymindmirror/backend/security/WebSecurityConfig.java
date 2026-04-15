@@ -25,15 +25,15 @@ public class WebSecurityConfig {
 
     private final JwtRequestFilter jwtRequestFilter;
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
-    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint; // ⭐ NEW INJECTION ⭐
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
-    // ⭐ UPDATED CONSTRUCTOR ⭐
+
     public WebSecurityConfig(JwtRequestFilter jwtRequestFilter,
                              JwtAccessDeniedHandler jwtAccessDeniedHandler,
                              JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint) {
         this.jwtRequestFilter = jwtRequestFilter;
         this.jwtAccessDeniedHandler = jwtAccessDeniedHandler;
-        this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint; // ⭐ ASSIGN NEW FIELD ⭐
+        this.jwtAuthenticationEntryPoint = jwtAuthenticationEntryPoint;
     }
 
     @Bean
@@ -53,7 +53,7 @@ public class WebSecurityConfig {
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS)
                 )
                 .exceptionHandling(exceptions -> exceptions
-                        .authenticationEntryPoint(jwtAuthenticationEntryPoint) // ⭐ ADDED THIS ⭐
+                        .authenticationEntryPoint(jwtAuthenticationEntryPoint)
                         .accessDeniedHandler(jwtAccessDeniedHandler)
                 );
 
