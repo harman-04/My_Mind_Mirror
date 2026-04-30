@@ -13,6 +13,8 @@ import HeaderApiKeyStatus from './components/HeaderApiKeyStatus';
 import AchievementsPage from './pages/AchievementsPage';
 import FeaturesGuide from './pages/FeaturesGuide';
 import { useTheme } from './contexts/ThemeContext';
+import SchedulePage from './pages/SchedulePage';
+
 
 const PrivateRoute = ({ children }) => {
     const isAuthenticated = localStorage.getItem('jwtToken');
@@ -222,6 +224,7 @@ function App() {
                     <Route path="/achievements" element={<PrivateRoute><AchievementsPage /></PrivateRoute>} />
                     <Route path="/journal" element={<PrivateRoute><JournalPage /></PrivateRoute>} />
                     <Route path="/profile" element={<PrivateRoute><ProfilePage /></PrivateRoute>} />
+                    <Route path="/schedule" element={<PrivateRoute><SchedulePage /></PrivateRoute>} />
                 </Routes>
             </main>
 

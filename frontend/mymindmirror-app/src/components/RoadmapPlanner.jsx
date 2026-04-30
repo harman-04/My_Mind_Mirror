@@ -6,7 +6,12 @@ import { useRoadmaps, useGenerateRoadmap, useDeleteRoadmap, useImportTaskToMiles
     useRescheduleRoadmap } from '../hooks/useRoadmap';
 import { useTheme } from '../contexts/ThemeContext';
 import { toast } from 'sonner';
-import { Loader, Sparkles, CheckCircle, Circle, ExternalLink, Target, Trash2, ChevronDown, ChevronUp, BookOpen, ListChecks, Award, Calendar, Clock, TrendingUp, AlertTriangle } from 'lucide-react';
+import {
+  Loader, Sparkles, CheckCircle, Circle, ExternalLink, Target, Trash2,
+  ChevronDown, ChevronUp, BookOpen, ListChecks, Award, Calendar, Clock,
+  TrendingUp, AlertTriangle, BarChart2, List
+} from 'lucide-react';
+import RoadmapTimeline from './RoadmapTimeline'; // new import
 
 // ------------------------------------------------------------------
 // Helper to format markdown-like text (unchanged)
@@ -155,7 +160,7 @@ const formatText = (text) => {
 };
 
 // ------------------------------------------------------------------
-// Portal-based Delete Confirmation Modal (for roadmaps)
+// Portal-based Delete Confirmation Modal (unchanged)
 // ------------------------------------------------------------------
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, roadmapTitle, theme }) => {
   const [mounted, setMounted] = useState(false);
@@ -211,7 +216,7 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, roadmapTitle, the
 };
 
 // ------------------------------------------------------------------
-// Portal-based Task Detail Modal (beautiful redesign)
+// Portal-based Task Detail Modal (unchanged)
 // ------------------------------------------------------------------
 const TaskDetailModal = ({ task, isOpen, onClose, onElaborate, isElaborating }) => {
   const { theme } = useTheme();
@@ -355,7 +360,7 @@ const TaskDetailModal = ({ task, isOpen, onClose, onElaborate, isElaborating }) 
 };
 
 // ------------------------------------------------------------------
-// Loading Skeleton Component (enhanced)
+// Loading Skeleton Component (unchanged)
 // ------------------------------------------------------------------
 const RoadmapSkeleton = ({ theme }) => {
   const bgClass = theme === 'dark' ? 'bg-gray-800/60' : 'bg-white/70';
@@ -390,7 +395,7 @@ const RoadmapSkeleton = ({ theme }) => {
 };
 
 // ------------------------------------------------------------------
-// Main RoadmapPlanner Component (beautiful, robust, with delete modal)
+// Main RoadmapPlanner Component (with Timeline toggle)
 // ------------------------------------------------------------------
 function RoadmapPlanner() {
   const { theme } = useTheme();
@@ -412,6 +417,16 @@ function RoadmapPlanner() {
   const [completedRoadmapIds, setCompletedRoadmapIds] = useState(new Set());
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, roadmapId: null, roadmapTitle: '' });
 
+  // NEW: per-roadmap view mode (list or timeline)
+  const [viewModeMap, setViewModeMap] = useState({});
+
+  const toggleViewMode = (roadmapId) => {
+    setViewModeMap(prev => ({
+      ...prev,
+      [roadmapId]: prev[roadmapId] === 'timeline' ? 'list' : 'timeline'
+    }));
+  };
+
   // After mutation, update selectedTask if it matches the elaborated task
   useEffect(() => {
     if (selectedTask && roadmaps) {
@@ -425,7 +440,7 @@ function RoadmapPlanner() {
     }
   }, [roadmaps, selectedTask?.id]);
 
-  // Check for newly completed roadmaps (all tasks done)
+  // Check for newly completed roadmaps
   useEffect(() => {
     if (roadmaps) {
       roadmaps.forEach(roadmap => {
@@ -555,7 +570,7 @@ function RoadmapPlanner() {
         </button>
       </div>
 
-      {/* Generation Form (glass card) */}
+      {/* Generation Form */}
       {showForm && (
         <div className={`p-6 rounded-2xl ${bgClass} border ${borderClass} shadow-xl backdrop-blur-md transition-all duration-300`}>
           <h3 className="text-xl font-semibold mb-5 flex items-center gap-2">
@@ -624,7 +639,9 @@ function RoadmapPlanner() {
           const remainingWeeks = Math.max(0, (roadmap.durationWeeks || 1) - new Set(roadmap.tasks?.filter(t => t.completed).map(t => t.weekNumber)).size);
           const remainingTasksCount = totalTasks - completedTasks;
           const isCompleted = completionPercent === 100 && totalTasks > 0;
+          const currentViewMode = viewModeMap[roadmap.id] || 'list';
 
+          // Prepare tasks grouped by week for list view
           const tasksByWeek = {};
           roadmap.tasks?.forEach(task => {
             const week = task.weekNumber || 1;
@@ -655,7 +672,7 @@ function RoadmapPlanner() {
               </button>
 
               <div className="p-6">
-                {/* Header */}
+                {/* Header with view toggle */}
                 <div className="flex justify-between items-start mb-4 pr-8">
                   <div>
                     <h3 className="text-2xl font-poppins font-bold bg-gradient-to-r from-purple-600 to-teal-600 dark:from-purple-400 dark:to-teal-400 bg-clip-text text-transparent">
@@ -666,18 +683,28 @@ function RoadmapPlanner() {
                       <span className="flex items-center gap-1"><Clock size={14} /> {roadmap.durationWeeks} weeks</span>
                     </div>
                   </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    isCompleted
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300'
-                      : roadmap.status === 'ACTIVE'
-                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300'
-                      : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                  }`}>
-                    {isCompleted ? '🏆 Completed' : roadmap.status}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+                      isCompleted
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300'
+                        : roadmap.status === 'ACTIVE'
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300'
+                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                    }`}>
+                      {isCompleted ? '🏆 Completed' : roadmap.status}
+                    </span>
+                    {/* NEW: View mode toggle button */}
+                    <button
+                      onClick={() => toggleViewMode(roadmap.id)}
+                      className="p-1.5 rounded-lg bg-gray-200/70 dark:bg-gray-700/70 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+                      title={currentViewMode === 'list' ? 'Switch to timeline view' : 'Switch to list view'}
+                    >
+                      {currentViewMode === 'list' ? <BarChart2 size={16} /> : <List size={16} />}
+                    </button>
+                  </div>
                 </div>
 
-                {/* Progress Dashboard */}
+                {/* Progress Dashboard (always visible) */}
                 <div className="mb-5 p-4 rounded-xl bg-gradient-to-r from-purple-50/50 to-teal-50/50 dark:from-purple-900/20 dark:to-teal-900/20">
                   <div className="flex justify-between text-sm mb-2">
                     <span className="font-medium flex items-center gap-1"><TrendingUp size={14} /> Overall Progress</span>
@@ -695,101 +722,115 @@ function RoadmapPlanner() {
                   </div>
                 </div>
 
-                {/* Tasks grouped by week */}
-                {sortedWeeks.length > 0 && (
-                  <div className="mb-5">
-                    <h4 className="font-semibold mb-3 flex items-center gap-2 text-purple-700 dark:text-purple-300">
-                      <Target size={18} /> Actionable Tasks
-                    </h4>
-                    <div className="space-y-4">
-                      {sortedWeeks.map((week) => {
-                        const tasks = tasksByWeek[week];
-                        const isExpanded = expandedWeeks[week];
-                        const weekCompleted = tasks.every(t => t.completed);
-                        return (
-                          <div key={week} className="border-l-2 border-purple-300 dark:border-purple-700 pl-4">
-                            <button
-                              onClick={() => toggleWeekExpand(week)}
-                              className="flex items-center gap-2 text-sm font-semibold text-purple-600 dark:text-purple-400 mb-2 hover:opacity-80 transition"
-                            >
-                              {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                              Week {week}
-                              {weekCompleted && <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">✓ Done</span>}
-                            </button>
-                            {isExpanded && (
-                              <div className="space-y-3">
-                                {tasks.map((task) => (
-                                  <div key={task.id} className="group bg-gray-50/50 dark:bg-gray-800/30 rounded-xl p-3 hover:bg-gray-100/70 dark:hover:bg-gray-800/50 transition">
-                                    <div className="flex items-start gap-3">
-                                      <button
-                                        onClick={() => toggleTaskMutation.mutate(task.id)}
-                                        className="focus:outline-none mt-0.5"
-                                        disabled={toggleTaskMutation.isPending}
-                                      >
-                                        {task.completed ? (
-                                          <CheckCircle size={18} className="text-green-500" />
-                                        ) : (
-                                          <Circle size={18} className="text-gray-400 group-hover:text-gray-500" />
-                                        )}
-                                      </button>
-                                      <div className="flex-1">
-                                        <div className="flex flex-wrap justify-between items-start gap-2">
-                                          <button
-                                            onClick={() => setSelectedTask(task)}
-                                            className="text-left font-medium hover:text-purple-600 dark:hover:text-purple-400 transition"
-                                          >
-                                            <span className={task.completed ? 'line-through text-gray-400' : ''}>
-                                              {task.description}
-                                              {task.dayNumber && <span className="text-xs text-gray-400 ml-2">(Day {task.dayNumber})</span>}
-                                            </span>
-                                          </button>
-                                          <div className="flex items-center gap-1">
-                                            {task.importedToMilestone && (
-                                              <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">
-                                                ✓ in Milestones
-                                              </span>
-                                            )}
-                                            {(task.details || (task.subtasks && task.subtasks.length > 0)) && (
-                                              <button
-                                                onClick={() => toggleTaskExpand(task.id)}
-                                                className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
-                                              >
-                                                {expandedTaskId === task.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                                              </button>
-                                            )}
+                {/* Conditional Rendering: List View or Timeline View */}
+                {currentViewMode === 'list' ? (
+                  // ---------- List View (existing expandable weeks) ----------
+                  sortedWeeks.length > 0 && (
+                    <div className="mb-5">
+                      <h4 className="font-semibold mb-3 flex items-center gap-2 text-purple-700 dark:text-purple-300">
+                        <Target size={18} /> Actionable Tasks
+                      </h4>
+                      <div className="space-y-4">
+                        {sortedWeeks.map((week) => {
+                          const tasks = tasksByWeek[week];
+                          const isExpanded = expandedWeeks[week];
+                          const weekCompleted = tasks.every(t => t.completed);
+                          return (
+                            <div key={week} className="border-l-2 border-purple-300 dark:border-purple-700 pl-4">
+                              <button
+                                onClick={() => toggleWeekExpand(week)}
+                                className="flex items-center gap-2 text-sm font-semibold text-purple-600 dark:text-purple-400 mb-2 hover:opacity-80 transition"
+                              >
+                                {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                Week {week}
+                                {weekCompleted && <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">✓ Done</span>}
+                              </button>
+                              {isExpanded && (
+                                <div className="space-y-3">
+                                  {tasks.map((task) => (
+                                    <div key={task.id} className="group bg-gray-50/50 dark:bg-gray-800/30 rounded-xl p-3 hover:bg-gray-100/70 dark:hover:bg-gray-800/50 transition">
+                                      <div className="flex items-start gap-3">
+                                        <button
+                                          onClick={() => toggleTaskMutation.mutate(task.id)}
+                                          className="focus:outline-none mt-0.5"
+                                          disabled={toggleTaskMutation.isPending}
+                                        >
+                                          {task.completed ? (
+                                            <CheckCircle size={18} className="text-green-500" />
+                                          ) : (
+                                            <Circle size={18} className="text-gray-400 group-hover:text-gray-500" />
+                                          )}
+                                        </button>
+                                        <div className="flex-1">
+                                          <div className="flex flex-wrap justify-between items-start gap-2">
                                             <button
-                                              onClick={() => importTaskToMilestone(roadmap.id, task.id, task.description)}
-                                              className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded-lg transition"
-                                              title="Add to Milestones"
+                                              onClick={() => setSelectedTask(task)}
+                                              className="text-left font-medium hover:text-purple-600 dark:hover:text-purple-400 transition"
                                             >
-                                              Add
+                                              <span className={task.completed ? 'line-through text-gray-400' : ''}>
+                                                {task.description}
+                                                {task.dayNumber && <span className="text-xs text-gray-400 ml-2">(Day {task.dayNumber})</span>}
+                                              </span>
                                             </button>
+                                            <div className="flex items-center gap-1">
+                                              {task.importedToMilestone && (
+                                                <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">
+                                                  ✓ in Milestones
+                                                </span>
+                                              )}
+                                              {(task.details || (task.subtasks && task.subtasks.length > 0)) && (
+                                                <button
+                                                  onClick={() => toggleTaskExpand(task.id)}
+                                                  className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+                                                >
+                                                  {expandedTaskId === task.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                                </button>
+                                              )}
+                                              <button
+                                                onClick={() => importTaskToMilestone(roadmap.id, task.id, task.description)}
+                                                className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded-lg transition"
+                                                title="Add to Milestones"
+                                              >
+                                                Add
+                                              </button>
+                                            </div>
                                           </div>
+                                          {expandedTaskId === task.id && (
+                                            <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
+                                              <div className="roadmap-details mt-2" dangerouslySetInnerHTML={{ __html: formatText(task.details) }} />
+                                              {task.subtasks && task.subtasks.length > 0 && (
+                                                <ul className="list-disc list-inside ml-2 mt-1">
+                                                  {task.subtasks.map((sub, idx) => <li key={idx}>{sub}</li>)}
+                                                </ul>
+                                              )}
+                                            </div>
+                                          )}
                                         </div>
-                                        {expandedTaskId === task.id && (
-                                          <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
-                                            <div className="roadmap-details mt-2" dangerouslySetInnerHTML={{ __html: formatText(task.details) }} />
-                                            {task.subtasks && task.subtasks.length > 0 && (
-                                              <ul className="list-disc list-inside ml-2 mt-1">
-                                                {task.subtasks.map((sub, idx) => <li key={idx}>{sub}</li>)}
-                                              </ul>
-                                            )}
-                                          </div>
-                                        )}
                                       </div>
                                     </div>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })}
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
+                  )
+                ) : (
+                  // ---------- Timeline View (using RoadmapTimeline) ----------
+                  <div className="mb-5">
+                    <h4 className="font-semibold mb-3 flex items-center gap-2 text-teal-700 dark:text-teal-300">
+                      <BarChart2 size={18} /> Timeline View
+                    </h4>
+                    <RoadmapTimeline
+                      tasks={roadmap.tasks || []}
+                      durationWeeks={roadmap.durationWeeks || 1}
+                    />
                   </div>
                 )}
 
-                {/* Resources */}
+                {/* Resources (always visible) */}
                 {roadmap.resources && roadmap.resources.length > 0 && (
                   <div className="mb-5">
                     <h4 className="font-semibold mb-2 text-teal-700 dark:text-teal-300">Recommended Resources</h4>
@@ -809,7 +850,7 @@ function RoadmapPlanner() {
                   </div>
                 )}
 
-                {/* Milestones */}
+                {/* Milestones (always visible) */}
                 {roadmap.milestones && roadmap.milestones.length > 0 && (
                   <div className="mb-5">
                     <h4 className="font-semibold mb-2 text-amber-700 dark:text-amber-300">Key Milestones</h4>
@@ -823,7 +864,7 @@ function RoadmapPlanner() {
                   </div>
                 )}
 
-                {/* Action Buttons */}
+                {/* Action Buttons (always visible) */}
                 <div className="flex flex-col sm:flex-row gap-3 mt-6">
                   <button
                     onClick={() => continueMutation.mutate(roadmap.id)}

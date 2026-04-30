@@ -20,6 +20,8 @@ import org.hibernate.Hibernate;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 /**
@@ -36,10 +38,23 @@ public class JournalService {
     private final UserService userService;
     private final ApiKeyService apiKeyService;
     private final MLServiceClient mlServiceClient;
+    private final Map<String, CachedQuestion> questionCache = new ConcurrentHashMap<>();
+
 
     @Value("${app.ml-service.url}")
     private String mlServiceBaseUrl;
 
+    private static class CachedQuestion {
+        final String question;
+        final long timestamp;
+        CachedQuestion(String question) {
+            this.question = question;
+            this.timestamp = System.currentTimeMillis();
+        }
+        boolean isExpired() {
+            return System.currentTimeMillis() - timestamp > TimeUnit.MINUTES.toMillis(5);
+        }
+    }
 
     /**
      * Saves a new journal entry. Always triggers AI analysis for new entries.
@@ -85,6 +100,7 @@ public class JournalService {
         }
 
         JournalEntry savedEntry = journalEntryRepository.save(newEntry);
+        questionCache.remove(user.getId().toString());
         log.info("New journal entry with ID {} for user {} saved successfully.", savedEntry.getId(), user.getUsername());
         return savedEntry;
     }
@@ -146,6 +162,7 @@ public class JournalService {
         }
 
         JournalEntry savedEntry = journalEntryRepository.save(existingEntry);
+        questionCache.remove(user.getId().toString());
         log.info("Journal entry with ID {} for user {} updated successfully.", savedEntry.getId(), user.getUsername());
         return savedEntry;
     }
@@ -167,6 +184,7 @@ public class JournalService {
         }
 
         journalEntryRepository.delete(existingEntry);
+        questionCache.remove(user.getId().toString());
         log.info("Journal entry with ID {} for user {} deleted successfully.", entryId, user.getUsername());
     }
 
@@ -537,4 +555,60 @@ public class JournalService {
         }
         return page;
     }
+
+    public String generateReflectionChat(User user, String query) {
+        // 1. Fetch recent journal entries (e.g., last 30 days, limit 10)
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(30);
+        List<JournalEntry> entries = getJournalEntriesForUser(user, startDate, endDate);
+
+        // 2. Build context: each entry as "Date: ...\nSummary: ...\nKey emotions: ..."
+        StringBuilder context = new StringBuilder("Here are the user's recent journal entries:\n\n");
+        for (JournalEntry entry : entries) {
+            context.append("Date: ").append(entry.getEntryDate()).append("\n");
+            context.append("Summary: ").append(entry.getSummary()).append("\n");
+            // Add emotions as readable string
+            String emotionsStr = entry.getEmotions() != null ? entry.getEmotions() : "{}";
+            context.append("Emotions: ").append(emotionsStr).append("\n");
+            context.append("---\n");
+        }
+
+        // 3. Call ML service
+        String apiKey = apiKeyService.getDecryptedApiKey(user);
+        Map<String, String> response = mlServiceClient.reflectionChat(context.toString(), query, apiKey).block();
+        return response != null ? response.get("answer") : "Unable to generate response.";
+    }
+
+    public String generateReflectiveQuestion(User user) {
+        String cacheKey = user.getId().toString();
+        CachedQuestion cached = questionCache.get(cacheKey);
+        if (cached != null && !cached.isExpired()) {
+            log.debug("Returning cached reflective question for user {}", user.getUsername());
+            return cached.question;
+        }
+
+        LocalDate endDate = LocalDate.now();
+        LocalDate startDate = endDate.minusDays(30);
+        List<JournalEntry> entries = getJournalEntriesForUser(user, startDate, endDate);
+
+        StringBuilder context = new StringBuilder();
+        for (JournalEntry entry : entries) {
+            context.append("Date: ").append(entry.getEntryDate()).append("\n");
+            context.append("Summary: ").append(entry.getSummary()).append("\n");
+            context.append("Emotions: ").append(entry.getEmotions()).append("\n");
+            context.append("---\n");
+        }
+
+        String apiKey = apiKeyService.getDecryptedApiKey(user);
+        Map<String, String> request = Map.of("context", context.toString());
+        Map<String, String> response = mlServiceClient.suggestQuestion(request, apiKey).block();
+        String question = response != null ? response.get("question") : null;
+        if (question == null || question.isBlank()) {
+            question = "What's one thing you've learned about yourself recently?";
+        }
+
+        questionCache.put(cacheKey, new CachedQuestion(question));
+        return question;
+    }
+
 }

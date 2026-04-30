@@ -32,12 +32,30 @@ def get_gemini_journal_analysis(journal_text, api_key=None):
     Makes a single, comprehensive call to the Gemini API to get all required
     journal analysis components (emotions, concerns, summary, growth tips, key phrases).
     """
-    prompt = f"""Analyze the following journal entry and provide the following information as a single JSON object:
+    prompt = f"""Analyze the following journal entry and provide the following information as a single JSON object.
+    **LANGUAGE & STYLE INSTRUCTION:**
+    - The journal entry may contain multiple languages (e.g., Hinglish: "Aaj wali movie bas timepass thi.") or mixed scripts.
+    - Detect the primary language(s) and the style (casual, formal, humorous, etc.).
+    - Generate ALL text output (summary, growth tips, core concerns, key phrases) in the **same mixed style and script** as the entry. For example, if the entry is in Hinglish (Hindi words written in Latin script), respond in Hinglish. If it mixes English and Spanish, respond with that mix.
+    - Do not force a single language; preserve the natural code‑switching.
+
     1.  **Emotions**: Identify primary emotions with intensity scores from 0.0 to 1.0. Focus on common emotions like joy, sadness, anger, fear, surprise, disgust, love, anxiety, relief, neutral, excitement, contentment, frustration, gratitude, hope. Ensure scores sum up to 1.0 if possible, or represent relative intensity.
-    2.  **Core Concerns**: Identify 3-5 main themes or core concerns discussed, as a list of concise strings (e.g., "work", "relationships", "health", "personal growth").
-    3.  **Summary**: Summarize the journal entry concisely, in 1-3 sentences, focusing on the main points and overall sentiment.
-    4.  **Growth Tips**: Generate 3-5 concise, empathetic, and actionable growth tips based on the entry's detected emotions and core concerns.
-    5.  **Key Phrases**: Extract 5-10 concise key phrases from the entry.
+
+    2.  **Core Concerns**: Identify 3-5 main themes or core concerns discussed, as a list of concise strings (e.g., "work", "relationships", "health", "personal growth"). Use the same mixed language/style.
+
+    3.  **Summary**: Summarize the journal entry concisely, in 1-3 sentences, focusing on the main points and overall sentiment. Use the same mixed language/style.
+
+    4.  **Growth Tips**: Generate 3-5 comprehensive, actionable, and deeply useful growth tips based on the entry's detected emotions and core concerns.
+        Each tip MUST be a **detailed markdown string** (not just one sentence). Use:
+        - **`##` subheadings** for each tip
+        - **Bullet points** for actionable steps
+        - **Bold text** for key concepts
+        - **`>` blockquotes** for reflective questions or affirmations
+        - **`---` horizontal rules** to separate tips (optional)
+        - **Links to relevant resources** (if applicable) in markdown `[text](url)`
+        Adapt the tone and style to match the entry (e.g., empathetic, motivational, practical). Use the same mixed language/style.
+
+    5.  **Key Phrases**: Extract 5-10 concise key phrases from the entry. Preserve the original language mix.
 
     The output MUST be a valid JSON object with the exact following structure. If a field cannot be determined, provide an empty list for arrays, an empty string for strings, or an empty object for emotion scores.
     {{
@@ -60,14 +78,16 @@ def get_gemini_journal_analysis(journal_text, api_key=None):
         }},
         "coreConcerns": ["concern1", "concern2", "concern3"],
         "summary": "This is a concise summary of the journal entry.",
-        "growthTips": ["Tip 1.", "Tip 2.", "Tip 3."],
+        "growthTips": [
+            "## First Tip Heading\\n\\n> Reflective quote\\n\\n- **Action:** ...\\n- **Resource:** [link]...",
+            "## Second Tip Heading\\n\\n..."
+        ],
         "keyPhrases": ["phrase1", "phrase2", "phrase3"]
     }}
 
     Journal Entry: "{journal_text}"
 
     JSON Analysis:"""
-
     # Define a comprehensive response schema
     response_schema = {
         "type": "OBJECT",

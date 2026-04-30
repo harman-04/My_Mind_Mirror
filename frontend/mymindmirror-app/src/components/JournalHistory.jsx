@@ -5,11 +5,111 @@ import { format, parseISO } from "date-fns";
 import { Doughnut } from "react-chartjs-2";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { useTheme } from "../contexts/ThemeContext";
-import { useUpdateJournalEntry, useDeleteJournalEntry } from '../hooks/useJournalData';
+import { useUpdateJournalEntry, useDeleteJournalEntry,  useImportGrowthTip } from '../hooks/useJournalData';
 import { SkeletonCard } from './Skeleton';
-import { AlertTriangle, Download, ChevronDown, ChevronUp, Edit, Trash2, Save, X, BookOpen, Lightbulb, Heart, Brain, Target, Clock } from 'lucide-react';
+import { AlertTriangle, Download, ChevronDown, ChevronUp, Edit, Trash2, Save, X, BookOpen, Lightbulb, Heart, Brain, Target, Clock, Plus } from 'lucide-react';
 import { downloadChartAsPng } from '../utils/downloadChart';
 
+// Helper to format markdown-like text (headings, blockquotes, lists, bold, italic, line breaks)
+const formatText = (text) => {
+  if (!text) return '';
+  const escapeHtml = (str) => {
+    return str.replace(/[&<>]/g, (m) => {
+      if (m === '&') return '&amp;';
+      if (m === '<') return '&lt;';
+      if (m === '>') return '&gt;';
+      return m;
+    });
+  };
+
+  const lines = text.split('\n');
+  const result = [];
+  let i = 0;
+  const total = lines.length;
+
+  // Helper to process a block of consecutive lines that start with '> '
+  const processBlockquote = (startIdx) => {
+    const quoteLines = [];
+    let j = startIdx;
+    while (j < total && lines[j].startsWith('> ')) {
+      quoteLines.push(lines[j].substring(2)); // remove '> '
+      j++;
+    }
+    // Recursively format the inner content of the blockquote (may contain lists, etc.)
+    const innerHtml = formatText(quoteLines.join('\n'));
+    result.push(`<blockquote class="guide-blockquote">${innerHtml}</blockquote>`);
+    return j;
+  };
+
+  while (i < total) {
+    const line = lines[i];
+
+    // 1. Horizontal rule
+    if (/^(\*{3,}|-{3,}|_{3,})$/.test(line.trim())) {
+      result.push('<hr class="guide-hr" />');
+      i++;
+      continue;
+    }
+
+    // 2. Headings (level 1-6)
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const content = escapeHtml(headingMatch[2]);
+      // Inline formatting inside heading
+      const formattedContent = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                      .replace(/\*(.*?)\*/g, '<em>$1</em>');
+      result.push(`<h${level} class="guide-heading">${formattedContent}</h${level}>`);
+      i++;
+      continue;
+    }
+
+    // 3. Blockquote (starts with '> ')
+    if (line.startsWith('> ')) {
+      i = processBlockquote(i);
+      continue;
+    }
+
+    // 4. Lists (unordered/ordered)
+    const bulletMatch = line.match(/^\s*(\*|\-)\s+(.*)/);
+    const numberMatch = line.match(/^\s*(\d+)\.\s+(.*)/);
+    if (bulletMatch || numberMatch) {
+      const isOrdered = !!numberMatch;
+      const listItems = [];
+      while (i < total) {
+        const currentLine = lines[i];
+        const bullet = currentLine.match(/^\s*(\*|\-)\s+(.*)/);
+        const number = currentLine.match(/^\s*(\d+)\.\s+(.*)/);
+        if (bullet || number) {
+          const content = bullet ? bullet[2] : number[2];
+          let formatted = escapeHtml(content);
+          formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+          formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+          listItems.push(`<li>${formatted}</li>`);
+          i++;
+        } else {
+          break;
+        }
+      }
+      const listTag = isOrdered ? 'ol' : 'ul';
+      result.push(`<${listTag} class="guide-list">${listItems.join('')}</${listTag}>`);
+      continue;
+    }
+
+    // 5. Normal paragraph (or empty line)
+    let formatted = escapeHtml(line);
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    if (formatted.trim()) {
+      result.push(`<p class="guide-paragraph">${formatted}</p>`);
+    } else if (line === '') {
+      result.push('<br/>');
+    }
+    i++;
+  }
+
+  return result.join('');
+};
 const TRUNCATION_LENGTH = 150;
 
 // Register Chart.js components
@@ -93,6 +193,7 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
 
   const updateMutation = useUpdateJournalEntry();
   const deleteMutation = useDeleteJournalEntry();
+  const importGrowthTipMutation = useImportGrowthTip();
 
   // Glass‑morphic styles
   const cardBg = isDarkMode ? 'bg-gray-800/60 backdrop-blur-md' : 'bg-white/70 backdrop-blur-md';
@@ -428,14 +529,23 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
                               <Lightbulb size={14} className="text-amber-400" />
                               <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Growth Tips</span>
                             </div>
-                            <ul className="space-y-1.5">
+                            <div className="space-y-4">
                               {parsedGrowthTips.map((tip, idx) => (
-                                <li key={idx} className="flex items-start gap-2 text-sm">
-                                  <span className="text-amber-500 text-sm">✦</span>
-                                  <span className="text-gray-700 dark:text-gray-300">{tip}</span>
-                                </li>
+                                <div key={idx} className="relative group">
+                                  <div className="prose prose-sm dark:prose-invert max-w-none pr-12">
+                                    <div dangerouslySetInnerHTML={{ __html: formatText(tip) }} />
+                                  </div>
+                                  <button
+                                    onClick={() => importGrowthTipMutation.mutate(tip)}
+                                    disabled={importGrowthTipMutation.isPending}
+                                    className="absolute top-0 right-0 p-1.5 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-300 hover:bg-blue-500/30 transition disabled:opacity-50"
+                                    title="Add to Milestones"
+                                  >
+                                    <Plus size={14} />
+                                  </button>
+                                </div>
                               ))}
-                            </ul>
+                            </div>
                           </div>
                         )}
 

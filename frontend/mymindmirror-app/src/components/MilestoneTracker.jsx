@@ -12,6 +12,93 @@ import {
   Plus, Edit2, Trash2, CheckCircle, Circle, Calendar, Clock, AlertCircle
 } from 'lucide-react';
 
+
+// Helper to format markdown-like text (headings, blockquotes, lists, bold, italic, line breaks)
+const formatText = (text) => {
+  if (!text) return '';
+  const escapeHtml = (str) => {
+    return str.replace(/[&<>]/g, (m) => {
+      if (m === '&') return '&amp;';
+      if (m === '<') return '&lt;';
+      if (m === '>') return '&gt;';
+      return m;
+    });
+  };
+
+  const lines = text.split('\n');
+  const result = [];
+  let i = 0;
+  const total = lines.length;
+
+  const processBlockquote = (startIdx) => {
+    const quoteLines = [];
+    let j = startIdx;
+    while (j < total && lines[j].startsWith('> ')) {
+      quoteLines.push(lines[j].substring(2));
+      j++;
+    }
+    const innerHtml = formatText(quoteLines.join('\n'));
+    result.push(`<blockquote class="guide-blockquote">${innerHtml}</blockquote>`);
+    return j;
+  };
+
+  while (i < total) {
+    const line = lines[i];
+    if (/^(\*{3,}|-{3,}|_{3,})$/.test(line.trim())) {
+      result.push('<hr class="guide-hr" />');
+      i++;
+      continue;
+    }
+    const headingMatch = line.match(/^(#{1,6})\s+(.*)/);
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const content = escapeHtml(headingMatch[2]);
+      const formattedContent = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                      .replace(/\*(.*?)\*/g, '<em>$1</em>');
+      result.push(`<h${level} class="guide-heading">${formattedContent}</h${level}>`);
+      i++;
+      continue;
+    }
+    if (line.startsWith('> ')) {
+      i = processBlockquote(i);
+      continue;
+    }
+    const bulletMatch = line.match(/^\s*(\*|\-)\s+(.*)/);
+    const numberMatch = line.match(/^\s*(\d+)\.\s+(.*)/);
+    if (bulletMatch || numberMatch) {
+      const isOrdered = !!numberMatch;
+      const listItems = [];
+      while (i < total) {
+        const currentLine = lines[i];
+        const bullet = currentLine.match(/^\s*(\*|\-)\s+(.*)/);
+        const number = currentLine.match(/^\s*(\d+)\.\s+(.*)/);
+        if (bullet || number) {
+          const content = bullet ? bullet[2] : number[2];
+          let formatted = escapeHtml(content);
+          formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+          formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+          listItems.push(`<li>${formatted}</li>`);
+          i++;
+        } else break;
+      }
+      const listTag = isOrdered ? 'ol' : 'ul';
+      result.push(`<${listTag} class="guide-list">${listItems.join('')}</${listTag}>`);
+      continue;
+    }
+    let formatted = escapeHtml(line);
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    if (formatted.trim()) {
+      result.push(`<p class="guide-paragraph">${formatted}</p>`);
+    } else if (line === '') {
+      result.push('<br/>');
+    }
+    i++;
+  }
+  return result.join('');
+};
+
+
 const API_BASE_URL = 'http://localhost:8080/api';
 
 const getAuthHeader = () => {
@@ -141,6 +228,8 @@ function MilestoneTracker({ userId }) {
   const [editedTaskDescription, setEditedTaskDescription] = useState('');
   const [editedTaskDueDate, setEditedTaskDueDate] = useState('');
   const [editedTaskStatus, setEditedTaskStatus] = useState('');
+
+  const [expandedTaskDetails, setExpandedTaskDetails] = useState({});
 
   // Modal states
   const [deleteMilestoneModal, setDeleteMilestoneModal] = useState({ isOpen: false, milestoneId: null });
@@ -719,11 +808,26 @@ function MilestoneTracker({ userId }) {
                     <Lightbulb size={16} /> AI Insights
                   </h4>
                   <div className="space-y-2 text-sm">
-                    <p><strong>Remaining Work:</strong> {milestoneInsights[milestone.id].remainingWork}</p>
-                    <p><strong>Performance:</strong> {milestoneInsights[milestone.id].performanceAssessment}</p>
-                    <div><strong>Tips:</strong> <ul className="list-disc list-inside ml-2">{milestoneInsights[milestone.id].tips.map((t,i)=><li key={i}>{t}</li>)}</ul></div>
-                    <p><strong>Encouragement:</strong> {milestoneInsights[milestone.id].encouragement}</p>
-                    <div><strong>Next Steps:</strong> <ul className="list-disc list-inside ml-2">{milestoneInsights[milestone.id].suggestedNewTasks.map((t,i)=><li key={i}>{t}</li>)}</ul></div>
+                    <div className="guide-content">
+                      <p><strong>Remaining Work:</strong></p>
+                      <div dangerouslySetInnerHTML={{ __html: formatText(milestoneInsights[milestone.id].remainingWork) }} />
+                    </div>
+                    <div className="guide-content">
+                      <p><strong>Performance:</strong></p>
+                      <div dangerouslySetInnerHTML={{ __html: formatText(milestoneInsights[milestone.id].performanceAssessment) }} />
+                    </div>
+                    <div className="guide-content">
+                      <p><strong>Tips:</strong></p>
+                      <div dangerouslySetInnerHTML={{ __html: formatText(milestoneInsights[milestone.id].tips.join('\n\n')) }} />
+                    </div>
+                    <div className="guide-content">
+                      <p><strong>Encouragement:</strong></p>
+                      <div dangerouslySetInnerHTML={{ __html: formatText(milestoneInsights[milestone.id].encouragement) }} />
+                    </div>
+                    <div className="guide-content">
+                      <p><strong>Next Steps:</strong></p>
+                      <div dangerouslySetInnerHTML={{ __html: formatText(milestoneInsights[milestone.id].suggestedNewTasks.join('\n- ')) }} />
+                    </div>
                   </div>
                 </div>
               )}
@@ -733,15 +837,33 @@ function MilestoneTracker({ userId }) {
                 <div className="px-5 pb-5 pt-2 border-t border-gray-200 dark:border-gray-700">
                   <h4 className="font-semibold mb-3 flex items-center gap-2 text-teal-600 dark:text-teal-300">Tasks</h4>
                   {milestone.tasks && milestone.tasks.length > 0 ? (
-                    <ul className="space-y-2">
+                    <ul className="space-y-3">
                       {milestone.tasks.map(task => (
-                        <li key={task.id} className={`p-3 rounded-xl ${isDarkMode ? 'bg-gray-700/50' : 'bg-gray-100/80'} flex flex-col sm:flex-row sm:items-center justify-between gap-2`}>
+                        <li key={task.id} className={`p-4 rounded-xl ${isDarkMode ? 'bg-gray-700/50' : 'bg-gray-100/80'} shadow-sm transition-all`}>
                           {editingTaskId === task.id ? (
-                            <div className="w-full space-y-2">
-                              <input type="text" value={editedTaskDescription} onChange={e=>setEditedTaskDescription(e.target.value)} className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`} required />
-                              <input type="date" value={editedTaskDueDate} onChange={e=>setEditedTaskDueDate(e.target.value)} className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`} />
-                              <select value={editedTaskStatus} onChange={e=>setEditedTaskStatus(e.target.value)} className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}>
-                                <option value="PENDING">Pending</option><option value="COMPLETED">Completed</option><option value="OVERDUE">Overdue</option><option value="CANCELLED">Cancelled</option>
+                            <div className="space-y-3">
+                              <input
+                                type="text"
+                                value={editedTaskDescription}
+                                onChange={e=>setEditedTaskDescription(e.target.value)}
+                                className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
+                                required
+                              />
+                              <input
+                                type="date"
+                                value={editedTaskDueDate}
+                                onChange={e=>setEditedTaskDueDate(e.target.value)}
+                                className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
+                              />
+                              <select
+                                value={editedTaskStatus}
+                                onChange={e=>setEditedTaskStatus(e.target.value)}
+                                className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
+                              >
+                                <option value="PENDING">Pending</option>
+                                <option value="COMPLETED">Completed</option>
+                                <option value="OVERDUE">Overdue</option>
+                                <option value="CANCELLED">Cancelled</option>
                               </select>
                               <div className="flex justify-end gap-2">
                                 <button onClick={()=>setEditingTaskId(null)} className="px-3 py-1 rounded-lg bg-gray-200 dark:bg-gray-600 text-sm">Cancel</button>
@@ -749,33 +871,102 @@ function MilestoneTracker({ userId }) {
                               </div>
                             </div>
                           ) : (
-                            <>
-                              <div className="flex-1">
-                                <p className={`text-sm ${task.status === 'COMPLETED' ? 'line-through text-gray-500' : ''}`}>
-                                  {task.description}
-                                  {task.roadmapTaskId && <span className="ml-2 inline-flex items-center gap-1 text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 px-2 py-0.5 rounded-full"><MapPin size={10} /> from Roadmap</span>}
-                                </p>
-                                <div className="flex items-center gap-2 mt-1 text-xs">
-                                  <span className={`px-2 py-0.5 rounded-full ${getStatusColorClass(task.status)}`}>{task.status.replace('_',' ')}</span>
-                                  {task.dueDate && isValid(parseISO(task.dueDate)) && <span className="flex items-center gap-1"><Calendar size={10} /> {format(parseISO(task.dueDate), 'MMM dd')}</span>}
+                            <div className="space-y-2">
+                              {/* Main row: description, badge, actions */}
+                              <div className="flex flex-wrap items-start justify-between gap-2">
+                                <div className="flex items-start gap-2 flex-1 min-w-0">
+                                  <button
+                                    onClick={() => handleToggleTaskStatus(milestone.id, task)}
+                                    className="mt-0.5 flex-shrink-0"
+                                    title="Toggle Complete"
+                                  >
+                                    {task.status === 'COMPLETED' ? (
+                                      <CheckCircle size={18} className="text-green-500" />
+                                    ) : (
+                                      <Circle size={18} className="text-gray-400 hover:text-gray-500" />
+                                    )}
+                                  </button>
+                                  <div className="flex-1">
+                                    <p className={`text-sm font-medium ${task.status === 'COMPLETED' ? 'line-through text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
+                                      {task.description}
+                                      {task.roadmapTaskId && (
+                                        <span className="ml-2 inline-flex items-center gap-1 text-xs bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 px-2 py-0.5 rounded-full">
+                                          <MapPin size={10} /> from Roadmap
+                                        </span>
+                                      )}
+                                    </p>
+                                    <div className="flex flex-wrap items-center gap-2 mt-1 text-xs">
+                                      <span className={`px-2 py-0.5 rounded-full ${getStatusColorClass(task.status)}`}>
+                                        {task.status.replace('_', ' ')}
+                                      </span>
+                                      {task.dueDate && isValid(parseISO(task.dueDate)) && (
+                                        <span className="flex items-center gap-1 text-gray-500 dark:text-gray-400">
+                                          <Calendar size={12} /> Due: {format(parseISO(task.dueDate), 'MMM dd')}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  {task.details && (
+                                    <button
+                                      onClick={() => {
+                                        const expanded = expandedTaskDetails[task.id];
+                                        setExpandedTaskDetails(prev => ({ ...prev, [task.id]: !expanded }));
+                                      }}
+                                      className="p-1.5 rounded-lg bg-gray-500/10 text-gray-600 dark:text-gray-400 hover:bg-gray-500/20 transition"
+                                      title={expandedTaskDetails[task.id] ? 'Hide details' : 'View details'}
+                                    >
+                                      {expandedTaskDetails[task.id] ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                    </button>
+                                  )}
+                                  <button
+                                    onClick={() => handleEditTaskClick(task)}
+                                    className="p-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 transition"
+                                    title="Edit"
+                                  >
+                                    <Edit2 size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleDeleteTaskClick(milestone.id, task.id)}
+                                    className="p-1.5 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20 transition"
+                                    title="Delete"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
                                 </div>
                               </div>
-                              {isTempId(task.id) ? (
-                                <div className="flex items-center gap-1"><Loader size={14} className="animate-spin" /><span className="text-xs">Adding...</span></div>
-                              ) : (
-                                <div className="flex items-center gap-1">
-                                  <button onClick={()=>handleToggleTaskStatus(milestone.id, task)} className="p-1.5 rounded-lg bg-green-500/10 text-green-600 dark:text-green-400 hover:bg-green-500/20" title="Toggle Complete"><CheckCircle size={14} /></button>
-                                  <button onClick={()=>handleEditTaskClick(task)} className="p-1.5 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20" title="Edit"><Edit2 size={14} /></button>
-                                  <button onClick={()=>handleDeleteTaskClick(milestone.id, task.id)} className="p-1.5 rounded-lg bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20" title="Delete"><Trash2 size={14} /></button>
+
+                              {/* Details expanded content */}
+                              {task.details && expandedTaskDetails[task.id] && (
+                                <div className="mt-2 p-3 rounded-lg bg-gray-200/50 dark:bg-gray-800/50 text-xs text-gray-700 dark:text-gray-300 border-l-4 border-purple-400">
+                                  {task.details}
                                 </div>
                               )}
-                            </>
+
+                              {/* Subtasks (legacy) */}
+                              {task.subtasksJson && (() => {
+                                try {
+                                  const subtasks = JSON.parse(task.subtasksJson);
+                                  if (Array.isArray(subtasks) && subtasks.length > 0) {
+                                    return (
+                                      <div className="mt-2 pl-6">
+                                        <ul className="list-disc list-inside text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+                                          {subtasks.map((sub, idx) => <li key={idx}>{sub}</li>)}
+                                        </ul>
+                                      </div>
+                                    );
+                                  }
+                                } catch (e) {}
+                                return null;
+                              })()}
+                            </div>
                           )}
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-center text-sm text-gray-500">No tasks yet. Add one below.</p>
+                    <p className="text-center text-sm text-gray-500 py-4">No tasks yet. Add one below.</p>
                   )}
 
                   {/* Add Task Form */}
@@ -785,11 +976,27 @@ function MilestoneTracker({ userId }) {
                       <div className="flex items-center justify-center py-2 text-gray-500"><Loader size={16} className="animate-spin mr-2" /> Milestone being created...</div>
                     ) : (
                       <form onSubmit={(e)=>handleAddTask(e, milestone.id)} className="space-y-3">
-                        <input type="text" value={newTaskDescription} onChange={e=>setNewTaskDescription(e.target.value)} placeholder="Description *" className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`} required />
-                        <input type="date" value={newTaskDueDate} onChange={e=>setNewTaskDueDate(e.target.value)} className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`} />
-                        <button type="submit" disabled={addTaskMutation.isPending} className="w-full py-2 rounded-lg bg-gradient-to-r from-teal-500 to-cyan-500 text-white font-medium hover:shadow-md transition disabled:opacity-50">
-                          {addTaskMutation.isPending ? <Loader size={16} className="animate-spin inline mr-1" /> : <Plus size={16} className="inline mr-1" />}
-                          Add Task
+                        <input
+                          type="text"
+                          value={newTaskDescription}
+                          onChange={e=>setNewTaskDescription(e.target.value)}
+                          placeholder="Description *"
+                          className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
+                          required
+                        />
+                        <input
+                          type="date"
+                          value={newTaskDueDate}
+                          onChange={e=>setNewTaskDueDate(e.target.value)}
+                          className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
+                        />
+                        <button
+                          type="submit"
+                          disabled={addTaskMutation.isPending}
+                          className="w-full py-2 rounded-lg bg-gradient-to-r from-teal-500 to-cyan-500 text-white font-medium hover:shadow-md transition disabled:opacity-50 flex items-center justify-center gap-1"
+                        >
+                          {addTaskMutation.isPending ? <Loader size={16} className="animate-spin" /> : <Plus size={16} />}
+                          {addTaskMutation.isPending ? 'Adding...' : 'Add Task'}
                         </button>
                       </form>
                     )}

@@ -6,6 +6,9 @@ import logging
 import os
 from modules.common.gemini_api_client import GeminiAPIException   # ⭐ ADD THIS IMPORT
 from modules.roadmap.routes import roadmap_bp
+from modules.chat.routes import chat_bp
+from modules.schedule.routes import schedule_bp
+
 
 # --- CORRECTED IMPORTS ---
 # When running as 'python -m ml_service.app', 'ml_service' is the top-level package.
@@ -53,6 +56,8 @@ if not Config.GEMINI_API_KEY:
 app.register_blueprint(journal_bp)
 app.register_blueprint(milestone_bp)
 app.register_blueprint(roadmap_bp)
+app.register_blueprint(chat_bp)
+app.register_blueprint(schedule_bp)
 
 
 # Endpoint kept directly in app.py for /generate_reflection path compatibility

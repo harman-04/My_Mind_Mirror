@@ -1,14 +1,13 @@
 package com.mymindmirror.backend.controller;
 
 import com.mymindmirror.backend.model.Milestone;
+import com.mymindmirror.backend.model.Task;
 import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.payload.request.MilestoneRequest;
 import com.mymindmirror.backend.payload.response.MessageResponse;
 import com.mymindmirror.backend.payload.response.MilestoneInsightResponse;
 import com.mymindmirror.backend.security.services.UserDetailsImpl;
-import com.mymindmirror.backend.service.MilestoneInsightService;
-import com.mymindmirror.backend.service.MilestoneService;
-import com.mymindmirror.backend.service.UserService;
+import com.mymindmirror.backend.service.*;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -17,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -29,6 +29,8 @@ public class MilestoneController {
     private final MilestoneService milestoneService;
     private final UserService userService;
     private final MilestoneInsightService milestoneInsightService;
+    private final TaskService taskService;
+    private final ApiKeyService apiKeyService;
 
 
     @PostMapping
@@ -148,5 +150,42 @@ public class MilestoneController {
             log.error("Error fetching insights: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to generate milestone insights.");
         }
+    }
+
+//    @PostMapping("/import-growth-tip")
+//    public ResponseEntity<?> importGrowthTip(@AuthenticationPrincipal UserDetailsImpl authenticatedUser,
+//                                             @RequestBody Map<String, String> request) {
+//        String tipText = request.get("tipText");
+//        if (tipText == null || tipText.trim().isEmpty()) {
+//            return ResponseEntity.badRequest().body("Tip text is required");
+//        }
+//        UUID userId = authenticatedUser.getId();
+//        Optional<User> userOpt = userService.findById(userId);
+//        if (userOpt.isEmpty()) {
+//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("User not found");
+//        }
+//        User user = userOpt.get();
+//        Milestone milestone = milestoneService.getOrCreateMilestoneByTitle(user, "AI Growth Tips");
+//        Task task = taskService.createTask(milestone.getId(), user, tipText, null);
+//        return ResponseEntity.ok(task);
+//    }
+
+    @PostMapping("/import-growth-tip")
+    public ResponseEntity<?> importGrowthTip(@AuthenticationPrincipal UserDetailsImpl authenticatedUser,
+                                             @RequestBody Map<String, String> request) {
+        String tipText = request.get("tipText");
+        if (tipText == null || tipText.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body("Tip text is required");
+        }
+        UUID userId = authenticatedUser.getId();
+        Optional<User> userOpt = userService.findById(userId);
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("User not found");
+        }
+        User user = userOpt.get();
+        String apiKey = apiKeyService.getDecryptedApiKey(user);
+        List<Task> tasks = milestoneService.importGrowthTipAsTask(user, tipText, apiKey);
+        return ResponseEntity.ok(Map.of("message", tasks.size() + " tasks added to Milestones"));
+
     }
 }

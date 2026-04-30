@@ -211,47 +211,50 @@ def generate_roadmap():
     # ------------------------------------------------------------------
     detailed_prompt = f"""You are an expert mentor. Create a detailed, actionable JSON roadmap for the goal: "{goal}" within {timeframe_weeks} weeks.
 
-The JSON MUST contain exactly these fields: title, durationWeeks, phases, tasks, resources, milestones.
+    **Language & Style Instruction:**
+    - Detect the language(s) and style (casual, formal, motivational) of the goal text.
+    - Generate ALL output (title, phases, tasks descriptions, details, subtasks, resources names, milestone names, criteria) in the **same language(s) and style** as the goal. If the goal is in Hinglish, respond in Hinglish. If it's in Hindi (Devanagari), respond in Hindi. Preserve any code‑switching.
 
-For each task, provide:
-- week (1 to {timeframe_weeks})
-- day (1 to 7, or null for weekly tasks)
-- description (short action)
-- details (longer instructions, tips, or links)
-- subtasks (array of strings, if applicable)
-- type ("daily" or "weekly")
+    The JSON MUST contain exactly these fields: title, durationWeeks, phases, tasks, resources, milestones.
 
-For each milestone, include a "criteria" field describing how to know it's achieved.
+    For each task, provide:
+    - week (1 to {timeframe_weeks})
+    - day (1 to 7, or null for weekly tasks)
+    - description (short action)
+    - details (longer instructions, tips, or links)
+    - subtasks (array of strings, if applicable)
+    - type ("daily" or "weekly")
 
-Output tasks sorted by week then day (ascending). Use real resource URLs (official docs, YouTube, Coursera, Udemy, etc.).
+    For each milestone, include a "criteria" field describing how to know it's achieved.
 
-Example structure (do not copy the example values, generate for "{goal}"):
+    Output tasks sorted by week then day (ascending). Use real resource URLs (official docs, YouTube, Coursera, Udemy, etc.).
 
-{{
-  "title": "Master React in 8 Weeks",
-  "durationWeeks": 8,
-  "phases": [
-    {{"name": "Fundamentals", "weeks": 2, "description": "Learn JSX, components, props, state"}}
-  ],
-  "tasks": [
+    Example structure (do not copy the example values, generate for "{goal}"):
     {{
-      "week": 1, "day": 1,
-      "description": "Set up development environment",
-      "details": "Install Node.js, create React app, explore folder structure.",
-      "subtasks": ["Install Node.js", "Run npx create-react-app", "Start dev server"],
-      "type": "daily"
+      "title": "Master React in 8 Weeks",
+      "durationWeeks": 8,
+      "phases": [
+        {{"name": "Fundamentals", "weeks": 2, "description": "Learn JSX, components, props, state"}}
+      ],
+      "tasks": [
+        {{
+          "week": 1, "day": 1,
+          "description": "Set up development environment",
+          "details": "Install Node.js, create React app, explore folder structure.",
+          "subtasks": ["Install Node.js", "Run npx create-react-app", "Start dev server"],
+          "type": "daily"
+        }}
+      ],
+      "resources": [
+        {{"name": "React Official Docs", "url": "https://react.dev", "type": "documentation"}}
+      ],
+      "milestones": [
+        {{"name": "Build first component", "week": 1, "criteria": "A working React component that displays data"}}
+      ]
     }}
-  ],
-  "resources": [
-    {{"name": "React Official Docs", "url": "https://react.dev", "type": "documentation"}}
-  ],
-  "milestones": [
-    {{"name": "Build first component", "week": 1, "criteria": "A working React component that displays data"}}
-  ]
-}}
 
-Now generate for "{goal}" in {timeframe_weeks} weeks. Return ONLY valid JSON, no markdown, no extra text.
-"""
+    Now generate for "{goal}" in {timeframe_weeks} weeks. Return ONLY valid JSON, no markdown, no extra text.
+    """
 
     try:
         raw_response = call_gemini_api(detailed_prompt, api_key=api_key, temperature=0.2)
@@ -299,6 +302,10 @@ def continue_roadmap():
     The user has completed the following tasks:
     {chr(10).join(f'- {task}' for task in completed_tasks[:10])}
 
+    **Language & Style Instruction:**
+    - Detect the language(s) and style of the original goal and tasks.
+    - Generate the new tasks (description, details, subtasks) in the **same language(s) and style**.
+
     Based on this progress, suggest the next 3-5 concrete, actionable tasks (daily or weekly) that the user should do to continue progressing toward the goal.
     Each task should have: description, details (longer instructions), subtasks (list of small steps), and a suggested week number (starting from the next week after the current roadmap's duration, but keep it reasonable, e.g., week 5,6,7).
     Return ONLY JSON with the following structure:
@@ -345,6 +352,10 @@ def elaborate_task():
         One task in that roadmap is: "{task_description}".
         The user has already seen a basic elaboration and wants an **even more detailed, comprehensive guide**.
 
+        **Language & Style Instruction:**
+        - Detect the language(s) and style of the goal and task description.
+        - Generate the details and subtasks in the **same language(s) and style**.
+
         Provide a **very detailed** step‑by‑step explanation, including:
         - Concrete examples
         - Best practices
@@ -363,6 +374,10 @@ def elaborate_task():
         prompt = f"""
         You are an expert mentor. The user is following a roadmap for the goal: "{goal}".
         One task in that roadmap is: "{task_description}".
+
+        **Language & Style Instruction:**
+        - Detect the language(s) and style of the goal and task description.
+        - Generate the details and subtasks in the **same language(s) and style**.
 
         Provide a detailed elaboration for this task. Include:
         - A longer, step‑by‑step explanation (details)
@@ -408,6 +423,10 @@ def reschedule_roadmap():
     You are an expert mentor. The user has a roadmap for the goal: "{goal}" originally planned for {original_duration} weeks.
     They have completed the following tasks: {completed_tasks}
     They still have these remaining tasks: {remaining_tasks}
+
+    **Language & Style Instruction:**
+    - Detect the language(s) and style of the original goal and tasks.
+    - Generate the revised schedule notes (newDurationWeeks) in the same language, but the output is mostly numeric and indices, so minimal text.
 
     Based on their progress, suggest a **revised weekly schedule** for the remaining tasks.
     Return ONLY JSON with the following structure:

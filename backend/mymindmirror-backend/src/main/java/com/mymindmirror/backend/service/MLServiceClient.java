@@ -155,4 +155,54 @@ public class MLServiceClient {
                 InsightStatus.ERROR
         ));
     }
+
+    @CircuitBreaker(name = "mlServiceCircuitBreaker", fallbackMethod = "fallbackReflectionChat")
+    public Mono<Map<String, String>> reflectionChat(String context, String query, String apiKey) {
+        Map<String, String> request = Map.of(
+                "context", context,
+                "query", query
+        );
+        return mlServiceWebClient.post()
+                .uri("/ml/chat/reflect")
+                .header("X-Gemini-Key", apiKey != null ? apiKey : "")
+                .bodyValue(request)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, String>>() {});
+    }
+
+    private Mono<Map<String, String>> fallbackReflectionChat(String context, String query, String apiKey, Throwable t) {
+        log.warn("Fallback for reflection chat: {}", t.getMessage());
+        return Mono.just(Map.of("answer", "I'm having trouble connecting right now. Please try again later."));
+    }
+
+    @CircuitBreaker(name = "mlServiceCircuitBreaker", fallbackMethod = "fallbackSuggestQuestion")
+    public Mono<Map<String, String>> suggestQuestion(Map<String, String> request, String apiKey) {
+        return mlServiceWebClient.post()
+                .uri("/ml/chat/suggest-question")
+                .header("X-Gemini-Key", apiKey != null ? apiKey : "")
+                .bodyValue(request)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, String>>() {});
+    }
+
+    private Mono<Map<String, String>> fallbackSuggestQuestion(Map<String, String> request, String apiKey, Throwable t) {
+        log.warn("Fallback for suggestQuestion: {}", t.getMessage());
+        return Mono.just(Map.of("question", "What's one small win you had this week?"));
+    }
+
+
+    @CircuitBreaker(name = "mlServiceCircuitBreaker", fallbackMethod = "fallbackGenerateSchedule")
+    public Mono<Map<String, Object>> generateSchedule(Object requestBody, String apiKey) {
+        return mlServiceWebClient.post()
+                .uri("/ml/schedule/generate")
+                .header("X-Gemini-Key", apiKey != null ? apiKey : "")
+                .bodyValue(requestBody)
+                .retrieve()
+                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {});
+    }
+
+    private Mono<Map<String, Object>> fallbackGenerateSchedule(Object requestBody, String apiKey, Throwable t) {
+        log.warn("Fallback for generateSchedule: {}", t.getMessage());
+        return Mono.just(Map.of("schedule", List.of(), "overflow", List.of()));
+    }
 }

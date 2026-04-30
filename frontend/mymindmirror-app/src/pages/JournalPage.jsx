@@ -21,7 +21,9 @@ import WeeklyDashboard from '../components/WeeklyDashboard';
 import OverallDashboard from '../components/OverallDashboard';
 import JournalSearch from '../components/JournalSearch';
 import MilestoneTracker from '../components/MilestoneTracker';
+import ReflectionChat from '../components/ReflectionChat';
 import AppLoader from '../components/AppLoader';
+import SchedulePage from '../pages/SchedulePage';
 import {
   Calendar,
   BarChart3,
@@ -31,7 +33,7 @@ import {
   Map,
   Sparkles,
   Feather,
-  User
+  User,
 } from 'lucide-react';
 
 function JournalPage() {
@@ -57,10 +59,8 @@ function JournalPage() {
   );
   const paginatedQuery = usePaginatedJournalEntries(20);
 
-  // Total entries from the first page of paginated query
   const totalEntries = paginatedQuery.data?.pages[0]?.totalElements || 0;
 
-  // Select data based on active tab
   let entriesData, isLoading, isError, error, refetch, hasNextPage, fetchNextPage, isFetchingNextPage;
   switch (activeTab) {
     case 'today':
@@ -121,21 +121,29 @@ function JournalPage() {
   };
 
   const handleClusteringComplete = (results) => {
-    console.log('handleClusteringComplete called with results:', results);
     setCurrentClusterResults(results);
   };
+
+  const tabs = [
+    { id: 'today', label: 'Today', icon: <Calendar size={18} /> },
+    { id: 'weekly', label: 'Weekly', icon: <BarChart3 size={18} /> },
+    { id: 'all', label: 'History', icon: <History size={18} /> },
+    { id: 'search', label: 'Search', icon: <Search size={18} /> },
+    { id: 'milestones', label: 'Goals', icon: <Target size={18} /> },
+    { id: 'roadmap', label: 'Roadmap', icon: <Map size={18} /> },
+    { id: 'chat', label: 'AI Coach', icon: <Sparkles size={18} /> },
+    { id: 'schedule', label: 'Schedule', icon: <Calendar size={18} /> },
+  ];
 
   if (isLoading) return <AppLoader />;
   if (isError) {
     return (
       <div
-        className={`w-full max-w-4xl flex-grow p-6 rounded-xl
-                    ${
-                      theme === 'dark'
-                        ? 'bg-black/30 text-[#FF8A7A] border-white/10'
-                        : 'bg-white/70 text-[#FF8A7A] border-white/30'
-                    }
-                    backdrop-blur-md shadow-lg transition-all duration-500 flex flex-col items-center justify-center font-inter text-lg`}
+        className={`w-full max-w-4xl flex-grow p-6 rounded-xl ${
+          theme === 'dark'
+            ? 'bg-black/30 text-[#FF8A7A] border-white/10'
+            : 'bg-white/70 text-[#FF8A7A] border-white/30'
+        } backdrop-blur-md shadow-lg transition-all duration-500 flex flex-col items-center justify-center font-inter text-lg`}
       >
         <p>{error?.message || 'Failed to load journal data.'}</p>
         <button
@@ -148,11 +156,9 @@ function JournalPage() {
     );
   }
 
-  // Theme-based colors for glass morphism
   const bgClass = isDarkMode ? 'bg-gray-900' : 'bg-gray-50';
   const cardBg = isDarkMode ? 'bg-black/30 backdrop-blur-md' : 'bg-white/70 backdrop-blur-md';
   const cardBorder = isDarkMode ? 'border-white/10' : 'border-white/30';
-  const textPrimary = isDarkMode ? 'text-gray-100' : 'text-gray-900';
   const textSecondary = isDarkMode ? 'text-gray-300' : 'text-gray-600';
 
   return (
@@ -164,7 +170,7 @@ function JournalPage() {
         <div className="absolute bottom-20 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl animate-pulse-slow delay-1000" />
       </div>
 
-      {/* Floating Icons - FIXED: increased z-index to appear above content */}
+      {/* Floating Icons */}
       <div className="absolute top-32 left-5 opacity-30 animate-float hidden lg:block z-20">
         <Feather size={32} className="text-purple-400" />
       </div>
@@ -193,21 +199,14 @@ function JournalPage() {
 
         {/* Navigation & Export Islands */}
         <div className="flex flex-col items-center gap-4 w-full">
-          {/* Floating Navigation Island */}
+          {/* Floating Navigation Island – never scrolls */}
           <div className="inline-flex p-1.5 bg-white/20 dark:bg-white/5 backdrop-blur-2xl rounded-2xl border border-white/30 dark:border-white/10 shadow-2xl">
-            <nav className="no-scrollbar flex flex-nowrap overflow-x-auto gap-1">
-              {[
-                { id: 'today', label: 'Today', icon: <Calendar size={18} /> },
-                { id: 'weekly', label: 'Weekly', icon: <BarChart3 size={18} /> },
-                { id: 'all', label: 'History', icon: <History size={18} /> },
-                { id: 'search', label: 'Search', icon: <Search size={18} /> },
-                { id: 'milestones', label: 'Goals', icon: <Target size={18} /> },
-                { id: 'roadmap', label: 'Roadmap', icon: <Map size={18} /> }
-              ].map((tab) => (
+            <nav className="flex flex-nowrap justify-center gap-1">
+              {tabs.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300 group ${
+                  className={`relative flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-xl transition-all duration-300 ${
                     activeTab === tab.id
                       ? 'text-white'
                       : `${textSecondary} hover:text-gray-800 dark:hover:text-gray-200`
@@ -220,7 +219,7 @@ function JournalPage() {
                   <span className="relative z-10 transition-transform duration-300 group-hover:scale-110">
                     {tab.icon}
                   </span>
-                  <span className="relative z-10 font-poppins font-medium text-sm hidden sm:block">
+                  <span className="relative z-10 font-poppins font-medium text-xs sm:text-sm hidden sm:inline whitespace-nowrap">
                     {tab.label}
                   </span>
                 </button>
@@ -263,6 +262,8 @@ function JournalPage() {
         {activeTab === 'search' && <JournalSearch userId={userId} />}
         {activeTab === 'milestones' && <MilestoneTracker userId={userId} />}
         {activeTab === 'roadmap' && <RoadmapPlanner />}
+        {activeTab === 'chat' && <ReflectionChat />}
+        {activeTab === 'schedule' && <SchedulePage />}
       </main>
 
       {/* Global Animations */}

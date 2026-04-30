@@ -95,3 +95,48 @@ body {
   height: 1px;
   background-color: #ccc;
 }
+
+.guide-heading {
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+  line-height: 1.3;
+}
+h1.guide-heading { font-size: 1.8rem; }
+h2.guide-heading { font-size: 1.5rem; }
+h3.guide-heading { font-size: 1.3rem; }
+h4.guide-heading { font-size: 1.1rem; }
+h5.guide-heading { font-size: 1rem; }
+h6.guide-heading { font-size: 0.9rem; }
+
+.guide-blockquote {
+  border-left: 4px solid #B399D4;
+  margin: 0.75rem 0;
+  padding: 0.5rem 1rem;
+  background-color: rgba(179, 153, 212, 0.1);
+  font-style: italic;
+  border-radius: 0.5rem;
+}
+.dark .guide-blockquote {
+  border-left-color: #8DE2DD;
+  background-color: rgba(141, 226, 221, 0.1);
+}
+
+.guide-hr {
+  margin: 1rem 0;
+  border: none;
+  height: 1px;
+  background-color: #ccc;
+}
+.dark .guide-hr {
+  background-color: #444;
+}
+
+/* Ensure existing list styles are applied */
+.guide-list {
+  margin: 0.5rem 0 0.75rem 1.5rem;
+  padding-left: 0;
+}
+.guide-list li {
+  margin-bottom: 0.25rem;
+  line-height: 1.5;
+}

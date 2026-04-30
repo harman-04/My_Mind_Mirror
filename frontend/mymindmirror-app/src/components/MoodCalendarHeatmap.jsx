@@ -6,7 +6,7 @@ import {
   parseISO,
   startOfYear,
   endOfYear,
-  subDays, // Added to fix the exclusive startDate bug
+  subDays,
   eachDayOfInterval,
   isSameDay,
   getDay,
@@ -24,7 +24,7 @@ const MoodCalendarHeatmap = ({ journalEntries, displayYear = new Date() }) => {
   const isDarkMode = theme === 'dark';
   const chartContainerRef = useRef(null);
 
-  // Improved mood color palette – intuitive and accessible
+  // Improved mood colour palette – intuitive and accessible
   const moodColors = {
     light: {
       veryNegative: '#EF4444', // red-500
@@ -32,7 +32,7 @@ const MoodCalendarHeatmap = ({ journalEntries, displayYear = new Date() }) => {
       neutral: '#9CA3AF',      // gray-400
       positive: '#10B981',     // emerald-500
       veryPositive: '#3B82F6', // blue-500
-      empty: '#F3F4F6',        // gray-100
+      empty: '#E5E7EB',        // gray-200 (more visible than before)
       text: '#1F2937',
       secondaryText: '#6B7280',
       background: '#FFFFFF',
@@ -43,7 +43,7 @@ const MoodCalendarHeatmap = ({ journalEntries, displayYear = new Date() }) => {
       neutral: '#6B7280',      // gray-500
       positive: '#059669',     // emerald-600
       veryPositive: '#2563EB', // blue-600
-      empty: '#1F2937',        // gray-800
+      empty: '#374151',        // gray-700 (clearly visible on dark background)
       text: '#F3F4F6',
       secondaryText: '#9CA3AF',
       background: '#111827',
@@ -88,13 +88,11 @@ const MoodCalendarHeatmap = ({ journalEntries, displayYear = new Date() }) => {
     return 'color-very-negative';
   };
 
-  // FIXED: Subtract 1 day because the library's startDate is exclusive
+  // Subtract 1 day because the library's startDate is exclusive
   const startDate = subDays(startOfYear(displayYear), 1);
   const endDate = endOfYear(displayYear);
 
-  // FIXED: Revert to Sunday-first so labels match the library's internal grid mapping
   const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
   const monthLabels = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
@@ -174,20 +172,24 @@ const MoodCalendarHeatmap = ({ journalEntries, displayYear = new Date() }) => {
             }
             .react-calendar-heatmap .day {
               shape-rendering: crispEdges;
-              stroke: ${isDarkMode ? '#374151' : '#E5E7EB'};
-              stroke-width: 1;
+              stroke: ${isDarkMode ? '#4B5563' : '#D1D5DB'};
+              stroke-width: 1.2px;
               rx: 3;
               ry: 3;
             }
-            .react-calendar-heatmap .color-empty { fill: ${currentColors.empty}; }
+            /* Empty cells get a thicker stroke so they appear as faint grid */
+            .react-calendar-heatmap .color-empty {
+              fill: ${currentColors.empty};
+              stroke-width: 1.5px;
+            }
             .react-calendar-heatmap .color-very-negative { fill: ${currentColors.veryNegative}; }
             .react-calendar-heatmap .color-negative { fill: ${currentColors.negative}; }
             .react-calendar-heatmap .color-neutral { fill: ${currentColors.neutral}; }
             .react-calendar-heatmap .color-positive { fill: ${currentColors.positive}; }
             .react-calendar-heatmap .color-very-positive { fill: ${currentColors.veryPositive}; }
-            /* Hover effect */
+            /* Hover effect for all cells */
             .react-calendar-heatmap .day:hover {
-              stroke-width: 2;
+              stroke-width: 2px;
               stroke: ${currentColors.text};
               filter: brightness(0.9);
             }

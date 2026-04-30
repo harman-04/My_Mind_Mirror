@@ -30,7 +30,7 @@ public class Task {
     @JsonBackReference // Prevents infinite recursion in JSON serialization
     private Milestone milestone;
 
-    @Column(nullable = false)
+    @Column(columnDefinition = "TEXT", nullable = false)
     private String description;
 
     @Column(name = "creation_timestamp", nullable = false)
@@ -45,6 +45,12 @@ public class Task {
 
     @Column(name = "roadmap_task_id")
     private UUID roadmapTaskId;
+
+    @Column(columnDefinition = "TEXT")
+    private String details;      // longer instructions, context
+
+    @Column(columnDefinition = "TEXT")
+    private String subtasksJson;  // JSON array of strings, e.g. ["subtask 1", "subtask 2"]
 
 
     // Constructors

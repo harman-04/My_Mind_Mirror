@@ -375,6 +375,13 @@ public class RoadmapService {
             roadmap.getTasks().add(task);
         }
 
+        int maxWeek = roadmap.getTasks().stream()
+                .mapToInt(t -> t.getWeekNumber() != null ? t.getWeekNumber() : 1)
+                .max()
+                .orElse(roadmap.getDurationWeeks());
+        roadmap.setDurationWeeks(maxWeek);
+
+
         roadmap = roadmapRepository.save(roadmap);
         // Convert to DTO while still inside transaction (collections are initialized)
         return toResponse(roadmap);

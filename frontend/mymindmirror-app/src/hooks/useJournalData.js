@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
 import { format } from 'date-fns';
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { useInfiniteQuery } from '@tanstack/react-query';
 
 const API_BASE_URL = 'http://localhost:8080/api';
@@ -103,14 +104,18 @@ const generateTodaysReflection = async (todayEntries, forceRefresh = false) => {
   const concerns_str = Array.from(aggregatedConcerns).join(', ') || 'No specific concerns identified.';
 
   const prompt = `Based on the following journal entries from today, their detected emotions, and core concerns,
-    generate a concise (1-2 sentences), empathetic, and insightful "Today's Reflection" or a short, encouraging thought.
-    Focus on summarizing the overall emotional state and offering a gentle, positive perspective.
+   generate a concise (1-3 sentences), empathetic, and insightful "Today's Reflection" or a short, encouraging thought.
 
-    Journal Entries (combined): "${combinedRawText}"
-    Detected Emotions (averaged): ${emotions_str}
-    Core Concerns: ${concerns_str}
+  **Language & Style Instruction:**
+  - Detect the language(s) and style (casual, formal, emotional) of the journal entries.
+  - Generate the reflection in the **same language(s) and style** as the entries. If the entries mix languages (e.g., Hinglish), respond in that same mix.
+  - Focus on summarizing the overall emotional state and offering a gentle, positive perspective.
 
-    Today's Reflection:`;
+  Journal Entries (combined): "${combinedRawText}"
+  Detected Emotions (averaged): ${emotions_str}
+  Core Concerns: ${concerns_str}
+
+  Today's Reflection:`;
 
   try {
     const springBootResponse = await axios.post(`${API_BASE_URL}/reflection/generate`, { prompt_text: prompt }, {
@@ -363,5 +368,30 @@ export const useWeeklyEntries = (startDate, endDate) => {
     },
     staleTime: 5 * 60 * 1000,
     enabled: !!startDate && !!endDate,
+  });
+};
+
+
+export const useImportGrowthTip = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (tipText) => {
+      const token = getToken();
+      if (!token) throw new Error('Not authenticated');
+      const response = await axios.post(
+        `${API_BASE_URL}/milestones/import-growth-tip`,
+        { tipText },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      return response.data;
+    },
+    onSuccess: (data) => {
+      const message = data?.message || 'Growth tip added to Milestones!';
+      toast.success(message);
+      queryClient.invalidateQueries({ queryKey: ['milestones'] });
+    },
+    onError: (error) => {
+      toast.error('Failed to add growth tip: ' + (error.response?.data?.message || error.message));
+    },
   });
 };
