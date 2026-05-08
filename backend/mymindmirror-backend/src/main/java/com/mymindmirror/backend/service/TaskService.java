@@ -1,6 +1,8 @@
 // src/main/java/com/mymindmirror.backend/service/TaskService.java
 package com.mymindmirror.backend.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mymindmirror.backend.enums.Status;
 import com.mymindmirror.backend.model.Milestone;
 import com.mymindmirror.backend.model.RoadmapTask;
@@ -31,6 +33,7 @@ public class TaskService {
     private final TaskRepository taskRepository;
     private final MilestoneService milestoneService; // To interact with Milestone logic
     private final RoadmapTaskRepository roadmapTaskRepository; // inject
+    private final ObjectMapper objectMapper;
 
 
     /**
@@ -45,17 +48,7 @@ public class TaskService {
      */
     @Transactional
     public Task createTask(UUID milestoneId, User user, String description, LocalDate dueDate) {
-        log.info("Creating new task for milestone {} for user {}", milestoneId, user.getUsername());
-        Milestone milestone = milestoneService.getMilestoneByIdForUser(milestoneId, user)
-                .orElseThrow(() -> new IllegalArgumentException("Milestone not found or not owned by user."));
-
-        Task task = new Task(milestone, description, dueDate);
-        task.setStatus(Status.PENDING); // New tasks start as PENDING
-        Task savedTask = taskRepository.save(task);
-
-        // Update milestone status after adding a new task
-        milestoneService.updateMilestoneStatusBasedOnTasks(milestone.getId());
-        return savedTask;
+        return createTask(milestoneId, user, description, dueDate, null, null);
     }
 
     /**
@@ -106,10 +99,11 @@ public class TaskService {
      * @return The updated Task entity.
      * @throws IllegalArgumentException if the task or milestone is not found or not owned correctly.
      */
+    // In TaskService.java
     @Transactional
     public Task updateTask(UUID taskId, UUID milestoneId, User user,
-                           String newDescription, LocalDate newDueDate, Status newStatus) {
-        log.info("Updating task {} for milestone {} for user {}", taskId, milestoneId, user.getUsername());
+                           String newDescription, LocalDate newDueDate, Status newStatus,
+                           String newDetails, List<String> newSubtasks) {
         Task existingTask = getTaskByIdForMilestoneAndUser(taskId, milestoneId, user)
                 .orElseThrow(() -> new IllegalArgumentException("Task not found or not owned by user/milestone."));
 
@@ -122,19 +116,28 @@ public class TaskService {
         if (newStatus != null) {
             Status oldStatus = existingTask.getStatus();
             existingTask.setStatus(newStatus);
-            // If status changed to COMPLETED and there is a linked roadmap task, sync it
             if (oldStatus != Status.COMPLETED && newStatus == Status.COMPLETED) {
                 if (existingTask.getRoadmapTaskId() != null) {
                     syncRoadmapTaskCompletion(existingTask.getRoadmapTaskId(), true);
                 }
             }
-            // If status changed away from COMPLETED (uncomplete), also sync
             if (oldStatus == Status.COMPLETED && newStatus != Status.COMPLETED) {
                 if (existingTask.getRoadmapTaskId() != null) {
                     syncRoadmapTaskCompletion(existingTask.getRoadmapTaskId(), false);
                 }
             }
             milestoneService.updateMilestoneStatusBasedOnTasks(milestoneId);
+        }
+        if (newDetails != null) {
+            existingTask.setDetails(newDetails);
+        }
+        if (newSubtasks != null) {
+            try {
+                existingTask.setSubtasksJson(objectMapper.writeValueAsString(newSubtasks));
+            } catch (JsonProcessingException e) {
+                log.error("Failed to serialize subtasks", e);
+                existingTask.setSubtasksJson("[]");
+            }
         }
         return taskRepository.save(existingTask);
     }
@@ -186,4 +189,44 @@ public class TaskService {
         }
     }
 
+
+    // In TaskService.java
+
+    @Transactional
+    public Task createTaskWithRoadmapLink(UUID milestoneId, User user, String description,
+                                          LocalDate dueDate, UUID roadmapTaskId,
+                                          String details, String subtasksJson) {
+        Milestone milestone = milestoneService.getMilestoneByIdForUser(milestoneId, user)
+                .orElseThrow(() -> new IllegalArgumentException("Milestone not found or not owned by user."));
+        Task task = new Task(milestone, description, dueDate);
+        task.setStatus(Status.PENDING);
+        task.setRoadmapTaskId(roadmapTaskId);
+        task.setDetails(details);
+        task.setSubtasksJson(subtasksJson);
+        Task savedTask = taskRepository.save(task);
+        milestoneService.updateMilestoneStatusBasedOnTasks(milestone.getId());
+        return savedTask;
+    }
+
+    @Transactional
+    public Task createTask(UUID milestoneId, User user, String description, LocalDate dueDate,
+                           String details, List<String> subtasks) {
+        Milestone milestone = milestoneService.getMilestoneByIdForUser(milestoneId, user)
+                .orElseThrow(() -> new IllegalArgumentException("Milestone not found or not owned by user."));
+
+        Task task = new Task(milestone, description, dueDate);
+        task.setStatus(Status.PENDING);
+        task.setDetails(details);
+        if (subtasks != null && !subtasks.isEmpty()) {
+            try {
+                task.setSubtasksJson(objectMapper.writeValueAsString(subtasks));
+            } catch (JsonProcessingException e) {
+                log.error("Failed to serialize subtasks", e);
+                task.setSubtasksJson("[]");
+            }
+        }
+        Task savedTask = taskRepository.save(task);
+        milestoneService.updateMilestoneStatusBasedOnTasks(milestone.getId());
+        return savedTask;
+    }
 }

@@ -49,6 +49,20 @@ public class Roadmap {
     @Column(name = "duration_weeks")
     private Integer durationWeeks;
 
+    @Column(name = "original_duration_value")
+    private Integer originalDurationValue;
+
+    @Column(name = "original_duration_unit")
+    private String originalDurationUnit;
+
+    // Add this field
+    @Column(name = "generated_weeks")
+    private Integer generatedWeeks = 0; // maximum week number that has detailed tasks
+
+    public boolean isFullyGenerated() {
+        return generatedWeeks != null && generatedWeeks >= durationWeeks;
+    }
+
     public Roadmap(User user, String title, String description, Integer durationWeeks) {
         this.user = user;
         this.title = title;

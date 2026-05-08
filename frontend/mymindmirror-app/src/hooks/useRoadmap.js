@@ -15,12 +15,24 @@ const fetchRoadmaps = async () => {
   return response.data;
 };
 
-const generateRoadmap = async ({ goal, timeframeWeeks }) => {
+const generateRoadmap = async ({ goal, timeframeValue, timeframeUnit, difficulty, language, learningStyle, hoursPerWeek, avoidWeekends, timeframeWeeks }) => {
   const token = getToken();
   if (!token) throw new Error('Not authenticated');
+  const payload = {
+    goal,
+    timeframeValue,
+    timeframeUnit,
+    difficulty,
+    language,
+    learningStyle,
+    hoursPerWeek,
+    avoidWeekends,
+  };
+  // For backward compatibility
+  if (timeframeWeeks) payload.timeframeWeeks = timeframeWeeks;
   const response = await axios.post(
     `${API_BASE_URL}/roadmap/generate`,
-    { goal, timeframeWeeks },
+    payload,
     { headers: { Authorization: `Bearer ${token}` } }
   );
   return response.data;
@@ -186,6 +198,30 @@ export const useRescheduleRoadmap = () => {
   return useMutation({
     mutationFn: rescheduleRoadmap,
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['roadmaps'] });
+    },
+  });
+};
+
+
+const continueRoadmapBatch = async ({ roadmapId, weeksToGenerate }) => {
+  const token = getToken();
+  if (!token) throw new Error('Not authenticated');
+  const params = weeksToGenerate ? `?weeksToGenerate=${weeksToGenerate}` : '';
+  const response = await axios.post(
+    `${API_BASE_URL}/roadmap/${roadmapId}/continue-batch${params}`,
+    {},
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  return response.data;
+};
+
+export const useContinueRoadmapBatch = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: continueRoadmapBatch,
+    onSuccess: (data, variables) => {
+      // Invalidate the roadmaps query to refetch the updated roadmap list
       queryClient.invalidateQueries({ queryKey: ['roadmaps'] });
     },
   });

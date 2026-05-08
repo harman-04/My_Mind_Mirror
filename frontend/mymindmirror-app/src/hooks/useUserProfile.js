@@ -1,8 +1,6 @@
 // src/hooks/useUserProfile.js
-
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { jwtDecode } from 'jwt-decode';
 
 const API_BASE_URL = 'http://localhost:8080/api';
 
@@ -18,7 +16,6 @@ const getAuthHeader = () => {
 const fetchUserProfile = async () => {
     const headers = getAuthHeader();
     if (!headers) throw new Error("Authentication required.");
-
     const response = await axios.get(`${API_BASE_URL}/users/profile`, { headers });
     return response.data;
 };
@@ -30,26 +27,16 @@ const fetchApiKeyStatus = async () => {
     return response.data;
 };
 
-//const fetchApiKeyStatus = async () => {
-//    const headers = getAuthHeader();
-//    if (!headers) throw new Error("Authentication required.");
-//    const response = await axios.get(`${API_BASE_URL}/users/api-key`, { headers });
-//    return response.data;
-//};
-
 const updateUserProfile = async (updatedData) => {
     const headers = getAuthHeader();
     if (!headers) throw new Error("Authentication required.");
-
     const response = await axios.put(`${API_BASE_URL}/users/profile`, updatedData, { headers });
     return response.data;
 };
 
-// ⭐ NEW: Function to change user password ⭐
 const changeUserPassword = async (passwordData) => {
     const headers = getAuthHeader();
     if (!headers) throw new Error("Authentication required.");
-
     const response = await axios.put(`${API_BASE_URL}/users/profile/password`, passwordData, { headers });
     return response.data;
 };
@@ -57,12 +44,9 @@ const changeUserPassword = async (passwordData) => {
 const deleteUserProfile = async () => {
     const headers = getAuthHeader();
     if (!headers) throw new Error("Authentication required.");
-
     const response = await axios.delete(`${API_BASE_URL}/users/profile`, { headers });
     return response.data;
 };
-
-
 
 const updateApiKey = async (apiKey) => {
     const headers = getAuthHeader();
@@ -70,45 +54,41 @@ const updateApiKey = async (apiKey) => {
     await axios.put(`${API_BASE_URL}/users/api-key`, { apiKey }, { headers });
 };
 
+const fetchRoadmapPreferences = async () => {
+    const headers = getAuthHeader();
+    if (!headers) throw new Error("Authentication required.");
+    const response = await axios.get(`${API_BASE_URL}/users/roadmap-preferences`, { headers });
+    return response.data;
+};
+
+const updateRoadmapPreferences = async (preferences) => {
+    const headers = getAuthHeader();
+    if (!headers) throw new Error("Authentication required.");
+    const response = await axios.put(`${API_BASE_URL}/users/roadmap-preferences`, preferences, { headers });
+    return response.data;
+};
+
 export function useUserProfile() {
     const queryClient = useQueryClient();
 
+    // --- All hook calls at the top level ---
     const profileQuery = useQuery({
         queryKey: ['userProfile'],
         queryFn: fetchUserProfile,
         staleTime: 5 * 60 * 1000,
-        cacheTime: 10 * 60 * 1000,
+        gcTime: 10 * 60 * 1000,      // React Query v5 uses gcTime (was cacheTime)
         retry: 1,
-        onError: (error) => {
-            console.error("Failed to fetch user profile:", error);
-            if (error.response && error.response.status === 401) {
-                localStorage.removeItem('jwtToken');
-                window.location.href = '/login';
-            }
-        },
     });
 
     const updateProfileMutation = useMutation({
         mutationFn: updateUserProfile,
-        onSuccess: (data) => {
+        onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['userProfile'] });
-        },
-        onError: (error) => {
-            console.error("Failed to update user profile:", error.response?.data || error.message);
-            throw new Error(error.response?.data?.message || "Failed to update profile.");
         },
     });
 
-    // ⭐ NEW: Mutation for changing user password ⭐
     const changePasswordMutation = useMutation({
         mutationFn: changeUserPassword,
-        onSuccess: () => {
-            // No need to invalidate userProfile, as password change doesn't alter profile data
-        },
-        onError: (error) => {
-            console.error("Failed to change password:", error.response?.data || error.message);
-            throw new Error(error.response?.data?.message || "Failed to change password.");
-        },
     });
 
     const deleteProfileMutation = useMutation({
@@ -118,26 +98,31 @@ export function useUserProfile() {
             localStorage.removeItem('jwtToken');
             window.location.href = '/login';
         },
-        onError: (error) => {
-            console.error("Failed to delete user profile:", error.response?.data || error.message);
-            throw new Error(error.response?.data?.message || "Failed to delete profile.");
-        },
     });
 
+    const apiKeyStatusQuery = useQuery({
+        queryKey: ['apiKeyStatus'],
+        queryFn: fetchApiKeyStatus,
+        staleTime: 5 * 60 * 1000,
+    });
 
-const apiKeyStatusQuery = useQuery({
-    queryKey: ['apiKeyStatus'],
-    queryFn: fetchApiKeyStatus,
-    staleTime: 5 * 60 * 1000,
-});
+    const updateApiKeyMutation = useMutation({
+        mutationFn: updateApiKey,
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['apiKeyStatus'] }),
+    });
 
+    const roadmapPreferencesQuery = useQuery({
+        queryKey: ['roadmapPreferences'],
+        queryFn: fetchRoadmapPreferences,
+        staleTime: 5 * 60 * 1000,
+    });
 
+    const updateRoadmapPreferencesMutation = useMutation({
+        mutationFn: updateRoadmapPreferences,
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['roadmapPreferences'] }),
+    });
 
-const updateApiKeyMutation = useMutation({
-    mutationFn: updateApiKey,
-    onSuccess: () => queryClient.invalidateQueries(['apiKeyStatus']),
-});
-
+    // --- Return object with all the data and functions ---
     return {
         profile: profileQuery.data,
         isLoading: profileQuery.isLoading,
@@ -145,11 +130,15 @@ const updateApiKeyMutation = useMutation({
         error: profileQuery.error,
         updateProfile: updateProfileMutation.mutateAsync,
         deleteProfile: deleteProfileMutation.mutateAsync,
-        changePassword: changePasswordMutation.mutateAsync, // Expose the new mutation
-        isUpdating: updateProfileMutation.isLoading,
-        isDeleting: deleteProfileMutation.isLoading,
-        isChangingPassword: changePasswordMutation.isLoading, // Expose loading state
-       apiKeyStatus: apiKeyStatusQuery,
-           updateApiKey: updateApiKeyMutation,
+        changePassword: changePasswordMutation.mutateAsync,
+        isUpdating: updateProfileMutation.isPending,
+        isDeleting: deleteProfileMutation.isPending,
+        isChangingPassword: changePasswordMutation.isPending,
+        apiKeyStatus: apiKeyStatusQuery,
+        updateApiKey: updateApiKeyMutation,
+
+        // Roadmap preferences
+        roadmapPreferences: roadmapPreferencesQuery,
+        updateRoadmapPreferences: updateRoadmapPreferencesMutation,
     };
 }

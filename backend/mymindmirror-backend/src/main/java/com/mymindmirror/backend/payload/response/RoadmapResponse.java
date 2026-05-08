@@ -19,6 +19,9 @@ public class RoadmapResponse {
     private List<TaskDto> tasks;
     private List<ResourceDto> resources;
     private List<MilestoneDto> milestones;
+    private Integer generatedWeeks;
+    private Integer originalDurationValue;
+    private String originalDurationUnit;
 
     @Data
     @NoArgsConstructor

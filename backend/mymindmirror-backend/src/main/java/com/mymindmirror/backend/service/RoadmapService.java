@@ -9,15 +9,15 @@ import com.mymindmirror.backend.repository.RoadmapRepository;
 import com.mymindmirror.backend.repository.RoadmapTaskRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.reactive.function.client.WebClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import reactor.core.publisher.Mono;
+
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
@@ -36,28 +36,70 @@ public class RoadmapService {
     private final GamificationService gamificationService;
 
     @Transactional
-    public Roadmap generateRoadmap(User user, String goal, Integer timeframeWeeks) {
+    public Roadmap generateRoadmap(User user, String goal, Integer timeframeWeeks, Integer timeframeValue, String timeframeUnit) throws JsonProcessingException {
+        // Convert to weeks (same as before)
+        int weeks;
+        if (timeframeWeeks != null) {
+            weeks = timeframeWeeks;
+            timeframeValue = weeks;
+            timeframeUnit = "WEEKS";
+        } else if (timeframeValue != null && timeframeUnit != null) {
+            weeks = convertToWeeks(timeframeValue, timeframeUnit);
+        } else {
+            weeks = 4;
+            timeframeValue = 4;
+            timeframeUnit = "WEEKS";
+        }
+
+        UserRoadmapPreferences prefs = userService.getRoadmapPreferences(user);
         String apiKey = apiKeyService.getDecryptedApiKey(user);
-        RoadmapGenerateRequest request = new RoadmapGenerateRequest();
-        request.setGoal(goal);
-        request.setTimeframeWeeks(timeframeWeeks);
+        int weeksToGenerate = Math.min(weeks, 12);
+
+        Map<String, Object> mlRequest = new HashMap<>();
+        mlRequest.put("goal", goal);
+        mlRequest.put("timeframeValue", timeframeValue);
+        mlRequest.put("timeframeUnit", timeframeUnit);
+        mlRequest.put("difficulty", prefs.getDifficulty());
+        mlRequest.put("language", prefs.getLanguagePreference());
+        mlRequest.put("learningStyle", prefs.getLearningStyle());
+        mlRequest.put("hoursPerWeek", prefs.getHoursPerWeek());
+        mlRequest.put("avoidWeekends", prefs.isAvoidWeekends());
+        mlRequest.put("weeksToGenerate", weeksToGenerate);
 
         RoadmapGenerateResponse aiResponse = null;
+        boolean isFallback = false;
+
         try {
             aiResponse = mlServiceWebClient.post()
                     .uri("/ml/roadmap/generate")
                     .header("X-Gemini-Key", apiKey != null ? apiKey : "")
-                    .bodyValue(request)
+                    .bodyValue(mlRequest)
                     .retrieve()
                     .bodyToMono(RoadmapGenerateResponse.class)
                     .block();
+
+            if (aiResponse == null) {
+                isFallback = true;
+            } else {
+                // Check if the response itself marks itself as fallback
+                isFallback = Boolean.TRUE.equals(aiResponse.getIsFallback());
+                // Additional detection if title or tasks indicate fallback
+                if (!isFallback && aiResponse.getTitle() != null && aiResponse.getTitle().startsWith("Your Personalized Roadmap to")) {
+                    if (aiResponse.getTasks() != null && !aiResponse.getTasks().isEmpty()) {
+                        String firstTaskDetails = aiResponse.getTasks().get(0).getDetails();
+                        isFallback = firstTaskDetails != null && firstTaskDetails.contains("Continue Roadmap");
+                    }
+                }
+            }
         } catch (Exception e) {
-            log.error("ML service call failed, using fallback roadmap: {}", e.getMessage());
+            log.error("Error calling ML service, using fallback roadmap", e);
+            isFallback = true;
         }
 
-        // If AI response is null (failed), create a fallback response
-        if (aiResponse == null) {
-            aiResponse = createFallbackRoadmapResponse(goal, timeframeWeeks);
+        // If we need a fallback, create it and mark it as such
+        if (isFallback || aiResponse == null) {
+            aiResponse = createFallbackRoadmapResponse(goal, weeks);
+            aiResponse.setIsFallback(true);   // ensure flag is set
         }
 
         // Ensure collections are not null
@@ -66,9 +108,15 @@ public class RoadmapService {
         if (aiResponse.getMilestones() == null) aiResponse.setMilestones(new ArrayList<>());
         if (aiResponse.getPhases() == null) aiResponse.setPhases(new ArrayList<>());
 
-        Roadmap roadmap = new Roadmap(user, aiResponse.getTitle(), goal, aiResponse.getDurationWeeks());
+        Roadmap roadmap = new Roadmap(user, aiResponse.getTitle(), goal, weeks);
+        roadmap.setOriginalDurationValue(timeframeValue);
+        roadmap.setOriginalDurationUnit(timeframeUnit);
 
-        // Map tasks
+        // Set generatedWeeks correctly: 0 for fallback, weeksToGenerate for real AI tasks
+        int generated = isFallback ? 0 : weeksToGenerate;
+        roadmap.setGeneratedWeeks(generated);
+
+        // Map tasks (unchanged)
         if (aiResponse.getTasks() != null) {
             aiResponse.getTasks().forEach(taskDto -> {
                 RoadmapTask task = new RoadmapTask();
@@ -89,7 +137,7 @@ public class RoadmapService {
             });
         }
 
-        // Map resources
+        // Map resources (unchanged)
         if (aiResponse.getResources() != null) {
             aiResponse.getResources().forEach(resDto -> {
                 RoadmapResource res = new RoadmapResource();
@@ -101,7 +149,7 @@ public class RoadmapService {
             });
         }
 
-        // Map milestones
+        // Map milestones (unchanged)
         if (aiResponse.getMilestones() != null) {
             aiResponse.getMilestones().forEach(milDto -> {
                 RoadmapMilestone mil = new RoadmapMilestone();
@@ -116,9 +164,22 @@ public class RoadmapService {
         return roadmapRepository.save(roadmap);
     }
 
+    private int convertToWeeks(int value, String unit) {
+        switch (unit.toUpperCase()) {
+            case "DAYS":
+                return Math.max(1, value / 7);
+            case "MONTHS":
+                return value * 4;
+            case "YEARS":
+                return value * 52;
+            default:
+                return value;
+        }
+    }
     private RoadmapGenerateResponse createFallbackRoadmapResponse(String goal, Integer timeframeWeeks) {
         RoadmapGenerateResponse fallback = new RoadmapGenerateResponse();
         fallback.setTitle("Your Personalized Roadmap to " + goal);
+        fallback.setIsFallback(true);
         fallback.setDurationWeeks(timeframeWeeks != null ? timeframeWeeks : 4);
 
         // Create simple tasks
@@ -193,6 +254,9 @@ public class RoadmapService {
         response.setCreatedAt(roadmap.getCreatedAt());
         response.setStatus(roadmap.getStatus());
         response.setDurationWeeks(roadmap.getDurationWeeks());
+        response.setGeneratedWeeks(roadmap.getGeneratedWeeks());
+        response.setOriginalDurationValue(roadmap.getOriginalDurationValue());
+        response.setOriginalDurationUnit(roadmap.getOriginalDurationUnit());
 
         // Convert tasks
         if (roadmap.getTasks() != null) {
@@ -282,16 +346,24 @@ public class RoadmapService {
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Task not found in roadmap"));
 
-
         // Mark as imported
         task.setImportedToMilestone(true);
-        taskRepository.save(task);  // save the flag
+        taskRepository.save(task);
 
         String milestoneTitle = "Roadmap: " + roadmap.getTitle();
         Milestone milestone = milestoneService.getOrCreateMilestoneByTitle(user, milestoneTitle);
 
-        // Use the new method
-        taskService.createTaskWithRoadmapLink(milestone.getId(), user, task.getDescription(), null, task.getId());
+        // Copy details and subtasks from RoadmapTask to Task
+        String details = task.getDetails();
+        String subtasksJson = task.getSubtasks();  // note: RoadmapTask uses "subtasks", Task uses "subtasksJson"
+
+        taskService.createTaskWithRoadmapLink(
+                milestone.getId(), user,
+                task.getDescription(), null,
+                task.getId(),
+                details,
+                subtasksJson
+        );
     }
 
     @Transactional
@@ -375,10 +447,11 @@ public class RoadmapService {
             roadmap.getTasks().add(task);
         }
 
+        int currentDuration = roadmap.getDurationWeeks() != null ? roadmap.getDurationWeeks() : 1;
         int maxWeek = roadmap.getTasks().stream()
                 .mapToInt(t -> t.getWeekNumber() != null ? t.getWeekNumber() : 1)
                 .max()
-                .orElse(roadmap.getDurationWeeks());
+                .orElse(currentDuration);
         roadmap.setDurationWeeks(maxWeek);
 
 
@@ -492,6 +565,122 @@ public class RoadmapService {
 
         roadmap.setDurationWeeks(newDuration);
         roadmap = roadmapRepository.save(roadmap);
+        return toResponse(roadmap);
+    }
+
+    @Transactional
+    public RoadmapResponse continueRoadmapBatch(UUID roadmapId, User user, Integer weeksToGenerate) {
+        Roadmap roadmap = roadmapRepository.findById(roadmapId)
+                .orElseThrow(() -> new IllegalArgumentException("Roadmap not found"));
+        if (!roadmap.getUser().getId().equals(user.getId())) {
+            throw new SecurityException("Not authorized");
+        }
+        if (roadmap.isFullyGenerated()) {
+            throw new IllegalStateException("Roadmap already fully generated");
+        }
+
+        int totalWeeks = roadmap.getDurationWeeks();
+        int currentGenerated = roadmap.getGeneratedWeeks() != null ? roadmap.getGeneratedWeeks() : 0;
+        int remainingWeeks = totalWeeks - currentGenerated;
+        if (remainingWeeks <= 0) {
+            throw new IllegalStateException("No weeks left to generate");
+        }
+
+        int chunkSize = (weeksToGenerate != null && weeksToGenerate > 0) ? weeksToGenerate : Math.min(remainingWeeks, 12);
+        int startWeek = currentGenerated + 1;
+        int endWeek = Math.min(startWeek + chunkSize - 1, totalWeeks);
+        int weeksToGenerateNow = endWeek - startWeek + 1;
+
+        // Delete any existing tasks for the target weeks (to avoid duplicates)
+        List<RoadmapTask> tasksToDelete = roadmap.getTasks().stream()
+                .filter(t -> t.getWeekNumber() != null && t.getWeekNumber() >= startWeek && t.getWeekNumber() <= endWeek)
+                .collect(Collectors.toList());
+        roadmap.getTasks().removeAll(tasksToDelete);
+        taskRepository.deleteAll(tasksToDelete);
+
+        // --- Build summary of previous weeks for AI context ---
+        StringBuilder previousWeeksSummary = new StringBuilder();
+        if (currentGenerated > 0) {
+            List<RoadmapTask> previousTasks = roadmap.getTasks().stream()
+                    .filter(t -> t.getWeekNumber() != null && t.getWeekNumber() <= currentGenerated)
+                    .sorted(Comparator.comparingInt(RoadmapTask::getWeekNumber)
+                            .thenComparingInt(t -> t.getDayNumber() != null ? t.getDayNumber() : 0))
+                    .collect(Collectors.toList());
+            int lastWeek = 0;
+            for (RoadmapTask task : previousTasks) {
+                if (task.getWeekNumber() != lastWeek) {
+                    lastWeek = task.getWeekNumber();
+                    previousWeeksSummary.append("Week ").append(lastWeek).append(":\n");
+                }
+                previousWeeksSummary.append("  - ").append(task.getDescription()).append("\n");
+            }
+        } else {
+            previousWeeksSummary.append("No previous weeks. Start from week 1.");
+        }
+
+        // Build request for ML service
+        Map<String, Object> mlRequest = new HashMap<>();
+        mlRequest.put("goal", roadmap.getDescription());
+        mlRequest.put("currentWeek", currentGenerated);
+        mlRequest.put("weeksToGenerate", weeksToGenerateNow);
+        mlRequest.put("totalWeeks", totalWeeks);
+        mlRequest.put("originalUnit", roadmap.getOriginalDurationUnit());
+        mlRequest.put("previousWeeksSummary", previousWeeksSummary.toString());  // NEW
+
+        UserRoadmapPreferences prefs = userService.getRoadmapPreferences(user);
+        mlRequest.put("difficulty", prefs.getDifficulty());
+        mlRequest.put("language", prefs.getLanguagePreference());
+        mlRequest.put("learningStyle", prefs.getLearningStyle());
+        mlRequest.put("hoursPerWeek", prefs.getHoursPerWeek());
+        mlRequest.put("avoidWeekends", prefs.isAvoidWeekends());
+
+        String apiKey = apiKeyService.getDecryptedApiKey(user);
+        Map<String, Object> aiResponse;
+        try {
+            aiResponse = mlServiceWebClient.post()
+                    .uri("/ml/roadmap/continue")
+                    .header("X-Gemini-Key", apiKeyService.getDecryptedApiKey(user))
+                    .bodyValue(mlRequest)
+                    .retrieve()
+                    .onStatus(HttpStatusCode::isError, clientResponse ->
+                            clientResponse.bodyToMono(Map.class).flatMap(errorBody ->
+                                    Mono.error(new RuntimeException("ML service error: " + errorBody))
+                            ))
+                    .bodyToMono(Map.class)
+                    .block();
+        } catch (Exception e) {
+            log.error("Failed to get continuation from ML service", e);
+            throw new RuntimeException("Continuation failed: " + e.getMessage(), e);
+        }
+        if (aiResponse == null || !aiResponse.containsKey("tasks")) {
+            throw new RuntimeException("Failed to get continuation from AI");
+        }
+
+        List<Map<String, Object>> newTasks = (List<Map<String, Object>>) aiResponse.get("tasks");
+        for (Map<String, Object> taskMap : newTasks) {
+            RoadmapTask task = new RoadmapTask();
+            task.setRoadmap(roadmap);
+            task.setDescription((String) taskMap.get("description"));
+            task.setDetails((String) taskMap.get("details"));
+            task.setWeekNumber((Integer) taskMap.getOrDefault("week", startWeek));
+            task.setDayNumber((Integer) taskMap.getOrDefault("day", 1));
+            task.setTaskType((String) taskMap.getOrDefault("type", "daily"));
+            task.setCompleted(false);
+            Object subtasksObj = taskMap.get("subtasks");
+            if (subtasksObj instanceof List) {
+                try {
+                    task.setSubtasks(objectMapper.writeValueAsString(subtasksObj));
+                } catch (JsonProcessingException e) {
+                    task.setSubtasks("[]");
+                }
+            }
+            roadmap.getTasks().add(task);
+        }
+
+        // Update generatedWeeks
+        roadmap.setGeneratedWeeks(endWeek);
+        roadmapRepository.save(roadmap);
+
         return toResponse(roadmap);
     }
 }

@@ -1,6 +1,7 @@
 package com.mymindmirror.backend.controller;
 
 import com.mymindmirror.backend.model.User;
+import com.mymindmirror.backend.model.UserRoadmapPreferences;
 import com.mymindmirror.backend.payload.request.ChangePasswordRequest;
 import com.mymindmirror.backend.payload.request.UserProfileRequest;
 import com.mymindmirror.backend.payload.response.UserProfileResponse;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
 
+import java.util.Map;
 import java.util.UUID;
 import java.util.Optional;
 
@@ -141,6 +143,63 @@ public class UserController {
         } catch (Exception e) {
             log.error("An unexpected error occurred while changing password: {}", e.getMessage(), e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to change password due to an internal error.");
+        }
+    }
+
+    // In UserController.java, add:
+
+    @GetMapping("/roadmap-preferences")
+    public ResponseEntity<UserRoadmapPreferences> getRoadmapPreferences(HttpServletRequest request) {
+        UUID userId = getUserIdFromRequest(request);
+        User user = userService.findById(userId).orElseThrow();
+        return ResponseEntity.ok(userService.getRoadmapPreferences(user));
+    }
+
+    // In UserController.java
+
+    @PutMapping("/roadmap-preferences")
+    public ResponseEntity<?> updateRoadmapPreferences(
+            HttpServletRequest request,
+            @RequestBody Map<String, Object> updates) {
+        try {
+            UUID userId = getUserIdFromRequest(request);
+            User user = userService.findById(userId)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+            // Safely extract values with type checking
+            String difficulty = updates.get("difficulty") instanceof String ? (String) updates.get("difficulty") : null;
+            String languagePreference = updates.get("languagePreference") instanceof String ? (String) updates.get("languagePreference") : null;
+            String learningStyle = updates.get("learningStyle") instanceof String ? (String) updates.get("learningStyle") : null;
+
+            Integer hoursPerWeek = null;
+            if (updates.containsKey("hoursPerWeek")) {
+                Object hoursObj = updates.get("hoursPerWeek");
+                if (hoursObj instanceof Number) {
+                    hoursPerWeek = ((Number) hoursObj).intValue();
+                } else if (hoursObj instanceof String) {
+                    try {
+                        hoursPerWeek = Integer.parseInt((String) hoursObj);
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+
+            Boolean avoidWeekends = null;
+            if (updates.containsKey("avoidWeekends")) {
+                Object avoidObj = updates.get("avoidWeekends");
+                if (avoidObj instanceof Boolean) {
+                    avoidWeekends = (Boolean) avoidObj;
+                } else if (avoidObj instanceof String) {
+                    avoidWeekends = Boolean.parseBoolean((String) avoidObj);
+                }
+            }
+
+            UserRoadmapPreferences updated = userService.updateRoadmapPreferences(
+                    user, difficulty, languagePreference, learningStyle, hoursPerWeek, avoidWeekends);
+            return ResponseEntity.ok(updated);
+        } catch (Exception e) {
+            log.error("Error updating roadmap preferences for user", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("error", e.getMessage()));
         }
     }
 }

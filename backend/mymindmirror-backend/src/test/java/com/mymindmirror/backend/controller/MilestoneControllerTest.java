@@ -9,9 +9,7 @@ import com.mymindmirror.backend.payload.request.MilestoneRequest;
 import com.mymindmirror.backend.payload.response.MilestoneInsightResponse;
 import com.mymindmirror.backend.security.JwtUtil;
 import com.mymindmirror.backend.security.services.UserDetailsImpl;
-import com.mymindmirror.backend.service.MilestoneInsightService;
-import com.mymindmirror.backend.service.MilestoneService;
-import com.mymindmirror.backend.service.UserService;
+import com.mymindmirror.backend.service.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -53,6 +51,12 @@ class MilestoneControllerTest {
 
     @MockitoBean
     private UserService userService;
+
+    @MockitoBean
+    private TaskService taskService;
+
+    @MockitoBean
+    private ApiKeyService apiKeyService;
 
     @MockitoBean
     private MilestoneInsightService milestoneInsightService;

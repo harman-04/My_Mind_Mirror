@@ -1,5 +1,6 @@
 package com.mymindmirror.backend.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mymindmirror.backend.model.Roadmap;
 import com.mymindmirror.backend.model.RoadmapTask;
@@ -10,6 +11,7 @@ import com.mymindmirror.backend.payload.response.RoadmapResponse;
 import com.mymindmirror.backend.service.RoadmapService;
 import com.mymindmirror.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -31,19 +33,18 @@ public class RoadmapController {
 
     @PostMapping("/generate")
     public ResponseEntity<?> generateRoadmap(@AuthenticationPrincipal UserDetails userDetails,
-                                             @RequestBody RoadmapGenerateRequest request) {
+                                             @RequestBody RoadmapGenerateRequest request) throws JsonProcessingException {
         Optional<User> userOpt = userService.findByUsername(userDetails.getUsername());
-        if (userOpt.isEmpty()) {
-            return ResponseEntity.status(401).body("User not found");
-        }
-        try {
-            Roadmap roadmap = roadmapService.generateRoadmap(userOpt.get(), request.getGoal(), request.getTimeframeWeeks());
-            // Convert entity to DTO before returning
-            RoadmapResponse response = roadmapService.toResponse(roadmap);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.status(500).body(Map.of("error", "Failed to generate roadmap: " + e.getMessage()));
-        }
+        if (userOpt.isEmpty()) return ResponseEntity.status(401).body("User not found");
+
+        Roadmap roadmap = roadmapService.generateRoadmap(
+                userOpt.get(),
+                request.getGoal(),
+                request.getTimeframeWeeks(),
+                request.getTimeframeValue(),
+                request.getTimeframeUnit()
+        );
+        return ResponseEntity.ok(roadmapService.toResponse(roadmap));
     }
 
     @GetMapping
@@ -153,6 +154,27 @@ public class RoadmapController {
             return ResponseEntity.status(400).body(e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(500).body(Map.of("error", "Failed to reschedule roadmap: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/continue-batch")
+    public ResponseEntity<?> continueRoadmapBatch(@AuthenticationPrincipal UserDetails userDetails,
+                                                  @PathVariable UUID id,
+                                                  @RequestParam(required = false) Integer weeksToGenerate) {
+        Optional<User> userOpt = userService.findByUsername(userDetails.getUsername());
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(401).body("User not found");
+        }
+        try {
+            RoadmapResponse response = roadmapService.continueRoadmapBatch(id, userOpt.get(), weeksToGenerate);
+            return ResponseEntity.ok(response);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(e.getMessage());
+        }
+        catch (Exception e) {
+            return ResponseEntity.status(500).body(Map.of("error", "Failed to continue roadmap: " + e.getMessage()));
         }
     }
 }

@@ -16,6 +16,7 @@ public class RoadmapGenerateResponse {
     private List<Task> tasks;
     private List<Resource> resources;
     private List<Milestone> milestones;
+    private Boolean isFallback = false;
 
     @Data
     public static class Phase {

@@ -241,6 +241,13 @@ function MilestoneTracker({ userId }) {
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
 
+  // Inside MilestoneTracker component, with other state variables
+  const [editedTaskDetails, setEditedTaskDetails] = useState('');
+  const [editedTaskSubtasks, setEditedTaskSubtasks] = useState([]);
+
+  const [newTaskDetails, setNewTaskDetails] = useState('');
+  const [newTaskSubtasks, setNewTaskSubtasks] = useState([]);
+
   // --- React Query: fetch milestones ---
   const {
     data: milestones = [],
@@ -534,19 +541,31 @@ function MilestoneTracker({ userId }) {
       taskData: {
         description: newTaskDescription,
         dueDate: newTaskDueDate || null,
-      },
+        details: newTaskDetails || null,
+        subtasks: newTaskSubtasks.filter(s => s.trim() !== '')
+      }
     });
+    // Reset form
     setNewTaskDescription('');
     setNewTaskDueDate('');
+    setNewTaskDetails('');
+    setNewTaskSubtasks([]);
     setSuccessMessage('Task added!');
     setTimeout(() => setSuccessMessage(''), 3000);
   };
-
   const handleEditTaskClick = (task) => {
     setEditingTaskId(task.id);
     setEditedTaskDescription(task.description);
     setEditedTaskDueDate(task.dueDate || '');
     setEditedTaskStatus(task.status);
+    setEditedTaskDetails(task.details || '');
+    let subtasks = [];
+    if (task.subtasksJson) {
+      try {
+        subtasks = JSON.parse(task.subtasksJson);
+      } catch(e) { subtasks = []; }
+    }
+    setEditedTaskSubtasks(subtasks);
   };
 
   const handleSaveTaskEdit = (milestoneId, taskId) => {
@@ -554,15 +573,14 @@ function MilestoneTracker({ userId }) {
       setErrorMessage('Task description cannot be empty');
       return;
     }
-    updateTaskMutation.mutate({
-      milestoneId,
-      taskId,
-      data: {
-        description: editedTaskDescription,
-        dueDate: editedTaskDueDate || null,
-        status: editedTaskStatus,
-      },
-    });
+    const payload = {
+      description: editedTaskDescription,
+      dueDate: editedTaskDueDate || null,
+      status: editedTaskStatus,
+      details: editedTaskDetails || null,
+      subtasks: editedTaskSubtasks.filter(s => s.trim() !== '')
+    };
+    updateTaskMutation.mutate({ milestoneId, taskId, data: payload });
     setEditingTaskId(null);
     setSuccessMessage('Task updated!');
     setTimeout(() => setSuccessMessage(''), 3000);
@@ -840,36 +858,82 @@ function MilestoneTracker({ userId }) {
                     <ul className="space-y-3">
                       {milestone.tasks.map(task => (
                         <li key={task.id} className={`p-4 rounded-xl ${isDarkMode ? 'bg-gray-700/50' : 'bg-gray-100/80'} shadow-sm transition-all`}>
-                          {editingTaskId === task.id ? (
-                            <div className="space-y-3">
-                              <input
-                                type="text"
-                                value={editedTaskDescription}
-                                onChange={e=>setEditedTaskDescription(e.target.value)}
-                                className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
-                                required
-                              />
-                              <input
-                                type="date"
-                                value={editedTaskDueDate}
-                                onChange={e=>setEditedTaskDueDate(e.target.value)}
-                                className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
-                              />
-                              <select
-                                value={editedTaskStatus}
-                                onChange={e=>setEditedTaskStatus(e.target.value)}
-                                className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
-                              >
-                                <option value="PENDING">Pending</option>
-                                <option value="COMPLETED">Completed</option>
-                                <option value="OVERDUE">Overdue</option>
-                                <option value="CANCELLED">Cancelled</option>
-                              </select>
-                              <div className="flex justify-end gap-2">
-                                <button onClick={()=>setEditingTaskId(null)} className="px-3 py-1 rounded-lg bg-gray-200 dark:bg-gray-600 text-sm">Cancel</button>
-                                <button onClick={()=>handleSaveTaskEdit(milestone.id, task.id)} className="px-3 py-1 rounded-lg bg-purple-500 text-white text-sm">Save</button>
-                              </div>
-                            </div>
+                         {editingTaskId === task.id ? (
+                           <div className="space-y-3">
+                             <input
+                               type="text"
+                               value={editedTaskDescription}
+                               onChange={e=>setEditedTaskDescription(e.target.value)}
+                               className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
+                               placeholder="Task description *"
+                               required
+                             />
+                             <textarea
+                               value={editedTaskDetails}
+                               onChange={e=>setEditedTaskDetails(e.target.value)}
+                               className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
+                               placeholder="Details (optional) – long instructions, tips, etc."
+                               rows="3"
+                             />
+                             <div>
+                               <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">Subtasks</label>
+                               <div className="space-y-2">
+                                 {editedTaskSubtasks.map((sub, idx) => (
+                                   <div key={idx} className="flex gap-2 items-center">
+                                     <input
+                                       type="text"
+                                       value={sub}
+                                       onChange={(e) => {
+                                         const newSubtasks = [...editedTaskSubtasks];
+                                         newSubtasks[idx] = e.target.value;
+                                         setEditedTaskSubtasks(newSubtasks);
+                                       }}
+                                       className={`flex-1 p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
+                                       placeholder={`Subtask ${idx+1}`}
+                                     />
+                                     <button
+                                       type="button"
+                                       onClick={() => {
+                                         const newSubtasks = editedTaskSubtasks.filter((_, i) => i !== idx);
+                                         setEditedTaskSubtasks(newSubtasks);
+                                       }}
+                                       className="p-1.5 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 transition"
+                                       title="Remove subtask"
+                                     >
+                                       <Trash2 size={14} />
+                                     </button>
+                                   </div>
+                                 ))}
+                                 <button
+                                   type="button"
+                                   onClick={() => setEditedTaskSubtasks([...editedTaskSubtasks, ''])}
+                                   className="text-sm text-purple-500 hover:text-purple-600 flex items-center gap-1"
+                                 >
+                                   <Plus size={14} /> Add subtask
+                                 </button>
+                               </div>
+                             </div>
+                             <input
+                               type="date"
+                               value={editedTaskDueDate}
+                               onChange={e=>setEditedTaskDueDate(e.target.value)}
+                               className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
+                             />
+                             <select
+                               value={editedTaskStatus}
+                               onChange={e=>setEditedTaskStatus(e.target.value)}
+                               className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
+                             >
+                               <option value="PENDING">Pending</option>
+                               <option value="COMPLETED">Completed</option>
+                               <option value="OVERDUE">Overdue</option>
+                               <option value="CANCELLED">Cancelled</option>
+                             </select>
+                             <div className="flex justify-end gap-2">
+                               <button onClick={()=>setEditingTaskId(null)} className="px-3 py-1 rounded-lg bg-gray-200 dark:bg-gray-600 text-sm">Cancel</button>
+                               <button onClick={()=>handleSaveTaskEdit(milestone.id, task.id)} className="px-3 py-1 rounded-lg bg-purple-500 text-white text-sm">Save</button>
+                             </div>
+                           </div>
                           ) : (
                             <div className="space-y-2">
                               {/* Main row: description, badge, actions */}
@@ -973,21 +1037,70 @@ function MilestoneTracker({ userId }) {
                   <div className={`mt-4 p-4 rounded-xl ${isDarkMode ? 'bg-gray-700/30' : 'bg-gray-100/50'}`}>
                     <h5 className="font-medium mb-2">Add New Task</h5>
                     {isTempId(milestone.id) ? (
-                      <div className="flex items-center justify-center py-2 text-gray-500"><Loader size={16} className="animate-spin mr-2" /> Milestone being created...</div>
+                      <div className="flex items-center justify-center py-2 text-gray-500">
+                        <Loader size={16} className="animate-spin mr-2" /> Milestone being created...
+                      </div>
                     ) : (
-                      <form onSubmit={(e)=>handleAddTask(e, milestone.id)} className="space-y-3">
+                      <form onSubmit={(e) => handleAddTask(e, milestone.id)} className="space-y-3">
                         <input
                           type="text"
                           value={newTaskDescription}
-                          onChange={e=>setNewTaskDescription(e.target.value)}
+                          onChange={(e) => setNewTaskDescription(e.target.value)}
                           placeholder="Description *"
                           className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
                           required
                         />
+                        <textarea
+                          value={newTaskDetails}
+                          onChange={(e) => setNewTaskDetails(e.target.value)}
+                          placeholder="Details (optional) – longer instructions, tips, etc."
+                          className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
+                          rows="2"
+                        />
+                        <div>
+                          <label className="block text-xs font-medium mb-1 text-gray-600 dark:text-gray-400">
+                            Subtasks (optional)
+                          </label>
+                          <div className="space-y-2">
+                            {newTaskSubtasks.map((sub, idx) => (
+                              <div key={idx} className="flex gap-2 items-center">
+                                <input
+                                  type="text"
+                                  value={sub}
+                                  onChange={(e) => {
+                                    const updated = [...newTaskSubtasks];
+                                    updated[idx] = e.target.value;
+                                    setNewTaskSubtasks(updated);
+                                  }}
+                                  className={`flex-1 p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
+                                  placeholder={`Subtask ${idx + 1}`}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = newTaskSubtasks.filter((_, i) => i !== idx);
+                                    setNewTaskSubtasks(updated);
+                                  }}
+                                  className="p-1.5 rounded-lg bg-red-500/10 text-red-600 hover:bg-red-500/20 transition"
+                                  title="Remove subtask"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            ))}
+                            <button
+                              type="button"
+                              onClick={() => setNewTaskSubtasks([...newTaskSubtasks, ''])}
+                              className="text-sm text-purple-500 hover:text-purple-600 flex items-center gap-1"
+                            >
+                              <Plus size={14} /> Add subtask
+                            </button>
+                          </div>
+                        </div>
                         <input
                           type="date"
                           value={newTaskDueDate}
-                          onChange={e=>setNewTaskDueDate(e.target.value)}
+                          onChange={(e) => setNewTaskDueDate(e.target.value)}
                           className={`w-full p-2 rounded-lg border ${inputBorder} ${inputBg} focus:ring-2 ${inputFocusRing}`}
                         />
                         <button
@@ -995,7 +1108,11 @@ function MilestoneTracker({ userId }) {
                           disabled={addTaskMutation.isPending}
                           className="w-full py-2 rounded-lg bg-gradient-to-r from-teal-500 to-cyan-500 text-white font-medium hover:shadow-md transition disabled:opacity-50 flex items-center justify-center gap-1"
                         >
-                          {addTaskMutation.isPending ? <Loader size={16} className="animate-spin" /> : <Plus size={16} />}
+                          {addTaskMutation.isPending ? (
+                            <Loader size={16} className="animate-spin" />
+                          ) : (
+                            <Plus size={16} />
+                          )}
                           {addTaskMutation.isPending ? 'Adding...' : 'Add Task'}
                         </button>
                       </form>

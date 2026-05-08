@@ -42,13 +42,16 @@ public class TaskController {
 
     @PostMapping
     public ResponseEntity<Task> createTask(@RequestHeader("Authorization") String authorizationHeader,
-                                           @PathVariable UUID milestoneId, @RequestBody TaskRequest taskRequest) {
+                                           @PathVariable UUID milestoneId,
+                                           @RequestBody TaskRequest taskRequest) {
         User currentUser = getCurrentUserFromToken(authorizationHeader);
         Task newTask = taskService.createTask(
                 milestoneId,
                 currentUser,
                 taskRequest.getDescription(),
-                taskRequest.getDueDate()
+                taskRequest.getDueDate(),
+                taskRequest.getDetails(),
+                taskRequest.getSubtasks()
         );
         return new ResponseEntity<>(newTask, HttpStatus.CREATED);
     }
@@ -72,15 +75,16 @@ public class TaskController {
 
     @PutMapping("/{taskId}")
     public ResponseEntity<Task> updateTask(@RequestHeader("Authorization") String authorizationHeader,
-                                           @PathVariable UUID milestoneId, @PathVariable UUID taskId, @RequestBody TaskRequest taskRequest) {
+                                           @PathVariable UUID milestoneId, @PathVariable UUID taskId,
+                                           @RequestBody TaskRequest taskRequest) {
         User currentUser = getCurrentUserFromToken(authorizationHeader);
         Task updatedTask = taskService.updateTask(
-                taskId,
-                milestoneId,
-                currentUser,
+                taskId, milestoneId, currentUser,
                 taskRequest.getDescription(),
                 taskRequest.getDueDate(),
-                taskRequest.getStatus()
+                taskRequest.getStatus(),
+                taskRequest.getDetails(),
+                taskRequest.getSubtasks()
         );
         return ResponseEntity.ok(updatedTask);
     }

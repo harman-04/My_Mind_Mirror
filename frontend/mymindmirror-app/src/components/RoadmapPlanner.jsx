@@ -3,15 +3,17 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useRoadmaps, useGenerateRoadmap, useDeleteRoadmap, useImportTaskToMilestone,
     useToggleTaskCompletion, useContinueRoadmap, useElaborateTask,
-    useRescheduleRoadmap } from '../hooks/useRoadmap';
+    useRescheduleRoadmap, useContinueRoadmapBatch } from '../hooks/useRoadmap';
 import { useTheme } from '../contexts/ThemeContext';
 import { toast } from 'sonner';
 import {
   Loader, Sparkles, CheckCircle, Circle, ExternalLink, Target, Trash2,
   ChevronDown, ChevronUp, BookOpen, ListChecks, Award, Calendar, Clock,
-  TrendingUp, AlertTriangle, BarChart2, List
+  TrendingUp, AlertTriangle, BarChart2, List, Video, FileText, GraduationCap
 } from 'lucide-react';
 import RoadmapTimeline from './RoadmapTimeline'; // new import
+import { useUserProfile } from '../hooks/useUserProfile';
+import { useQueryClient } from '@tanstack/react-query';
 
 // ------------------------------------------------------------------
 // Helper to format markdown-like text (unchanged)
@@ -162,7 +164,7 @@ const formatText = (text) => {
 // ------------------------------------------------------------------
 // Portal-based Delete Confirmation Modal (unchanged)
 // ------------------------------------------------------------------
-const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, roadmapTitle, theme }) => {
+const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, roadmapTitle, theme, isLoading }) => {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -196,11 +198,12 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, roadmapTitle, the
           <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">This action cannot be undone.</p>
           <div className="flex justify-center gap-3">
             <button
-              onClick={onConfirm}
-              className="px-5 py-2 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition shadow-md"
-            >
-              Delete
-            </button>
+               onClick={onConfirm}
+               disabled={isLoading}
+               className="px-5 py-2 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition shadow-md disabled:opacity-50"
+             >
+               {isLoading ? <Loader size={16} className="animate-spin mr-1" /> : 'Delete'}
+             </button>
             <button
               onClick={onClose}
               className="px-5 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
@@ -407,18 +410,33 @@ function RoadmapPlanner() {
   const continueMutation = useContinueRoadmap();
   const elaborateMutation = useElaborateTask();
   const rescheduleMutation = useRescheduleRoadmap();
+  const { roadmapPreferences } = useUserProfile();
+  const continueBatchMutation = useContinueRoadmapBatch();
+  const queryClient = useQueryClient();
+  const [timeframeValue, setTimeframeValue] = useState(4);
+  const [timeframeUnit, setTimeframeUnit] = useState('WEEKS');
+  const [overridePreferences, setOverridePreferences] = useState(false);
+  const [difficulty, setDifficulty] = useState('BEGINNER');
+  const [language, setLanguage] = useState('en');
+  const [learningStyle, setLearningStyle] = useState('READING');
+  const [hoursPerWeek, setHoursPerWeek] = useState(10);
+  const [avoidWeekends, setAvoidWeekends] = useState(false);
 
   const [goal, setGoal] = useState('');
-  const [timeframeWeeks, setTimeframeWeeks] = useState('');
+//   const [timeframeWeeks, setTimeframeWeeks] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [expandedWeeks, setExpandedWeeks] = useState({});
   const [selectedTask, setSelectedTask] = useState(null);
   const [completedRoadmapIds, setCompletedRoadmapIds] = useState(new Set());
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, roadmapId: null, roadmapTitle: '' });
-
+const [continuingRoadmapId, setContinuingRoadmapId] = useState(null);
   // NEW: per-roadmap view mode (list or timeline)
   const [viewModeMap, setViewModeMap] = useState({});
+const [visibleWeeksMap, setVisibleWeeksMap] = useState({});
+
+const [isDeleting, setIsDeleting] = useState(false);
+
 
   const toggleViewMode = (roadmapId) => {
     setViewModeMap(prev => ({
@@ -426,6 +444,7 @@ function RoadmapPlanner() {
       [roadmapId]: prev[roadmapId] === 'timeline' ? 'list' : 'timeline'
     }));
   };
+
 
   // After mutation, update selectedTask if it matches the elaborated task
   useEffect(() => {
@@ -457,36 +476,78 @@ function RoadmapPlanner() {
     }
   }, [roadmaps, completedRoadmapIds]);
 
+useEffect(() => {
+  if (roadmapPreferences.data && !overridePreferences) {
+    setDifficulty(roadmapPreferences.data.difficulty || 'BEGINNER');
+    setLanguage(roadmapPreferences.data.languagePreference || 'en');
+    setLearningStyle(roadmapPreferences.data.learningStyle || 'READING');
+    setHoursPerWeek(roadmapPreferences.data.hoursPerWeek || 10);
+    setAvoidWeekends(roadmapPreferences.data.avoidWeekends || false);
+  }
+}, [roadmapPreferences.data, overridePreferences]);
+
+
+ // Initialise visible weeks when roadmaps load
+  useEffect(() => {
+    if (roadmaps) {
+      const newVisibleMap = { ...visibleWeeksMap };
+      roadmaps.forEach(roadmap => {
+        if (!newVisibleMap[roadmap.id]) {
+          // Initially show up to generatedWeeks (or 12 if not set)
+          const initialVisible = roadmap.generatedWeeks
+              ? Math.min(roadmap.generatedWeeks, roadmap.durationWeeks)
+              : roadmap.durationWeeks;
+          newVisibleMap[roadmap.id] = initialVisible;   // <-- this line was missing                                 // fallback – show all weeks
+        }
+      });
+      setVisibleWeeksMap(newVisibleMap);
+    }
+  }, [roadmaps]);
+
   const handleGenerate = (e) => {
     e.preventDefault();
     if (!goal.trim()) return;
-    generateMutation.mutate(
-      { goal: goal.trim(), timeframeWeeks: timeframeWeeks ? parseInt(timeframeWeeks) : null },
-      {
-        onSuccess: () => {
-          setGoal('');
-          setTimeframeWeeks('');
-          setShowForm(false);
-          refetch();
-          toast.success('Roadmap generated successfully!');
-        },
-      }
-    );
+    const payload = {
+      goal: goal.trim(),
+      timeframeValue: timeframeValue,
+      timeframeUnit: timeframeUnit,
+      difficulty: difficulty,
+      language: language,
+      learningStyle: learningStyle,
+      hoursPerWeek: hoursPerWeek,
+      avoidWeekends: avoidWeekends,
+    };
+    // If the user kept the old weeks input, also send for backward compatibility
+    if (timeframeUnit === 'WEEKS') {
+      payload.timeframeWeeks = timeframeValue;
+    }
+    generateMutation.mutate(payload, {
+      onSuccess: () => {
+        setGoal('');
+        setTimeframeValue(4);
+        setTimeframeUnit('WEEKS');
+        setShowForm(false);
+        refetch();
+        toast.success('Roadmap generated successfully!');
+      },
+    });
   };
-
   const handleDeleteClick = (id, title) => {
     setDeleteModal({ isOpen: true, roadmapId: id, roadmapTitle: title });
   };
 
   const confirmDelete = () => {
+    setIsDeleting(true);
     deleteMutation.mutate(deleteModal.roadmapId, {
       onSuccess: () => {
         toast.success('Roadmap deleted');
         setDeleteModal({ isOpen: false, roadmapId: null, roadmapTitle: '' });
+        setIsDeleting(false);
       },
       onError: () => {
         toast.error('Failed to delete roadmap');
         setDeleteModal({ isOpen: false, roadmapId: null, roadmapTitle: '' });
+        setIsDeleting(false);
       },
     });
   };
@@ -589,16 +650,109 @@ function RoadmapPlanner() {
                 required
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-1.5">Timeframe (weeks) – optional</label>
-              <input
-                type="number"
-                value={timeframeWeeks}
-                onChange={(e) => setTimeframeWeeks(e.target.value)}
-                placeholder="e.g., 12"
-                className="w-full p-3 rounded-xl border dark:bg-gray-800/80 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
-                min="1"
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Duration</label>
+                <input
+                  type="number"
+                  value={timeframeValue}
+                  onChange={(e) => setTimeframeValue(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full p-3 rounded-xl border dark:bg-gray-800/80 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+                  min="1"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-1.5">Unit</label>
+                <select
+                  value={timeframeUnit}
+                  onChange={(e) => setTimeframeUnit(e.target.value)}
+                  className="w-full p-3 rounded-xl border dark:bg-gray-800/80 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+                >
+                  <option value="DAYS">Days</option>
+                  <option value="WEEKS">Weeks</option>
+                  <option value="MONTHS">Months</option>
+                  <option value="YEARS">Years</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-200 dark:border-gray-700 my-4 pt-4">
+              <div className="flex items-center gap-2 mb-3">
+                <input
+                  type="checkbox"
+                  id="overridePrefs"
+                  checked={overridePreferences}
+                  onChange={(e) => setOverridePreferences(e.target.checked)}
+                  className="w-4 h-4 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
+                />
+                <label htmlFor="overridePrefs" className="text-sm font-medium">
+                  Use custom preferences for this roadmap (override saved defaults)
+                </label>
+              </div>
+
+              {overridePreferences && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">Difficulty</label>
+                    <select
+                      value={difficulty}
+                      onChange={(e) => setDifficulty(e.target.value)}
+                      className="w-full p-2 rounded-lg border dark:bg-gray-800/80 dark:border-gray-700"
+                    >
+                      <option value="BEGINNER">Beginner</option>
+                      <option value="INTERMEDIATE">Intermediate</option>
+                      <option value="ADVANCED">Advanced</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">Language</label>
+                    <select
+                      value={language}
+                      onChange={(e) => setLanguage(e.target.value)}
+                      className="w-full p-2 rounded-lg border dark:bg-gray-800/80 dark:border-gray-700"
+                    >
+                      <option value="en">English</option>
+                      <option value="hi">Hindi</option>
+                      <option value="es">Spanish</option>
+                      <option value="fr">French</option>
+                      <option value="de">German</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">Learning Style</label>
+                    <select
+                      value={learningStyle}
+                      onChange={(e) => setLearningStyle(e.target.value)}
+                      className="w-full p-2 rounded-lg border dark:bg-gray-800/80 dark:border-gray-700"
+                    >
+                      <option value="READING">Reading</option>
+                      <option value="VISUAL">Visual</option>
+                      <option value="HANDS_ON">Hands‑on</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1.5">Hours per Week</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="70"
+                      value={hoursPerWeek}
+                      onChange={(e) => setHoursPerWeek(parseInt(e.target.value) || 10)}
+                      className="w-full p-2 rounded-lg border dark:bg-gray-800/80 dark:border-gray-700"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 col-span-full">
+                    <input
+                      type="checkbox"
+                      id="avoidWeekendsLocal"
+                      checked={avoidWeekends}
+                      onChange={(e) => setAvoidWeekends(e.target.checked)}
+                      className="w-4 h-4 rounded"
+                    />
+                    <label htmlFor="avoidWeekendsLocal" className="text-sm">Avoid weekends</label>
+                  </div>
+                </div>
+              )}
             </div>
             <button
               type="submit"
@@ -641,6 +795,13 @@ function RoadmapPlanner() {
           const isCompleted = completionPercent === 100 && totalTasks > 0;
           const currentViewMode = viewModeMap[roadmap.id] || 'list';
 
+          // --- NEW: chunked continuation variables ---
+          const totalWeeks = roadmap.durationWeeks || 1;
+          const generatedWeeks = roadmap.generatedWeeks || 0;
+          const maxVisibleWeek = visibleWeeksMap[roadmap.id] || generatedWeeks || Math.min(12, totalWeeks);
+                    const canLoadMore = maxVisibleWeek < totalWeeks;
+          const isContinuable = generatedWeeks > 0 && generatedWeeks < totalWeeks;
+
           // Prepare tasks grouped by week for list view
           const tasksByWeek = {};
           roadmap.tasks?.forEach(task => {
@@ -648,10 +809,32 @@ function RoadmapPlanner() {
             if (!tasksByWeek[week]) tasksByWeek[week] = [];
             tasksByWeek[week].push(task);
           });
+
+          // Sort tasks within each week: daily tasks (day 1-5) first, then weekly (day null)
           Object.keys(tasksByWeek).forEach(week => {
-            tasksByWeek[week].sort((a, b) => (a.dayNumber || 999) - (b.dayNumber || 999));
+            tasksByWeek[week].sort((a, b) => {
+              // If both are daily or both are weekly, sort by dayNumber
+              if (a.dayNumber === null && b.dayNumber !== null) return 1;   // weekly after daily
+              if (a.dayNumber !== null && b.dayNumber === null) return -1;  // daily before weekly
+              if (a.dayNumber === null && b.dayNumber === null) return 0;
+              return (a.dayNumber || 999) - (b.dayNumber || 999);
+            });
           });
-          const sortedWeeks = Object.keys(tasksByWeek).sort((a, b) => a - b);
+          // Ensure every week from 1 to totalWeeks has an entry (even if empty)
+          for (let i = 1; i <= totalWeeks; i++) {
+            if (!tasksByWeek[i]) tasksByWeek[i] = [];
+          }
+          const sortedWeeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
+
+          const handleExpandAll = () => {
+            const newExpanded = {};
+            sortedWeeks.forEach(week => { newExpanded[week] = true; });
+            setExpandedWeeks(newExpanded);
+          };
+
+          const handleCollapseAll = () => {
+            setExpandedWeeks({});
+          };
 
           return (
             <div
@@ -693,7 +876,7 @@ function RoadmapPlanner() {
                     }`}>
                       {isCompleted ? '🏆 Completed' : roadmap.status}
                     </span>
-                    {/* NEW: View mode toggle button */}
+                    {/* View mode toggle button */}
                     <button
                       onClick={() => toggleViewMode(roadmap.id)}
                       className="p-1.5 rounded-lg bg-gray-200/70 dark:bg-gray-700/70 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
@@ -704,7 +887,7 @@ function RoadmapPlanner() {
                   </div>
                 </div>
 
-                {/* Progress Dashboard (always visible) */}
+                {/* Progress Dashboard */}
                 <div className="mb-5 p-4 rounded-xl bg-gradient-to-r from-purple-50/50 to-teal-50/50 dark:from-purple-900/20 dark:to-teal-900/20">
                   <div className="flex justify-between text-sm mb-2">
                     <span className="font-medium flex items-center gap-1"><TrendingUp size={14} /> Overall Progress</span>
@@ -720,16 +903,37 @@ function RoadmapPlanner() {
                     <span className="flex items-center gap-1"><CheckCircle size={12} /> Completed: {completedTasks}/{totalTasks} tasks</span>
                     <span className="flex items-center gap-1"><Clock size={12} /> Est. remaining: ~{remainingWeeks} weeks</span>
                   </div>
+                  {generatedWeeks > 0 && generatedWeeks < totalWeeks && (
+                    <div className="mt-2 text-xs text-purple-600 dark:text-purple-300 flex justify-between items-center border-t border-gray-200 dark:border-gray-700 pt-2">
+                      <span>📋 Weeks generated: {generatedWeeks}/{totalWeeks}</span>
+                      <span className="text-gray-400">Click below to generate next weeks</span>
+                    </div>
+                  )}
                 </div>
 
                 {/* Conditional Rendering: List View or Timeline View */}
                 {currentViewMode === 'list' ? (
-                  // ---------- List View (existing expandable weeks) ----------
                   sortedWeeks.length > 0 && (
                     <div className="mb-5">
-                      <h4 className="font-semibold mb-3 flex items-center gap-2 text-purple-700 dark:text-purple-300">
-                        <Target size={18} /> Actionable Tasks
-                      </h4>
+                      <div className="flex justify-between items-center mb-3">
+                        <h4 className="font-semibold flex items-center gap-2 text-purple-700 dark:text-purple-300">
+                          <Target size={18} /> Actionable Tasks
+                        </h4>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={handleExpandAll}
+                            className="text-xs px-2 py-1 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300"
+                          >
+                            Expand All
+                          </button>
+                          <button
+                            onClick={handleCollapseAll}
+                            className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                          >
+                            Collapse All
+                          </button>
+                        </div>
+                      </div>
                       <div className="space-y-4">
                         {sortedWeeks.map((week) => {
                           const tasks = tasksByWeek[week];
@@ -747,6 +951,11 @@ function RoadmapPlanner() {
                               </button>
                               {isExpanded && (
                                 <div className="space-y-3">
+                                  {tasks.length === 0 && (
+                                    <div className="text-gray-500 italic text-sm py-2 text-center">
+                                      No tasks yet. Use "Generate Next Weeks" to create tasks for this week.
+                                    </div>
+                                  )}
                                   {tasks.map((task) => (
                                     <div key={task.id} className="group bg-gray-50/50 dark:bg-gray-800/30 rounded-xl p-3 hover:bg-gray-100/70 dark:hover:bg-gray-800/50 transition">
                                       <div className="flex items-start gap-3">
@@ -815,10 +1024,48 @@ function RoadmapPlanner() {
                           );
                         })}
                       </div>
+                      {canLoadMore && (
+                                              <div className="mt-4 text-center">
+                                                <button
+                                                  onClick={() => {
+                                                    setContinuingRoadmapId(roadmap.id);
+                                                    continueBatchMutation.mutate(
+                                                      { roadmapId: roadmap.id, weeksToGenerate: 6 },
+                                                      {
+                                                        onSuccess: (updatedRoadmap) => {
+                                                          // Update roadmap data in cache
+                                                          queryClient.setQueryData(['roadmaps'], old =>
+                                                            old.map(r => r.id === updatedRoadmap.id ? updatedRoadmap : r)
+                                                          );
+                                                          // Increase visible weeks to the new generated weeks (or up to total weeks)
+                                                         const newVisible = Math.min(updatedRoadmap.generatedWeeks, totalWeeks);
+                                                         setVisibleWeeksMap(prev => ({ ...prev, [roadmap.id]: newVisible }));
+                                                          toast.success(`Loaded weeks up to ${newVisible}`);
+                                                        },
+
+                                                   onError: (error) => {
+                                                               toast.error(`Continuation failed: ${error.response?.data?.message || error.message}`);
+                                                               // Do NOT update visibleWeeksMap -> button remains active for retry
+                                                           },
+                                                        onSettled: () => setContinuingRoadmapId(null)
+                                                      }
+                                                    );
+                                                  }}
+                                                  disabled={continueBatchMutation.isPending && continuingRoadmapId === roadmap.id}
+                                                  className="px-5 py-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold shadow-md hover:shadow-lg transition disabled:opacity-50"
+                                                >
+                                                  {continueBatchMutation.isPending && continuingRoadmapId === roadmap.id ? (
+                                                    <Loader className="animate-spin w-4 h-4 inline mr-2" />
+                                                  ) : (
+                                                    <Calendar size={16} className="inline mr-2" />
+                                                  )}
+                                                  Load Next 6 Weeks ({maxVisibleWeek}/{totalWeeks})
+                                                </button>
+                                              </div>
+                                            )}
                     </div>
                   )
                 ) : (
-                  // ---------- Timeline View (using RoadmapTimeline) ----------
                   <div className="mb-5">
                     <h4 className="font-semibold mb-3 flex items-center gap-2 text-teal-700 dark:text-teal-300">
                       <BarChart2 size={18} /> Timeline View
@@ -830,27 +1077,49 @@ function RoadmapPlanner() {
                   </div>
                 )}
 
-                {/* Resources (always visible) */}
+                {/* Resources */}
+                {/* Recommended Resources */}
                 {roadmap.resources && roadmap.resources.length > 0 && (
                   <div className="mb-5">
-                    <h4 className="font-semibold mb-2 text-teal-700 dark:text-teal-300">Recommended Resources</h4>
+                    <h4 className="font-semibold mb-2 text-teal-700 dark:text-teal-300 flex items-center gap-2">
+                      <ExternalLink size={16} /> Recommended Resources
+                    </h4>
                     <div className="flex flex-wrap gap-2">
-                      {roadmap.resources.map((res) => (
-                        <a
-                          key={res.id}
-                          href={res.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 text-xs hover:bg-purple-200 dark:hover:bg-purple-800/60 transition"
-                        >
-                          {res.name} <ExternalLink size={12} />
-                        </a>
-                      ))}
+                      {roadmap.resources.map((res) => {
+                        // Choose icon based on type
+                        let IconComponent;
+                        switch (res.type?.toLowerCase()) {
+                          case 'video':
+                            IconComponent = Video;
+                            break;
+                          case 'article':
+                            IconComponent = FileText;
+                            break;
+                          case 'course':
+                            IconComponent = GraduationCap;
+                            break;
+                          default:
+                            IconComponent = ExternalLink; // fallback
+                        }
+                        return (
+                          <a
+                            key={res.id}
+                            href={res.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 text-xs hover:bg-purple-200 dark:hover:bg-purple-800/60 transition group"
+                            title={res.type || 'resource'}
+                          >
+                            <IconComponent size={12} className="text-purple-500 dark:text-purple-300" />
+                            <span>{res.name}</span>
+                          </a>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
 
-                {/* Milestones (always visible) */}
+                {/* Milestones */}
                 {roadmap.milestones && roadmap.milestones.length > 0 && (
                   <div className="mb-5">
                     <h4 className="font-semibold mb-2 text-amber-700 dark:text-amber-300">Key Milestones</h4>
@@ -864,39 +1133,41 @@ function RoadmapPlanner() {
                   </div>
                 )}
 
-                {/* Action Buttons (always visible) */}
-                <div className="flex flex-col sm:flex-row gap-3 mt-6">
-                  <button
-                    onClick={() => continueMutation.mutate(roadmap.id)}
-                    disabled={continueMutation.isPending || completedTasks === 0}
-                    className={`flex-1 py-2.5 rounded-xl font-semibold transition flex items-center justify-center gap-2 ${
-                      completedTasks === 0
-                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 cursor-not-allowed'
-                        : 'bg-gradient-to-r from-green-500 to-teal-500 text-white hover:shadow-lg'
-                    }`}
-                  >
-                    {continueMutation.isPending ? <Loader className="animate-spin w-4 h-4" /> : <Sparkles size={16} />}
-                    {continueMutation.isPending ? 'Generating...' : 'Continue Roadmap'}
-                  </button>
-                  <button
-                    onClick={() => rescheduleMutation.mutate(roadmap.id)}
-                    disabled={rescheduleMutation.isPending || remainingTasksCount === 0}
-                    className={`flex-1 py-2.5 rounded-xl font-semibold transition flex items-center justify-center gap-2 ${
-                      remainingTasksCount === 0
-                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 cursor-not-allowed'
-                        : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:shadow-lg'
-                    }`}
-                  >
-                    {rescheduleMutation.isPending ? <Loader className="animate-spin w-4 h-4" /> : <Calendar size={16} />}
-                    {rescheduleMutation.isPending ? 'Rescheduling...' : 'Smart Reschedule'}
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                  {/* Action Buttons (keep old continue and reschedule) */}
+                                <div className="flex flex-col sm:flex-row gap-3 mt-6">
+                                  {/* Old continue button (based on completed tasks) */}
+                                  <button
+                                    onClick={() => continueMutation.mutate(roadmap.id)}
+                                    disabled={continueMutation.isPending || completedTasks === 0}
+                                    className={`flex-1 py-2.5 rounded-xl font-semibold transition flex items-center justify-center gap-2 ${
+                                      completedTasks === 0
+                                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 cursor-not-allowed'
+                                        : 'bg-gradient-to-r from-green-500 to-teal-500 text-white hover:shadow-lg'
+                                    }`}
+                                  >
+                                    {continueMutation.isPending ? <Loader className="animate-spin w-4 h-4" /> : <Sparkles size={16} />}
+                                    {continueMutation.isPending ? 'Generating...' : 'Next Steps (based on progress)'}
+                                  </button>
 
+                                  {/* Smart Reschedule button */}
+                                  <button
+                                    onClick={() => rescheduleMutation.mutate(roadmap.id)}
+                                    disabled={rescheduleMutation.isPending || remainingTasksCount === 0}
+                                    className={`flex-1 py-2.5 rounded-xl font-semibold transition flex items-center justify-center gap-2 ${
+                                      remainingTasksCount === 0
+                                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 cursor-not-allowed'
+                                        : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:shadow-lg'
+                                    }`}
+                                  >
+                                    {rescheduleMutation.isPending ? <Loader className="animate-spin w-4 h-4" /> : <Calendar size={16} />}
+                                    {rescheduleMutation.isPending ? 'Rescheduling...' : 'Smart Reschedule'}
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
       {/* Task Detail Modal */}
       <TaskDetailModal
         task={selectedTask}
@@ -913,6 +1184,7 @@ function RoadmapPlanner() {
         onConfirm={confirmDelete}
         roadmapTitle={deleteModal.roadmapTitle}
         theme={theme}
+        isLoading={isDeleting}   // new prop
       />
     </div>
   );

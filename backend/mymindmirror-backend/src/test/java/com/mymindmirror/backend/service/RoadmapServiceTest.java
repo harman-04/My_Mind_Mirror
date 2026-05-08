@@ -228,6 +228,7 @@ class RoadmapServiceTest {
         roadmap.setUser(testUser);
         roadmap.setTitle("Java Learning Roadmap");
         roadmap.setDescription(goal);
+        roadmap.setDurationWeeks(4);
         RoadmapTask existingTask = new RoadmapTask();
         existingTask.setCompleted(true);
         existingTask.setDescription("Installed JDK");

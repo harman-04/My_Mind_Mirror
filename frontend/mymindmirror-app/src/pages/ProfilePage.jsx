@@ -6,7 +6,7 @@ import { useUserProfile } from '../hooks/useUserProfile';
 import { useTheme } from '../contexts/ThemeContext';
 import {
     User, Mail, Edit, Save, X, Trash2, Loader, CheckCircle, AlertCircle,
-    KeyRound, Lock, Info, Sparkles, Eye, EyeOff, Shield, Database
+    KeyRound, Lock, Info, Sparkles, Eye, EyeOff, Shield, Database, Target
 } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
 
@@ -28,6 +28,8 @@ function ProfilePage() {
         isChangingPassword,
         apiKeyStatus,
         updateApiKey,
+        roadmapPreferences,
+          updateRoadmapPreferences,
     } = useUserProfile();
 
     // Profile edit state
@@ -51,6 +53,39 @@ function ProfilePage() {
     const [feedbackMessage, setFeedbackMessage] = useState({ type: '', text: '' });
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+    const [roadmapPrefs, setRoadmapPrefs] = useState({
+      difficulty: 'BEGINNER',
+      languagePreference: 'en',
+      learningStyle: 'READING',
+      hoursPerWeek: 10,
+      avoidWeekends: false,
+    });
+
+    // Load preferences when available
+    useEffect(() => {
+      if (roadmapPreferences.data) {
+        setRoadmapPrefs({
+          difficulty: roadmapPreferences.data.difficulty || 'BEGINNER',
+          languagePreference: roadmapPreferences.data.languagePreference || 'en',
+          learningStyle: roadmapPreferences.data.learningStyle || 'READING',
+          hoursPerWeek: roadmapPreferences.data.hoursPerWeek || 10,
+          avoidWeekends: roadmapPreferences.data.avoidWeekends || false,
+        });
+      }
+    }, [roadmapPreferences.data]);
+
+    const handlePrefChange = (key, value) => {
+      setRoadmapPrefs(prev => ({ ...prev, [key]: value }));
+    };
+
+    const saveRoadmapPrefs = async () => {
+      try {
+        await updateRoadmapPreferences.mutateAsync(roadmapPrefs);
+        setFeedbackMessage({ type: 'success', text: 'Roadmap preferences saved!' });
+      } catch (err) {
+        setFeedbackMessage({ type: 'error', text: err.message || 'Failed to save preferences.' });
+      }
+    };
     // Initialize form fields when profile loads
     useEffect(() => {
         if (profile) {
@@ -464,6 +499,91 @@ function ProfilePage() {
                                 Your key is encrypted and stored securely. It will only be used to call the Gemini API on your behalf.
                                 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-teal-500 hover:underline ml-1">Get one here</a>.
                             </p>
+                        </div>
+
+                        {/* Roadmap Preferences Card */}
+                        <div className={`rounded-xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 space-y-5`}>
+                          <h2 className="text-xl font-semibold flex items-center gap-2">
+                            <Target size={20} className="text-teal-400" /> Roadmap Preferences
+                          </h2>
+                          <p className={`text-sm ${colors.textSecondary}`}>
+                            These preferences will be used when generating AI roadmaps. You can override them per roadmap.
+                          </p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                            <div>
+                              <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Difficulty</label>
+                              <select
+                                value={roadmapPrefs.difficulty}
+                                onChange={(e) => handlePrefChange('difficulty', e.target.value)}
+                                className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                              >
+                                <option value="BEGINNER">Beginner (explain basics)</option>
+                                <option value="INTERMEDIATE">Intermediate</option>
+                                <option value="ADVANCED">Advanced (skip fundamentals)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Preferred Language</label>
+                              <select
+                                value={roadmapPrefs.languagePreference}
+                                onChange={(e) => handlePrefChange('languagePreference', e.target.value)}
+                                className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                              >
+                                <option value="en">English</option>
+                                <option value="hi">Hindi</option>
+                                <option value="es">Spanish</option>
+                                <option value="fr">French</option>
+                                <option value="de">German</option>
+                                <option value="zh">Chinese</option>
+                                <option value="ar">Arabic</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Learning Style</label>
+                              <select
+                                value={roadmapPrefs.learningStyle}
+                                onChange={(e) => handlePrefChange('learningStyle', e.target.value)}
+                                className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                              >
+                                <option value="READING">Reading (articles, docs)</option>
+                                <option value="VISUAL">Visual (videos, diagrams)</option>
+                                <option value="HANDS_ON">Hands‑on (exercises, projects)</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Hours per Week</label>
+                              <input
+                                type="number"
+                                min="1"
+                                max="70"
+                                value={roadmapPrefs.hoursPerWeek}
+                                onChange={(e) => handlePrefChange('hoursPerWeek', parseInt(e.target.value) || 10)}
+                                className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                              />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                id="avoidWeekends"
+                                checked={roadmapPrefs.avoidWeekends}
+                                onChange={(e) => handlePrefChange('avoidWeekends', e.target.checked)}
+                                className="w-4 h-4 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
+                              />
+                              <label htmlFor="avoidWeekends" className={`text-sm font-medium ${colors.textSecondary}`}>
+                                Avoid weekends (schedule tasks only on weekdays)
+                              </label>
+                            </div>
+                          </div>
+                          <div className="flex justify-end">
+                            <button
+                              onClick={saveRoadmapPrefs}
+                              disabled={updateRoadmapPreferences.isPending}
+                              className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
+                            >
+                              {updateRoadmapPreferences.isPending ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
+                              Save Preferences
+                            </button>
+                          </div>
                         </div>
 
                         {/* Danger Zone */}

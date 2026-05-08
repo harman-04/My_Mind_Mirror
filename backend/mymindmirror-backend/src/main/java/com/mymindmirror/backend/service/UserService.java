@@ -2,9 +2,11 @@ package com.mymindmirror.backend.service;
 
 import com.mymindmirror.backend.model.JournalEntry;
 import com.mymindmirror.backend.model.User;
+import com.mymindmirror.backend.model.UserRoadmapPreferences;
 import com.mymindmirror.backend.payload.request.UserProfileRequest;
 import com.mymindmirror.backend.repository.JournalEntryRepository;
 import com.mymindmirror.backend.repository.UserRepository;
+import com.mymindmirror.backend.repository.UserRoadmapPreferencesRepository;
 import com.mymindmirror.backend.util.EncryptionUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,6 +29,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final JournalEntryRepository journalEntryRepository;
+    private final UserRoadmapPreferencesRepository userRoadmapPreferencesRepository;
 
 
     public User registerNewUser(String username, String email, String password) {
@@ -183,4 +186,36 @@ public class UserService {
     public User save(User user) {
         return userRepository.save(user);
     }
+
+    // In UserService.java, add:
+
+    @Transactional(readOnly = true)
+    public UserRoadmapPreferences getRoadmapPreferences(User user) {
+        return userRoadmapPreferencesRepository.findByUser(user)
+                .orElseGet(() -> createDefaultRoadmapPreferences(user));
+    }
+
+    @Transactional
+    public UserRoadmapPreferences updateRoadmapPreferences(User user, String difficulty, String languagePreference,
+                                                           String learningStyle, Integer hoursPerWeek, Boolean avoidWeekends) {
+        UserRoadmapPreferences prefs = getRoadmapPreferences(user);
+        if (difficulty != null && !difficulty.isBlank()) prefs.setDifficulty(difficulty);
+        if (languagePreference != null && !languagePreference.isBlank()) prefs.setLanguagePreference(languagePreference);
+        if (learningStyle != null && !learningStyle.isBlank()) prefs.setLearningStyle(learningStyle);
+        if (hoursPerWeek != null && hoursPerWeek >= 1) prefs.setHoursPerWeek(hoursPerWeek);
+        if (avoidWeekends != null) prefs.setAvoidWeekends(avoidWeekends);
+        return userRoadmapPreferencesRepository.save(prefs);
+    }
+
+    private UserRoadmapPreferences createDefaultRoadmapPreferences(User user) {
+        UserRoadmapPreferences prefs = new UserRoadmapPreferences();
+        prefs.setUser(user);
+        prefs.setDifficulty("BEGINNER");
+        prefs.setLanguagePreference("en");
+        prefs.setLearningStyle("READING");
+        prefs.setHoursPerWeek(10);
+        prefs.setAvoidWeekends(false);
+        return userRoadmapPreferencesRepository.save(prefs);
+    }
+
 }
