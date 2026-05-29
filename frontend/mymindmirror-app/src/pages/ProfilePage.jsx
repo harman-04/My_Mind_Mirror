@@ -1,12 +1,13 @@
 // src/pages/ProfilePage.jsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUserProfile } from '../hooks/useUserProfile';
 import { useTheme } from '../contexts/ThemeContext';
+import { toast } from 'sonner';
 import {
     User, Mail, Edit, Save, X, Trash2, Loader, CheckCircle, AlertCircle,
-    KeyRound, Lock, Info, Sparkles, Eye, EyeOff, Shield, Database, Target
+    KeyRound, Lock, Info, Sparkles, Eye, EyeOff, Shield, Database, Target, Clock
 } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
 
@@ -29,7 +30,9 @@ function ProfilePage() {
         apiKeyStatus,
         updateApiKey,
         roadmapPreferences,
-          updateRoadmapPreferences,
+        updateRoadmapPreferences,
+        updatePreferences,
+        isUpdatingPreferences,
     } = useUserProfile();
 
     // Profile edit state
@@ -54,38 +57,77 @@ function ProfilePage() {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     const [roadmapPrefs, setRoadmapPrefs] = useState({
-      difficulty: 'BEGINNER',
-      languagePreference: 'en',
-      learningStyle: 'READING',
-      hoursPerWeek: 10,
-      avoidWeekends: false,
+        difficulty: 'BEGINNER',
+        languagePreference: 'en',
+        learningStyle: 'READING',
+        hoursPerWeek: 10,
+        avoidWeekends: false,
     });
+
+    const [availableHours, setAvailableHours] = useState({
+        monday: [["09:00","12:00"],["13:00","17:00"]],
+        tuesday: [["09:00","12:00"],["13:00","17:00"]],
+        wednesday: [["09:00","12:00"],["13:00","17:00"]],
+        thursday: [["09:00","12:00"],["13:00","17:00"]],
+        friday: [["09:00","12:00"],["13:00","17:00"]],
+        saturday: [],
+        sunday: []
+    });
+    const [timezone, setTimezone] = useState("Asia/Kolkata");
+
+    // Local loading flags to prevent double clicks
+    const [savingProfile, setSavingProfile] = useState(false);
+    const [savingPassword, setSavingPassword] = useState(false);
+    const [savingApiKey, setSavingApiKey] = useState(false);
+    const [savingRoadmapPrefs, setSavingRoadmapPrefs] = useState(false);
+    const [savingHours, setSavingHours] = useState(false);
 
     // Load preferences when available
     useEffect(() => {
-      if (roadmapPreferences.data) {
-        setRoadmapPrefs({
-          difficulty: roadmapPreferences.data.difficulty || 'BEGINNER',
-          languagePreference: roadmapPreferences.data.languagePreference || 'en',
-          learningStyle: roadmapPreferences.data.learningStyle || 'READING',
-          hoursPerWeek: roadmapPreferences.data.hoursPerWeek || 10,
-          avoidWeekends: roadmapPreferences.data.avoidWeekends || false,
-        });
-      }
+        if (roadmapPreferences.data) {
+            setRoadmapPrefs({
+                difficulty: roadmapPreferences.data.difficulty || 'BEGINNER',
+                languagePreference: roadmapPreferences.data.languagePreference || 'en',
+                learningStyle: roadmapPreferences.data.learningStyle || 'READING',
+                hoursPerWeek: roadmapPreferences.data.hoursPerWeek || 10,
+                avoidWeekends: roadmapPreferences.data.avoidWeekends || false,
+            });
+        }
     }, [roadmapPreferences.data]);
 
+    useEffect(() => {
+        if (profile) {
+            if (profile.availableHoursJson) {
+                try {
+                    setAvailableHours(JSON.parse(profile.availableHoursJson));
+                } catch(e) { console.error(e); }
+            }
+            if (profile.timezone) setTimezone(profile.timezone);
+        }
+    }, [profile]);
+
     const handlePrefChange = (key, value) => {
-      setRoadmapPrefs(prev => ({ ...prev, [key]: value }));
+        setRoadmapPrefs(prev => ({ ...prev, [key]: value }));
     };
 
-    const saveRoadmapPrefs = async () => {
-      try {
-        await updateRoadmapPreferences.mutateAsync(roadmapPrefs);
-        setFeedbackMessage({ type: 'success', text: 'Roadmap preferences saved!' });
-      } catch (err) {
-        setFeedbackMessage({ type: 'error', text: err.message || 'Failed to save preferences.' });
-      }
-    };
+    const saveRoadmapPrefs = useCallback(async () => {
+        if (savingRoadmapPrefs) return;
+        setSavingRoadmapPrefs(true);
+        try {
+            await updateRoadmapPreferences(roadmapPrefs);
+            toast.success('Roadmap preferences saved successfully!');
+            // Clear any existing feedback message for this action
+            setFeedbackMessage({ type: '', text: '' });
+        } catch (err) {
+            console.error("Error saving roadmap prefs", err);
+            const errorMsg = err.message || 'Failed to save preferences.';
+            toast.error(errorMsg);
+            setFeedbackMessage({ type: 'error', text: errorMsg });
+        } finally {
+            setSavingRoadmapPrefs(false);
+        }
+    }, [roadmapPrefs, updateRoadmapPreferences, savingRoadmapPrefs]);
+
     // Initialize form fields when profile loads
     useEffect(() => {
         if (profile) {
@@ -128,79 +170,133 @@ function ProfilePage() {
         setFeedbackMessage({ type: '', text: '' });
     };
 
-    const handleSaveProfile = async () => {
+    const handleSaveProfile = useCallback(async () => {
+        if (savingProfile) return;
         setFeedbackMessage({ type: '', text: '' });
         try {
+            if (editedUsername.length < 3 || editedUsername.length > 50) {
+                const errorMsg = 'Username must be between 3 and 50 characters.';
+                setFeedbackMessage({ type: 'error', text: errorMsg });
+                toast.error(errorMsg);
+                return;
+            }
+            setSavingProfile(true);
             await updateProfile({ username: editedUsername, email: editedEmail });
             setIsEditing(false);
+            toast.success('Profile updated successfully!');
             setFeedbackMessage({ type: 'success', text: 'Profile updated successfully!' });
         } catch (err) {
             console.error("Error updating profile:", err);
-            setFeedbackMessage({ type: 'error', text: err.message || 'Failed to update profile.' });
+            const errorMsg = err.response?.data?.message || err.message || 'Failed to update profile.';
+            setFeedbackMessage({ type: 'error', text: errorMsg });
+            toast.error(errorMsg);
+        } finally {
+            setSavingProfile(false);
         }
-    };
+    }, [editedUsername, editedEmail, updateProfile, savingProfile]);
 
-    const handleChangePassword = async () => {
+    const handleChangePassword = useCallback(async () => {
+        if (savingPassword) return;
         setPasswordChangeError('');
         setPasswordChangeSuccess('');
 
         if (!currentPassword || !newPassword || !confirmNewPassword) {
-            setPasswordChangeError('All password fields are required.');
+            const errorMsg = 'All password fields are required.';
+            setPasswordChangeError(errorMsg);
+            toast.error(errorMsg);
             return;
         }
         if (newPassword.length < 6) {
-            setPasswordChangeError('New password must be at least 6 characters long.');
+            const errorMsg = 'New password must be at least 6 characters long.';
+            setPasswordChangeError(errorMsg);
+            toast.error(errorMsg);
             return;
         }
         if (newPassword !== confirmNewPassword) {
-            setPasswordChangeError('New password and confirmation do not match.');
+            const errorMsg = 'New password and confirmation do not match.';
+            setPasswordChangeError(errorMsg);
+            toast.error(errorMsg);
             return;
         }
         if (currentPassword === newPassword) {
-            setPasswordChangeError('New password cannot be the same as the current password.');
+            const errorMsg = 'New password cannot be the same as the current password.';
+            setPasswordChangeError(errorMsg);
+            toast.error(errorMsg);
             return;
         }
 
+        setSavingPassword(true);
         try {
             await changePassword({ currentPassword, newPassword });
             setPasswordChangeSuccess('Password changed successfully!');
+            toast.success('Password changed successfully!');
             setCurrentPassword('');
             setNewPassword('');
             setConfirmNewPassword('');
         } catch (err) {
             console.error("Error changing password:", err);
-            setPasswordChangeError(err.message || 'Failed to change password.');
+            const errorMsg = err.message || 'Failed to change password.';
+            setPasswordChangeError(errorMsg);
+            toast.error(errorMsg);
+        } finally {
+            setSavingPassword(false);
         }
-    };
+    }, [currentPassword, newPassword, confirmNewPassword, changePassword, savingPassword]);
 
-    const handleSaveApiKey = async () => {
+    const handleSaveApiKey = useCallback(async () => {
+        if (savingApiKey) return;
         setApiKeyMessage('');
+        setSavingApiKey(true);
         try {
-            await updateApiKey.mutateAsync(newApiKey);
+            await updateApiKey(newApiKey);
+            toast.success('API key saved successfully.');
             setApiKeyMessage({ type: 'success', text: 'API key saved successfully.' });
             setNewApiKey('');
         } catch (err) {
-            setApiKeyMessage({ type: 'error', text: err.message || 'Failed to save API key.' });
+            const errorMsg = err.message || 'Failed to save API key.';
+            toast.error(errorMsg);
+            setApiKeyMessage({ type: 'error', text: errorMsg });
+        } finally {
+            setSavingApiKey(false);
         }
-    };
+    }, [newApiKey, updateApiKey, savingApiKey]);
 
     const handleDeleteAccount = () => setShowDeleteConfirm(true);
     const confirmDeleteAccount = async () => {
         setFeedbackMessage({ type: '', text: '' });
         try {
             await deleteProfile();
+            toast.success('Account deleted successfully. Redirecting...');
             setFeedbackMessage({ type: 'success', text: 'Account deleted successfully. Redirecting...' });
             setTimeout(() => navigate('/'), 2000);
         } catch (err) {
             console.error("Error deleting account:", err);
-            setFeedbackMessage({ type: 'error', text: err.message || 'Failed to delete account.' });
+            const errorMsg = err.message || 'Failed to delete account.';
+            toast.error(errorMsg);
+            setFeedbackMessage({ type: 'error', text: errorMsg });
         } finally {
             setShowDeleteConfirm(false);
         }
     };
     const cancelDeleteAccount = () => setShowDeleteConfirm(false);
 
-    // Theme styles
+    const handleSaveHours = useCallback(async () => {
+        if (savingHours) return;
+        setSavingHours(true);
+        try {
+            await updatePreferences({
+                availableHoursJson: JSON.stringify(availableHours),
+                timezone: timezone,
+            });
+            toast.success("Available hours saved");
+        } catch (err) {
+            toast.error("Failed to save preferences");
+        } finally {
+            setSavingHours(false);
+        }
+    }, [availableHours, timezone, updatePreferences, savingHours]);
+
+    // Theme styles (unchanged)
     const colors = {
         background: isDarkMode ? 'bg-gray-900' : 'bg-gray-50',
         cardBg: isDarkMode ? 'bg-gray-800/60 backdrop-blur-md' : 'bg-white/80 backdrop-blur-md',
@@ -224,7 +320,6 @@ function ProfilePage() {
         feedbackErrorText: isDarkMode ? 'text-red-300' : 'text-red-800',
     };
 
-    // ========== ELEGANT LOADER (restored from old version) ==========
     if (isLoading) {
         return (
             <div className={`min-h-screen w-full ${colors.background} flex flex-col items-center justify-center p-4 transition-all duration-500`}>
@@ -254,7 +349,6 @@ function ProfilePage() {
         );
     }
 
-    // ========== ERROR STATE (kept modern) ==========
     if (isError) {
         return (
             <div className={`min-h-screen w-full ${colors.background} flex items-center justify-center p-4`}>
@@ -272,7 +366,6 @@ function ProfilePage() {
         );
     }
 
-    // ========== MAIN RENDER (glass‑morphic, fully modern) ==========
     return (
         <div className={`min-h-screen w-full ${colors.background} transition-colors duration-300 relative p-4 sm:p-6`}>
             {/* Animated Background */}
@@ -282,7 +375,6 @@ function ProfilePage() {
                 <div className="absolute bottom-20 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl animate-pulse-slow delay-1000" />
             </div>
 
-            {/* Floating Icons */}
             <div className="absolute top-32 left-5 opacity-30 animate-float hidden lg:block">
                 <User size={32} className="text-purple-400" />
             </div>
@@ -327,7 +419,7 @@ function ProfilePage() {
                                             value={editedUsername}
                                             onChange={(e) => setEditedUsername(e.target.value)}
                                             className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                                            disabled={isUpdating}
+                                            disabled={savingProfile}
                                         />
                                     ) : (
                                         <div className={`p-3 rounded-xl ${colors.inputBg} border ${colors.inputBorder}`}>
@@ -343,7 +435,7 @@ function ProfilePage() {
                                             value={editedEmail}
                                             onChange={(e) => setEditedEmail(e.target.value)}
                                             className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                                            disabled={isUpdating}
+                                            disabled={savingProfile}
                                         />
                                     ) : (
                                         <div className={`p-3 rounded-xl ${colors.inputBg} border ${colors.inputBorder}`}>
@@ -358,17 +450,17 @@ function ProfilePage() {
                                         <button
                                             onClick={handleCancelEdit}
                                             className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonSecondary} ${colors.buttonText}`}
-                                            disabled={isUpdating}
+                                            disabled={savingProfile}
                                         >
                                             <X size={16} /> Cancel
                                         </button>
                                         <button
                                             onClick={handleSaveProfile}
                                             className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
-                                            disabled={isUpdating}
+                                            disabled={savingProfile}
                                         >
-                                            {isUpdating ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
-                                            Save
+                                            {savingProfile ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
+                                            {savingProfile ? 'Saving...' : 'Save'}
                                         </button>
                                     </>
                                 ) : (
@@ -406,6 +498,7 @@ function ProfilePage() {
                                         onChange={(e) => setCurrentPassword(e.target.value)}
                                         className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
                                         placeholder="••••••••"
+                                        disabled={savingPassword}
                                     />
                                 </div>
                                 <div>
@@ -416,6 +509,7 @@ function ProfilePage() {
                                         onChange={(e) => setNewPassword(e.target.value)}
                                         className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
                                         placeholder="••••••••"
+                                        disabled={savingPassword}
                                     />
                                 </div>
                                 <div>
@@ -426,6 +520,7 @@ function ProfilePage() {
                                         onChange={(e) => setConfirmNewPassword(e.target.value)}
                                         className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
                                         placeholder="••••••••"
+                                        disabled={savingPassword}
                                     />
                                 </div>
                             </div>
@@ -433,10 +528,10 @@ function ProfilePage() {
                                 <button
                                     onClick={handleChangePassword}
                                     className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
-                                    disabled={isChangingPassword}
+                                    disabled={savingPassword || isChangingPassword}
                                 >
-                                    {isChangingPassword ? <Loader size={16} className="animate-spin" /> : <Lock size={16} />}
-                                    Change Password
+                                    {(savingPassword || isChangingPassword) ? <Loader size={16} className="animate-spin" /> : <Lock size={16} />}
+                                    {(savingPassword || isChangingPassword) ? 'Changing...' : 'Change Password'}
                                 </button>
                             </div>
                         </div>
@@ -467,11 +562,13 @@ function ProfilePage() {
                                             onChange={(e) => setNewApiKey(e.target.value)}
                                             placeholder="Paste your Gemini API key here"
                                             className={`flex-1 p-3 rounded-l-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                                            disabled={savingApiKey}
                                         />
                                         <button
                                             type="button"
                                             onClick={() => setShowApiKey(!showApiKey)}
                                             className="px-4 rounded-r-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+                                            disabled={savingApiKey}
                                         >
                                             {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
                                         </button>
@@ -481,10 +578,10 @@ function ProfilePage() {
                                     <button
                                         onClick={handleSaveApiKey}
                                         className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
-                                        disabled={updateApiKey.isLoading}
+                                        disabled={savingApiKey || updateApiKey.isLoading}
                                     >
-                                        {updateApiKey.isLoading ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
-                                        Save
+                                        {(savingApiKey || updateApiKey.isLoading) ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
+                                        {(savingApiKey || updateApiKey.isLoading) ? 'Saving...' : 'Save'}
                                     </button>
                                 </div>
                             </div>
@@ -503,87 +600,217 @@ function ProfilePage() {
 
                         {/* Roadmap Preferences Card */}
                         <div className={`rounded-xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 space-y-5`}>
-                          <h2 className="text-xl font-semibold flex items-center gap-2">
-                            <Target size={20} className="text-teal-400" /> Roadmap Preferences
-                          </h2>
-                          <p className={`text-sm ${colors.textSecondary}`}>
-                            These preferences will be used when generating AI roadmaps. You can override them per roadmap.
-                          </p>
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                            <div>
-                              <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Difficulty</label>
-                              <select
-                                value={roadmapPrefs.difficulty}
-                                onChange={(e) => handlePrefChange('difficulty', e.target.value)}
-                                className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                              >
-                                <option value="BEGINNER">Beginner (explain basics)</option>
-                                <option value="INTERMEDIATE">Intermediate</option>
-                                <option value="ADVANCED">Advanced (skip fundamentals)</option>
-                              </select>
+                            <h2 className="text-xl font-semibold flex items-center gap-2">
+                                <Target size={20} className="text-teal-400" /> Roadmap Preferences
+                            </h2>
+                            <p className={`text-sm ${colors.textSecondary}`}>
+                                These preferences will be used when generating AI roadmaps. You can override them per roadmap.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Difficulty</label>
+                                    <select
+                                        value={roadmapPrefs.difficulty}
+                                        onChange={(e) => handlePrefChange('difficulty', e.target.value)}
+                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                                        disabled={savingRoadmapPrefs}
+                                    >
+                                        <option value="BEGINNER">Beginner (explain basics)</option>
+                                        <option value="INTERMEDIATE">Intermediate</option>
+                                        <option value="ADVANCED">Advanced (skip fundamentals)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Preferred Language</label>
+                                    <select
+                                        value={roadmapPrefs.languagePreference}
+                                        onChange={(e) => handlePrefChange('languagePreference', e.target.value)}
+                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                                        disabled={savingRoadmapPrefs}
+                                    >
+                                        <option value="en">English</option>
+                                        <option value="hi">Hindi</option>
+                                        <option value="es">Spanish</option>
+                                        <option value="fr">French</option>
+                                        <option value="de">German</option>
+                                        <option value="zh">Chinese</option>
+                                        <option value="ar">Arabic</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Learning Style</label>
+                                    <select
+                                        value={roadmapPrefs.learningStyle}
+                                        onChange={(e) => handlePrefChange('learningStyle', e.target.value)}
+                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                                        disabled={savingRoadmapPrefs}
+                                    >
+                                        <option value="READING">Reading (articles, docs)</option>
+                                        <option value="VISUAL">Visual (videos, diagrams)</option>
+                                        <option value="HANDS_ON">Hands‑on (exercises, projects)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Hours per Week</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="70"
+                                        value={roadmapPrefs.hoursPerWeek}
+                                        onChange={(e) => handlePrefChange('hoursPerWeek', parseInt(e.target.value) || 10)}
+                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
+                                        disabled={savingRoadmapPrefs}
+                                    />
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        id="avoidWeekends"
+                                        checked={roadmapPrefs.avoidWeekends}
+                                        onChange={(e) => handlePrefChange('avoidWeekends', e.target.checked)}
+                                        className="w-4 h-4 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
+                                        disabled={savingRoadmapPrefs}
+                                    />
+                                    <label htmlFor="avoidWeekends" className={`text-sm font-medium ${colors.textSecondary}`}>
+                                        Avoid weekends (schedule tasks only on weekdays)
+                                    </label>
+                                </div>
                             </div>
-                            <div>
-                              <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Preferred Language</label>
-                              <select
-                                value={roadmapPrefs.languagePreference}
-                                onChange={(e) => handlePrefChange('languagePreference', e.target.value)}
-                                className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                              >
-                                <option value="en">English</option>
-                                <option value="hi">Hindi</option>
-                                <option value="es">Spanish</option>
-                                <option value="fr">French</option>
-                                <option value="de">German</option>
-                                <option value="zh">Chinese</option>
-                                <option value="ar">Arabic</option>
-                              </select>
+                            <div className="flex justify-end">
+                                <button
+                                    onClick={saveRoadmapPrefs}
+                                    className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
+                                    disabled={savingRoadmapPrefs || updateRoadmapPreferences.isPending}
+                                >
+                                    {(savingRoadmapPrefs || updateRoadmapPreferences.isPending) ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
+                                    {(savingRoadmapPrefs || updateRoadmapPreferences.isPending) ? 'Saving...' : 'Save Preferences'}
+                                </button>
                             </div>
-                            <div>
-                              <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Learning Style</label>
-                              <select
-                                value={roadmapPrefs.learningStyle}
-                                onChange={(e) => handlePrefChange('learningStyle', e.target.value)}
-                                className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                              >
-                                <option value="READING">Reading (articles, docs)</option>
-                                <option value="VISUAL">Visual (videos, diagrams)</option>
-                                <option value="HANDS_ON">Hands‑on (exercises, projects)</option>
-                              </select>
+                        </div>
+
+                        {/* Available Hours Card */}
+                        <div className={`rounded-2xl ${colors.sectionBg} border ${colors.sectionBorder} p-4 sm:p-6 lg:p-8 shadow-sm backdrop-blur-sm space-y-6`}>
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <div>
+                                    <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2">
+                                        <div className="p-2 rounded-lg bg-teal-500/10">
+                                            <Clock size={18} className="text-teal-400" />
+                                        </div>
+                                        Your Available Hours
+                                    </h2>
+                                    <p className={`text-sm mt-2 ${colors.textSecondary} max-w-2xl`}>
+                                        Set the time slots when you are free to work. The AI scheduler will automatically use these hours.
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                              <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Hours per Week</label>
-                              <input
-                                type="number"
-                                min="1"
-                                max="70"
-                                value={roadmapPrefs.hoursPerWeek}
-                                onChange={(e) => handlePrefChange('hoursPerWeek', parseInt(e.target.value) || 10)}
-                                className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                              />
+
+                            {isLoading ? (
+                                <div className="animate-pulse space-y-4">
+                                    <div className="h-16 rounded-xl bg-gray-200 dark:bg-gray-700" />
+                                    <div className="h-16 rounded-xl bg-gray-200 dark:bg-gray-700" />
+                                    <div className="h-16 rounded-xl bg-gray-200 dark:bg-gray-700" />
+                                </div>
+                            ) : (
+                                <div className="space-y-5">
+                                    {Object.keys(availableHours).map((day) => (
+                                        <div
+                                            key={day}
+                                            className={`rounded-2xl border ${colors.sectionBorder} bg-white/40 dark:bg-white/[0.03] p-4 sm:p-5 transition-all duration-200 hover:shadow-md`}
+                                        >
+                                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="w-2 h-8 rounded-full bg-gradient-to-b from-purple-500 to-teal-400" />
+                                                    <div>
+                                                        <h3 className="capitalize font-semibold text-base sm:text-lg">{day}</h3>
+                                                        <p className={`text-xs ${colors.textSecondary}`}>
+                                                            {availableHours[day].length} slot{availableHours[day].length !== 1 ? "s" : ""}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const newSlots = [...availableHours[day], ["09:00", "17:00"]];
+                                                        setAvailableHours({ ...availableHours, [day]: newSlots });
+                                                    }}
+                                                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gradient-to-r from-purple-500 to-teal-500 text-white transition-all duration-200 hover:scale-[1.02] hover:shadow-lg disabled:opacity-50 disabled:hover:scale-100"
+                                                    disabled={savingHours}
+                                                >
+                                                    + Add Slot
+                                                </button>
+                                            </div>
+
+                                            <div className="space-y-3">
+                                                {availableHours[day].map((slot, idx) => (
+                                                    <div key={idx} className={`group rounded-xl border ${colors.inputBorder} ${colors.inputBg} p-3`}>
+                                                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                                                            <div className="flex-1">
+                                                                <label className={`text-xs mb-1 block ${colors.textSecondary}`}>Start</label>
+                                                                <input
+                                                                    type="time"
+                                                                    value={slot[0]}
+                                                                    onChange={(e) => {
+                                                                        const newSlots = [...availableHours[day]];
+                                                                        newSlots[idx][0] = e.target.value;
+                                                                        setAvailableHours({ ...availableHours, [day]: newSlots });
+                                                                    }}
+                                                                    className={`w-full px-3 py-2.5 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500 outline-none transition-all`}
+                                                                    disabled={savingHours}
+                                                                />
+                                                            </div>
+                                                            <div className="hidden sm:flex items-center justify-center pt-5">
+                                                                <span className="text-gray-400">→</span>
+                                                            </div>
+                                                            <div className="flex-1">
+                                                                <label className={`text-xs mb-1 block ${colors.textSecondary}`}>End</label>
+                                                                <input
+                                                                    type="time"
+                                                                    value={slot[1]}
+                                                                    onChange={(e) => {
+                                                                        const newSlots = [...availableHours[day]];
+                                                                        newSlots[idx][1] = e.target.value;
+                                                                        setAvailableHours({ ...availableHours, [day]: newSlots });
+                                                                    }}
+                                                                    className={`w-full px-3 py-2.5 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500 outline-none transition-all`}
+                                                                    disabled={savingHours}
+                                                                />
+                                                            </div>
+                                                            <div className="flex items-end">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        const newSlots = availableHours[day].filter((_, i) => i !== idx);
+                                                                        setAvailableHours({ ...availableHours, [day]: newSlots });
+                                                                    }}
+                                                                    className="w-full sm:w-11 h-11 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-500/10 transition-all duration-200 disabled:opacity-50"
+                                                                    disabled={savingHours}
+                                                                >
+                                                                    <Trash2 size={16} />
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                                {availableHours[day].length === 0 && (
+                                                    <div className={`rounded-xl border border-dashed ${colors.sectionBorder} p-5 text-center`}>
+                                                        <p className={`text-sm italic ${colors.textSecondary}`}>No slots added — no tasks will be scheduled on this day.</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+
+                            <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end pt-2">
+                                <button
+                                    onClick={handleSaveHours}
+                                    disabled={savingHours || isUpdatingPreferences}
+                                    className="w-full sm:w-auto min-w-[180px] px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-500 to-teal-500 text-white font-semibold flex items-center justify-center gap-2 transition-all duration-200 hover:shadow-xl hover:scale-[1.01] disabled:opacity-50 disabled:hover:scale-100"
+                                >
+                                    {(savingHours || isUpdatingPreferences) ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}
+                                    {(savingHours || isUpdatingPreferences) ? "Saving..." : "Save Hours"}
+                                </button>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                id="avoidWeekends"
-                                checked={roadmapPrefs.avoidWeekends}
-                                onChange={(e) => handlePrefChange('avoidWeekends', e.target.checked)}
-                                className="w-4 h-4 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
-                              />
-                              <label htmlFor="avoidWeekends" className={`text-sm font-medium ${colors.textSecondary}`}>
-                                Avoid weekends (schedule tasks only on weekdays)
-                              </label>
-                            </div>
-                          </div>
-                          <div className="flex justify-end">
-                            <button
-                              onClick={saveRoadmapPrefs}
-                              disabled={updateRoadmapPreferences.isPending}
-                              className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
-                            >
-                              {updateRoadmapPreferences.isPending ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
-                              Save Preferences
-                            </button>
-                          </div>
                         </div>
 
                         {/* Danger Zone */}
@@ -598,8 +825,10 @@ function ProfilePage() {
                                 <button
                                     onClick={handleDeleteAccount}
                                     className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonDanger} ${colors.buttonText}`}
+                                    disabled={isDeleting}
                                 >
-                                    <Trash2 size={16} /> Delete Account
+                                    {isDeleting ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                                    {isDeleting ? 'Deleting...' : 'Delete Account'}
                                 </button>
                             </div>
                         </div>
@@ -607,7 +836,6 @@ function ProfilePage() {
                 </div>
             </div>
 
-            {/* Confirmation Modal */}
             <ConfirmationModal
                 isOpen={showDeleteConfirm}
                 onClose={cancelDeleteAccount}
@@ -620,7 +848,6 @@ function ProfilePage() {
                 isLoading={isDeleting}
             />
 
-            {/* Global Animations */}
             <style>{`
                 @keyframes pulse-slow {
                     0%, 100% { opacity: 0.2; transform: scale(1); }

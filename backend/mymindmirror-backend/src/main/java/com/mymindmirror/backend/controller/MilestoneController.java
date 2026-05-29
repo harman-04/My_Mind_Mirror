@@ -6,6 +6,7 @@ import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.payload.request.MilestoneRequest;
 import com.mymindmirror.backend.payload.response.MessageResponse;
 import com.mymindmirror.backend.payload.response.MilestoneInsightResponse;
+import com.mymindmirror.backend.payload.response.MilestoneResponse;
 import com.mymindmirror.backend.security.services.UserDetailsImpl;
 import com.mymindmirror.backend.service.*;
 
@@ -41,15 +42,15 @@ public class MilestoneController {
         if (userOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("User not found");
         }
-
-        Milestone milestone = milestoneService.createMilestone(
+        MilestoneResponse response = milestoneService.createMilestoneAsDTO(
                 userOpt.get(),
                 milestoneRequest.getTitle(),
                 milestoneRequest.getDescription(),
                 milestoneRequest.getDueDate()
         );
-        return new ResponseEntity<>(milestone, HttpStatus.CREATED);
+        return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
+
 
     @GetMapping
     public ResponseEntity<?> getAllMilestones(@AuthenticationPrincipal UserDetailsImpl authenticatedUser) {
@@ -58,28 +59,44 @@ public class MilestoneController {
         if (userOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("User not found");
         }
-
-        List<Milestone> milestones = milestoneService.getAllMilestonesForUser(userOpt.get());
+        List<MilestoneResponse> milestones = milestoneService.getAllMilestonesForUserAsDTO(userOpt.get());
         return ResponseEntity.ok(milestones);
     }
 
+
+//    @GetMapping("/{id}")
+//    public ResponseEntity<?> getMilestoneById(
+//            @AuthenticationPrincipal UserDetailsImpl authenticatedUser,
+//            @PathVariable UUID id) {
+//
+//        UUID currentUserId = authenticatedUser.getId();
+//        Optional<User> userOpt = userService.findById(currentUserId);
+//
+//        if (userOpt.isEmpty()) {
+//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("User not found");
+//        }
+//
+//        Optional<Milestone> milestoneOpt = milestoneService.getMilestoneByIdForUser(id, userOpt.get());
+//
+//        return milestoneOpt
+//                .<ResponseEntity<?>>map(ResponseEntity::ok)
+//                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body("Milestone not found or not owned"));
+//    }
+
     @GetMapping("/{id}")
-    public ResponseEntity<?> getMilestoneById(
-            @AuthenticationPrincipal UserDetailsImpl authenticatedUser,
-            @PathVariable UUID id) {
-
-        UUID currentUserId = authenticatedUser.getId();
-        Optional<User> userOpt = userService.findById(currentUserId);
-
+    public ResponseEntity<?> getMilestoneById(@AuthenticationPrincipal UserDetailsImpl authenticatedUser,
+                                              @PathVariable UUID id) {
+        UUID userId = authenticatedUser.getId();
+        Optional<User> userOpt = userService.findById(userId);
         if (userOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("User not found");
         }
-
-        Optional<Milestone> milestoneOpt = milestoneService.getMilestoneByIdForUser(id, userOpt.get());
-
-        return milestoneOpt
-                .<ResponseEntity<?>>map(ResponseEntity::ok)
-                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND).body("Milestone not found or not owned"));
+        try {
+            MilestoneResponse response = milestoneService.getMilestoneResponseById(id, userOpt.get());
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        }
     }
 
     @PutMapping("/{id}")
@@ -91,20 +108,19 @@ public class MilestoneController {
         if (userOpt.isEmpty()) {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("User not found");
         }
-
         try {
-            Milestone updated = milestoneService.updateMilestone(
+            MilestoneResponse response = milestoneService.updateMilestoneAsDTO(
                     id, userOpt.get(),
                     milestoneRequest.getTitle(),
                     milestoneRequest.getDescription(),
                     milestoneRequest.getDueDate(),
                     milestoneRequest.getStatus()
             );
-            return ResponseEntity.ok(updated);
+            return ResponseEntity.ok(response);
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
         } catch (Exception e) {
-            log.error("Error updating milestone: {}", e.getMessage(), e);
+            log.error("Error updating milestone", e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Internal Server Error");
         }
     }
@@ -152,23 +168,6 @@ public class MilestoneController {
         }
     }
 
-//    @PostMapping("/import-growth-tip")
-//    public ResponseEntity<?> importGrowthTip(@AuthenticationPrincipal UserDetailsImpl authenticatedUser,
-//                                             @RequestBody Map<String, String> request) {
-//        String tipText = request.get("tipText");
-//        if (tipText == null || tipText.trim().isEmpty()) {
-//            return ResponseEntity.badRequest().body("Tip text is required");
-//        }
-//        UUID userId = authenticatedUser.getId();
-//        Optional<User> userOpt = userService.findById(userId);
-//        if (userOpt.isEmpty()) {
-//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("User not found");
-//        }
-//        User user = userOpt.get();
-//        Milestone milestone = milestoneService.getOrCreateMilestoneByTitle(user, "AI Growth Tips");
-//        Task task = taskService.createTask(milestone.getId(), user, tipText, null);
-//        return ResponseEntity.ok(task);
-//    }
 
     @PostMapping("/import-growth-tip")
     public ResponseEntity<?> importGrowthTip(@AuthenticationPrincipal UserDetailsImpl authenticatedUser,
@@ -188,4 +187,6 @@ public class MilestoneController {
         return ResponseEntity.ok(Map.of("message", tasks.size() + " tasks added to Milestones"));
 
     }
+
+
 }

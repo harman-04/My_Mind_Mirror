@@ -1,10 +1,14 @@
 package com.mymindmirror.backend.controller;
 
 import com.mymindmirror.backend.model.User;
+import com.mymindmirror.backend.model.UserPreferences;
 import com.mymindmirror.backend.model.UserRoadmapPreferences;
 import com.mymindmirror.backend.payload.request.ChangePasswordRequest;
 import com.mymindmirror.backend.payload.request.UserProfileRequest;
+import com.mymindmirror.backend.payload.response.UserFullProfileResponse;
+import com.mymindmirror.backend.payload.response.UserPreferencesResponse;
 import com.mymindmirror.backend.payload.response.UserProfileResponse;
+import com.mymindmirror.backend.service.ApiKeyService;
 import com.mymindmirror.backend.service.UserService;
 import com.mymindmirror.backend.security.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,6 +16,8 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
@@ -32,6 +38,7 @@ public class UserController {
 
     private final UserService userService;
     private final JwtUtil jwtUtil;
+    private final ApiKeyService apiKeyService;
 
 
     private UUID getUserIdFromRequest(HttpServletRequest request) {
@@ -43,30 +50,30 @@ public class UserController {
         throw new SecurityException("Authorization header missing or invalid.");
     }
 
-    @GetMapping("/profile")
-    public ResponseEntity<?> getUserProfile(HttpServletRequest request) {
-        try {
-            UUID userId = getUserIdFromRequest(request);
-            log.info("Attempting to retrieve profile for user ID: {}", userId);
-
-            Optional<User> userOptional = userService.findById(userId);
-            if (userOptional.isPresent()) {
-                User user = userOptional.get();
-                UserProfileResponse response = new UserProfileResponse(user.getId(), user.getUsername(), user.getEmail());
-                log.info("Profile retrieved successfully for user ID: {}", userId);
-                return ResponseEntity.ok(response);
-            } else {
-                log.warn("User profile not found for ID: {}", userId);
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User profile not found.");
-            }
-        } catch (SecurityException e) {
-            log.error("Security error during profile retrieval: {}", e.getMessage());
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
-        } catch (Exception e) {
-            log.error("An unexpected error occurred while retrieving user profile: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to retrieve user profile due to an internal error.");
-        }
-    }
+//    @GetMapping("/profile")
+//    public ResponseEntity<?> getUserProfile(HttpServletRequest request) {
+//        try {
+//            UUID userId = getUserIdFromRequest(request);
+//            log.info("Attempting to retrieve profile for user ID: {}", userId);
+//
+//            Optional<User> userOptional = userService.findById(userId);
+//            if (userOptional.isPresent()) {
+//                User user = userOptional.get();
+//                UserProfileResponse response = new UserProfileResponse(user.getId(), user.getUsername(), user.getEmail());
+//                log.info("Profile retrieved successfully for user ID: {}", userId);
+//                return ResponseEntity.ok(response);
+//            } else {
+//                log.warn("User profile not found for ID: {}", userId);
+//                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User profile not found.");
+//            }
+//        } catch (SecurityException e) {
+//            log.error("Security error during profile retrieval: {}", e.getMessage());
+//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+//        } catch (Exception e) {
+//            log.error("An unexpected error occurred while retrieving user profile: {}", e.getMessage(), e);
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to retrieve user profile due to an internal error.");
+//        }
+//    }
 
     @PutMapping("/profile")
     public ResponseEntity<?> updateUserProfile(
@@ -148,12 +155,12 @@ public class UserController {
 
     // In UserController.java, add:
 
-    @GetMapping("/roadmap-preferences")
-    public ResponseEntity<UserRoadmapPreferences> getRoadmapPreferences(HttpServletRequest request) {
-        UUID userId = getUserIdFromRequest(request);
-        User user = userService.findById(userId).orElseThrow();
-        return ResponseEntity.ok(userService.getRoadmapPreferences(user));
-    }
+//    @GetMapping("/roadmap-preferences")
+//    public ResponseEntity<UserRoadmapPreferences> getRoadmapPreferences(HttpServletRequest request) {
+//        UUID userId = getUserIdFromRequest(request);
+//        User user = userService.findById(userId).orElseThrow();
+//        return ResponseEntity.ok(userService.getRoadmapPreferences(user));
+//    }
 
     // In UserController.java
 
@@ -201,5 +208,60 @@ public class UserController {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(Map.of("error", e.getMessage()));
         }
+    }
+
+    @GetMapping("/profile-full")
+    public ResponseEntity<?> getUserFullProfile(HttpServletRequest request) {
+        try {
+            UUID userId = getUserIdFromRequest(request);
+            log.info("Fetching full profile for user ID: {}", userId);
+
+            User user = userService.findById(userId)
+                    .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+            String decryptedKey = apiKeyService.getDecryptedApiKey(user);
+            UserFullProfileResponse response = userService.getFullUserProfile(user, decryptedKey);
+
+            return ResponseEntity.ok(response);
+        } catch (SecurityException e) {
+            log.error("Security error during full profile retrieval: {}", e.getMessage());
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error retrieving full profile", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body("Failed to retrieve full profile due to an internal error.");
+        }
+    }
+
+//    @GetMapping("/preferences")
+//    public ResponseEntity<UserPreferencesResponse> getUserPreferences(@AuthenticationPrincipal UserDetails userDetails) {
+//        User user = userService.findByUsername(userDetails.getUsername())
+//                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+//        UserPreferences prefs = userService.getUserPreferences(user);
+//        UserPreferencesResponse response = new UserPreferencesResponse(
+//                prefs.getAvailableHoursJson(),
+//                prefs.getTimezone()
+//        );
+//        return ResponseEntity.ok(response);
+//    }
+
+    // In UserController.java, update the PUT /preferences method
+
+    @PutMapping("/preferences")
+    public ResponseEntity<UserPreferencesResponse> updateUserPreferences(@AuthenticationPrincipal UserDetails userDetails,
+                                                                         @RequestBody Map<String, String> request) {
+        User user = userService.findByUsername(userDetails.getUsername())
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+        String availableHoursJson = request.get("availableHoursJson");
+        String timezone = request.get("timezone");
+        UserPreferences updated = userService.updateUserPreferences(user, availableHoursJson, timezone);
+
+        UserPreferencesResponse response = new UserPreferencesResponse(
+                updated.getAvailableHoursJson(),
+                updated.getTimezone()
+        );
+        return ResponseEntity.ok(response);
     }
 }

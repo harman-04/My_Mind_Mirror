@@ -1,5 +1,4 @@
 // src/pages/HomePage.jsx
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTheme } from '../contexts/ThemeContext';
@@ -7,7 +6,8 @@ import {
   Sparkles, Brain, Target, Shield, Feather, ArrowRight, ChevronRight,
   Layers, PieChart, Notebook, Hash, Clock, Zap, BookOpen, Gauge,
   TrendingUp, Folders, HeartPulse, BarChart, Lightbulb, Trophy, Flame,
-  Cloud, LineChart, ListChecks, MapPin, Award, Calendar, CheckCircle
+  Cloud, LineChart, ListChecks, MapPin, Award, Calendar, CheckCircle,
+  CalendarDays, MessageCircle, Settings, Clock as ClockIcon
 } from 'lucide-react';
 
 function HomePage() {
@@ -16,10 +16,8 @@ function HomePage() {
   const [animatedStats, setAnimatedStats] = useState(false);
   const statsRef = useRef(null);
 
-  // Check if user is authenticated
   const isAuthenticated = !!localStorage.getItem('jwtToken');
 
-  // Intersection Observer for stats animation
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
@@ -53,24 +51,40 @@ function HomePage() {
 
   const features = [
     {
-      title: "AI-Powered Journal Analysis",
-      description: "Get emotion scores, key phrases, summaries, and growth tips from every entry.",
+      title: "AI‑Powered Journal Analysis",
+      description: "Save entries instantly – AI analysis runs in the background. Get emotion scores, key phrases, summaries, and growth tips with rich markdown.",
       icon: <Brain size={28} />,
       gradient: "from-purple-500/20 to-pink-500/20",
       iconBg: "bg-purple-500/20",
       iconColor: "text-purple-400",
     },
     {
-      title: "Smart Roadmap Generator",
-      description: "Turn any goal into a step-by-step plan with AI-generated tasks, resources, and milestones.",
+      title: "Chunked Roadmap Generator",
+      description: "Generate the first 12 weeks of a personalised plan, then load the next 6 weeks on demand. AI remembers what you’ve already covered.",
       icon: <MapPin size={28} />,
       gradient: "from-teal-500/20 to-cyan-500/20",
       iconBg: "bg-teal-500/20",
       iconColor: "text-teal-400",
     },
     {
+      title: "Roadmap Personalisation",
+      description: "Set your difficulty, language, learning style, hours per week, and avoid weekends. The AI tailors every roadmap to you.",
+      icon: <Settings size={28} />,
+      gradient: "from-indigo-500/20 to-blue-500/20",
+      iconBg: "bg-indigo-500/20",
+      iconColor: "text-indigo-400",
+    },
+    {
+      title: "Smart Timetable",
+      description: "AI schedules your tasks into your available hours. Drag & drop any task, choose between 'All tasks' or 'Only Custom tasks'.",
+      icon: <CalendarDays size={28} />,
+      gradient: "from-orange-500/20 to-amber-500/20",
+      iconBg: "bg-orange-500/20",
+      iconColor: "text-orange-400",
+    },
+    {
       title: "Gamified Progress",
-      description: "Earn badges, maintain streaks, and watch your growth with visual achievements.",
+      description: "Earn badges, maintain streaks, and watch your growth. Badges include First Step, 3‑Day Streak, Task Master, and Roadmap Finisher.",
       icon: <Trophy size={28} />,
       gradient: "from-amber-500/20 to-orange-500/20",
       iconBg: "bg-amber-500/20",
@@ -78,23 +92,31 @@ function HomePage() {
     },
     {
       title: "Visual Insights",
-      description: "Mood trends, emotion breakdowns, word clouds, and correlation charts.",
+      description: "Mood trends, emotion breakdowns, word clouds, radar charts, and anomaly alerts – all powered by a pre‑aggregated summary table for instant queries.",
       icon: <LineChart size={28} />,
       gradient: "from-blue-500/20 to-indigo-500/20",
       iconBg: "bg-blue-500/20",
       iconColor: "text-blue-400",
     },
     {
+      title: "AI Reflection Coach",
+      description: "Chat with an AI that knows your recent entries. Get reflective questions or ask anything – it answers with personal context.",
+      icon: <MessageCircle size={28} />,
+      gradient: "from-pink-500/20 to-rose-500/20",
+      iconBg: "bg-pink-500/20",
+      iconColor: "text-pink-400",
+    },
+    {
       title: "Semantic Clustering",
-      description: "Discover hidden themes in your journal entries with AI clustering.",
+      description: "Discover hidden themes in your journal entries with sentence‑transformers and KMeans clustering (all‑MiniLM‑L6‑v2).",
       icon: <Folders size={28} />,
       gradient: "from-rose-500/20 to-red-500/20",
       iconBg: "bg-rose-500/20",
       iconColor: "text-rose-400",
     },
     {
-      title: "End-to-End Encryption",
-      description: "Your private thoughts stay private with military-grade encryption.",
+      title: "End‑to‑End Encryption",
+      description: "Your entries are encrypted with AES‑CBC using a key derived from your password. Your Gemini API key (if provided) is AES‑GCM encrypted.",
       icon: <Shield size={28} />,
       gradient: "from-green-500/20 to-emerald-500/20",
       iconBg: "bg-green-500/20",
@@ -104,9 +126,9 @@ function HomePage() {
 
   const stats = [
     { value: "100%", label: "Privacy First", icon: <Shield size={20} />, suffix: "" },
-    { value: "24/7", label: "AI Availability", icon: <Brain size={20} />, suffix: "" },
+    { value: "<1s", label: "Mood Chart Query", icon: <Zap size={20} />, suffix: "" },
     { value: "Unlimited", label: "Journal Entries", icon: <BookOpen size={20} />, suffix: "" },
-    { value: "Real-time", label: "Insights", icon: <TrendingUp size={20} />, suffix: "" },
+    { value: "24/7", label: "AI Availability", icon: <Brain size={20} />, suffix: "" },
   ];
 
   return (
@@ -132,10 +154,9 @@ function HomePage() {
             </span>
           </h1>
           <p className={`text-xl max-w-3xl mx-auto mt-6 ${colors.textSecondary} animate-in fade-in slide-in-from-bottom-5 duration-700 delay-100`}>
-            MyMindMirror combines AI-powered journal analysis, goal roadmaps, and gamification to help you understand yourself better and achieve your dreams.
+            MyMindMirror combines AI‑powered journal analysis, personalised roadmaps, smart scheduling, and gamification to help you understand yourself better and achieve your dreams.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4 mt-10 animate-in fade-in slide-in-from-bottom-5 duration-700 delay-200">
-            {/* Hero Button - conditional based on authentication */}
             <Link
               to={isAuthenticated ? "/journal" : "/register"}
               className={`${colors.buttonPrimary} text-white px-8 py-3 rounded-full font-semibold flex items-center justify-center gap-2 transition-all hover:scale-105 shadow-lg`}
@@ -152,7 +173,7 @@ function HomePage() {
           </div>
         </div>
 
-        {/* Floating Icons (unchanged) */}
+        {/* Floating Icons */}
         <div className="absolute top-32 left-5 opacity-30 animate-float hidden lg:block">
           <Sparkles size={32} className="text-purple-400" />
         </div>
@@ -167,7 +188,7 @@ function HomePage() {
         </div>
       </section>
 
-      {/* Stats Bar (unchanged) */}
+      {/* Stats Bar */}
       <section ref={statsRef} className="w-full py-12 px-4 sm:px-6 lg:px-8 border-y border-white/10 bg-white/5 dark:bg-black/20 backdrop-blur-sm z-10 relative">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
@@ -184,7 +205,7 @@ function HomePage() {
         </div>
       </section>
 
-      {/* Features Grid (unchanged) */}
+      {/* Features Grid (now 9 items, but responsive) */}
       <section className="w-full py-24 px-4 sm:px-6 lg:px-8 z-10 relative">
         <div className="max-w-7xl mx-auto">
           <div className="text-center mb-16">
@@ -218,32 +239,38 @@ function HomePage() {
         </div>
       </section>
 
-      {/* Showcase – Charts Preview (unchanged) */}
+      {/* Showcase – Smart Timetable Preview */}
       <section className="w-full py-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-r from-purple-500/5 to-teal-500/5 z-10 relative">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div className="order-2 lg:order-1">
               <h2 className="text-3xl font-bold mb-4">
-                Visualize Your Emotional Journey
+                Smart Timetable – Your Life, Scheduled
               </h2>
               <p className={`text-lg ${colors.textSecondary} mb-6`}>
-                Track mood trends, emotion distribution, and correlations with word count. Our charts help you see patterns you might otherwise miss.
+                Define your available hours in the Profile page, then let the AI schedule your tasks (roadmap tasks, milestone tasks, or only your custom tasks). Drag events to reschedule, mark them complete, and everything stays in sync.
               </p>
               <ul className="space-y-3">
-                <li className="flex items-center gap-2"><TrendingUp className="w-5 h-5 text-purple-400" /> Mood & Emotion Trends Over Time</li>
-                <li className="flex items-center gap-2"><PieChart className="w-5 h-5 text-teal-400" /> Emotion Breakdown Charts</li>
-                <li className="flex items-center gap-2"><BarChart className="w-5 h-5 text-rose-400" /> Mood vs. Word Count Correlation</li>
+                <li className="flex items-center gap-2"><CalendarDays className="w-5 h-5 text-purple-400" /> Generate schedules for all tasks or only custom tasks.</li>
+                <li className="flex items-center gap-2"><ClockIcon className="w-5 h-5 text-teal-400" /> Available hours: set your own time slots per day.</li>
+                <li className="flex items-center gap-2"><CheckCircle className="w-5 h-5 text-rose-400" /> Mark tasks complete – syncs back to roadmaps/milestones.</li>
               </ul>
+              <div className="mt-8">
+                <Link to="/journal#schedule" className="inline-flex items-center gap-2 text-purple-400 hover:underline transition">
+                  Explore Timetable <ArrowRight className="w-4 h-4" />
+                </Link>
+              </div>
             </div>
             <div className="order-1 lg:order-2">
-              <div className={`rounded-2xl ${colors.cardBg} border ${colors.cardBorder} p-6 backdrop-blur-sm transition-all duration-300 hover:shadow-xl`}>
-                <div className="h-48 flex items-end justify-between gap-1">
-                  {[40, 65, 45, 80, 70, 55, 90, 75, 60, 85].map((h, i) => (
-                    <div key={i} className="flex-1 bg-gradient-to-t from-purple-500 to-teal-500 rounded-t transition-all duration-500 hover:from-purple-400 hover:to-teal-400" style={{ height: `${h}%` }} />
-                  ))}
-                </div>
-                <div className="flex justify-between mt-4 text-xs text-gray-500">
-                  <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span><span>Sun</span>
+              <div className={`rounded-2xl ${colors.cardBg} border ${colors.cardBorder} p-6 backdrop-blur-sm transition-all duration-300 hover:shadow-xl text-center`}>
+                <CalendarDays size={48} className="mx-auto text-purple-400 mb-4" />
+                <p className="text-sm font-mono bg-gray-100 dark:bg-gray-800 p-2 rounded-lg">
+                  Available Hours: Mon 9:00‑12:00, 13:00‑18:00<br />
+                  Scheduled: "Complete project" → Mon 9:00‑10:00
+                </p>
+                <div className="mt-4 flex justify-center gap-3">
+                  <span className="inline-flex items-center gap-1 text-xs bg-purple-500/20 px-2 py-1 rounded-full">Drag & Drop</span>
+                  <span className="inline-flex items-center gap-1 text-xs bg-teal-500/20 px-2 py-1 rounded-full">AI Powered</span>
                 </div>
               </div>
             </div>
@@ -251,8 +278,45 @@ function HomePage() {
         </div>
       </section>
 
-      {/* Roadmap & Achievements Showcase (unchanged) */}
+      {/* Showcase – AI Reflection Coach */}
       <section className="w-full py-24 px-4 sm:px-6 lg:px-8 z-10 relative">
+        <div className="max-w-7xl mx-auto">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <div className="order-2 lg:order-1">
+              <div className={`rounded-2xl ${colors.cardBg} border ${colors.cardBorder} p-6 backdrop-blur-sm transition-all duration-300 hover:shadow-xl`}>
+                <div className="flex items-start gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-pink-500/20 text-pink-400">
+                    <MessageCircle size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold">AI Reflection Coach</h3>
+                    <p className="text-sm text-gray-500">Chat based on your recent entries</p>
+                  </div>
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="bg-purple-500/10 p-2 rounded-lg italic">“What’s one thing you’ve learned about yourself recently?”</div>
+                  <div className="bg-gray-200/50 dark:bg-gray-700/50 p-2 rounded-lg">Answer freely – the AI will respond with empathy and insights.</div>
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <span className="text-xs text-purple-400">Powered by Gemini 2.5 Flash</span>
+                </div>
+              </div>
+            </div>
+            <div className="order-1 lg:order-2">
+              <h2 className="text-3xl font-bold mb-4">Talk to Your Journal</h2>
+              <p className={`text-lg ${colors.textSecondary} mb-6`}>
+                Get personalised coaching, generate reflective questions, or ask anything. The AI has access to your last 30 days of summaries and emotions, so every answer is context‑aware.
+              </p>
+              <Link to="/journal#chat" className="inline-flex items-center gap-2 text-purple-400 hover:underline transition">
+                Try AI Coach <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Roadmap & Achievements Showcase (adjusted) */}
+      <section className="w-full py-16 px-4 sm:px-6 lg:px-8 bg-gradient-to-r from-purple-500/5 to-teal-500/5 z-10 relative">
         <div className="max-w-7xl mx-auto">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
             <div className="order-2 lg:order-1">
@@ -262,8 +326,8 @@ function HomePage() {
                     <MapPin size={20} />
                   </div>
                   <div>
-                    <h3 className="font-semibold">AI Roadmap Generator</h3>
-                    <p className="text-sm text-gray-500">"Learn React in 8 weeks" → Detailed weekly tasks, resources, milestones.</p>
+                    <h3 className="font-semibold">Chunked Roadmap Generation</h3>
+                    <p className="text-sm text-gray-500">First 12 weeks → load next 6 weeks on demand. AI continues exactly where it left off.</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
@@ -280,8 +344,8 @@ function HomePage() {
                     <Cloud size={20} />
                   </div>
                   <div>
-                    <h3 className="font-semibold">Key Phrase Cloud</h3>
-                    <p className="text-sm text-gray-500">See your most frequent topics at a glance.</p>
+                    <h3 className="font-semibold">Key Phrase Cloud & Clustering</h3>
+                    <p className="text-sm text-gray-500">See your most frequent topics at a glance and discover journal themes.</p>
                   </div>
                 </div>
               </div>
@@ -289,7 +353,7 @@ function HomePage() {
             <div className="order-1 lg:order-2">
               <h2 className="text-3xl font-bold mb-4">Turn Goals into Action</h2>
               <p className={`text-lg ${colors.textSecondary} mb-6`}>
-                Generate personalized roadmaps, import tasks to milestones, and watch your progress with streaks and badges.
+                Generate personalised roadmaps, import tasks to milestones, and watch your progress with streaks and badges. All roadmaps are stored and can be continued week by week.
               </p>
               <Link to="/journal" className="inline-flex items-center gap-2 text-purple-400 hover:underline transition">
                 Try it now <ArrowRight className="w-4 h-4" />
@@ -299,7 +363,7 @@ function HomePage() {
         </div>
       </section>
 
-      {/* Final CTA - conditional based on authentication */}
+      {/* Final CTA */}
       <section className="w-full py-24 px-4 sm:px-6 lg:px-8 z-10 relative">
         <div className="max-w-5xl mx-auto text-center">
           <div className={`rounded-3xl ${colors.cardBg} border ${colors.cardBorder} p-8 md:p-12 relative overflow-hidden transition-all duration-500 hover:shadow-2xl`}>
@@ -312,7 +376,7 @@ function HomePage() {
                 Ready to Start Your Journey?
               </h2>
               <p className={`text-lg mb-8 max-w-2xl mx-auto ${colors.textSecondary}`}>
-                Join thousands who have transformed their self-reflection practice with MyMindMirror.
+                Join thousands who have transformed their self‑reflection practice with MyMindMirror.
               </p>
               <Link
                 to={isAuthenticated ? "/journal" : "/register"}
@@ -326,7 +390,7 @@ function HomePage() {
         </div>
       </section>
 
-      {/* Global Animations (unchanged) */}
+      {/* Global Animations */}
       <style>{`
         @keyframes pulse-slow {
           0%, 100% { opacity: 0.2; transform: scale(1); }

@@ -559,13 +559,7 @@ function MilestoneTracker({ userId }) {
     setEditedTaskDueDate(task.dueDate || '');
     setEditedTaskStatus(task.status);
     setEditedTaskDetails(task.details || '');
-    let subtasks = [];
-    if (task.subtasksJson) {
-      try {
-        subtasks = JSON.parse(task.subtasksJson);
-      } catch(e) { subtasks = []; }
-    }
-    setEditedTaskSubtasks(subtasks);
+    setEditedTaskSubtasks(task.subtasks || []);
   };
 
   const handleSaveTaskEdit = (milestoneId, taskId) => {
@@ -1004,26 +998,18 @@ function MilestoneTracker({ userId }) {
                               {/* Details expanded content */}
                               {task.details && expandedTaskDetails[task.id] && (
                                 <div className="mt-2 p-3 rounded-lg bg-gray-200/50 dark:bg-gray-800/50 text-xs text-gray-700 dark:text-gray-300 border-l-4 border-purple-400">
-                                  {task.details}
+                                  <div dangerouslySetInnerHTML={{ __html: formatText(task.details) }} />
                                 </div>
                               )}
 
                               {/* Subtasks (legacy) */}
-                              {task.subtasksJson && (() => {
-                                try {
-                                  const subtasks = JSON.parse(task.subtasksJson);
-                                  if (Array.isArray(subtasks) && subtasks.length > 0) {
-                                    return (
-                                      <div className="mt-2 pl-6">
-                                        <ul className="list-disc list-inside text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
-                                          {subtasks.map((sub, idx) => <li key={idx}>{sub}</li>)}
-                                        </ul>
-                                      </div>
-                                    );
-                                  }
-                                } catch (e) {}
-                                return null;
-                              })()}
+                              {task.subtasks && task.subtasks.length > 0 && (
+                                  <div className="mt-2 pl-6">
+                                      <ul className="list-disc list-inside text-xs text-gray-500 dark:text-gray-400 space-y-0.5">
+                                          {task.subtasks.map((sub, idx) => <li key={idx}>{sub}</li>)}
+                                      </ul>
+                                  </div>
+                              )}
                             </div>
                           )}
                         </li>

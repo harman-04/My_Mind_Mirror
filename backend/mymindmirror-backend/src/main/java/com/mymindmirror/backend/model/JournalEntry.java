@@ -6,6 +6,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import lombok.AllArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 import org.hibernate.annotations.CreationTimestamp;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -18,7 +19,11 @@ import java.util.UUID;
  * Stores the raw text, the date of the entry, and AI analysis results.
  */
 @Entity
-@Table(name = "journal_entries")
+@Table(name = "journal_entries" ,
+        indexes = {
+                @Index(name = "idx_journal_user_date", columnList = "user_id, entry_date"),
+                @Index(name = "idx_journal_mood", columnList = "user_id, mood_score")
+        })
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -29,7 +34,7 @@ public class JournalEntry {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
-    @ManyToOne(fetch = FetchType.EAGER)
+    @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
@@ -59,9 +64,13 @@ public class JournalEntry {
     @Column(name = "growth_tips", columnDefinition = "TEXT")
     private String growthTips; // Stored as JSON string
 
-    @OneToMany(mappedBy = "journalEntry", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @BatchSize(size = 20)
+    @OneToMany(mappedBy = "journalEntry", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<KeyPhrase> keyPhrases = new ArrayList<>();
 
     @Column(name = "cluster_id")
     private Integer clusterId; // Stores the ID of the cluster this entry belongs to
+
+    @Column(name = "word_count", nullable = false)
+    private int wordCount;
 }

@@ -1,9 +1,10 @@
+// src/main/java/com/mymindmirror/backend/controller/TaskController.java
 package com.mymindmirror.backend.controller;
 
-import com.mymindmirror.backend.model.Task;
 import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.payload.request.TaskRequest;
 import com.mymindmirror.backend.payload.response.MessageResponse;
+import com.mymindmirror.backend.payload.response.TaskResponse;
 import com.mymindmirror.backend.security.JwtUtil;
 import com.mymindmirror.backend.service.TaskService;
 import com.mymindmirror.backend.service.UserService;
@@ -29,23 +30,17 @@ public class TaskController {
             throw new IllegalArgumentException("Bearer token is missing or malformed.");
         }
         String jwt = authorizationHeader.substring(7);
-
         UUID userId = jwtUtil.extractUserId(jwt);
-
-        if (userId == null) { // This check is technically redundant if extractUserId throws on null
-            throw new IllegalArgumentException("User ID not found in JWT token.");
-        }
-
         return userService.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Error: User not found in database for ID: " + userId));
     }
 
     @PostMapping
-    public ResponseEntity<Task> createTask(@RequestHeader("Authorization") String authorizationHeader,
-                                           @PathVariable UUID milestoneId,
-                                           @RequestBody TaskRequest taskRequest) {
+    public ResponseEntity<TaskResponse> createTask(@RequestHeader("Authorization") String authorizationHeader,
+                                                   @PathVariable UUID milestoneId,
+                                                   @RequestBody TaskRequest taskRequest) {
         User currentUser = getCurrentUserFromToken(authorizationHeader);
-        Task newTask = taskService.createTask(
+        TaskResponse newTask = taskService.createTask(
                 milestoneId,
                 currentUser,
                 taskRequest.getDescription(),
@@ -57,16 +52,17 @@ public class TaskController {
     }
 
     @GetMapping
-    public ResponseEntity<List<Task>> getAllTasksForMilestone(@RequestHeader("Authorization") String authorizationHeader,
-                                                              @PathVariable UUID milestoneId) {
+    public ResponseEntity<List<TaskResponse>> getAllTasksForMilestone(@RequestHeader("Authorization") String authorizationHeader,
+                                                                      @PathVariable UUID milestoneId) {
         User currentUser = getCurrentUserFromToken(authorizationHeader);
-        List<Task> tasks = taskService.getAllTasksForMilestone(milestoneId, currentUser);
+        List<TaskResponse> tasks = taskService.getAllTasksForMilestone(milestoneId, currentUser);
         return ResponseEntity.ok(tasks);
     }
 
     @GetMapping("/{taskId}")
-    public ResponseEntity<Task> getTaskById(@RequestHeader("Authorization") String authorizationHeader,
-                                            @PathVariable UUID milestoneId, @PathVariable UUID taskId) {
+    public ResponseEntity<TaskResponse> getTaskById(@RequestHeader("Authorization") String authorizationHeader,
+                                                    @PathVariable UUID milestoneId,
+                                                    @PathVariable UUID taskId) {
         User currentUser = getCurrentUserFromToken(authorizationHeader);
         return taskService.getTaskByIdForMilestoneAndUser(taskId, milestoneId, currentUser)
                 .map(ResponseEntity::ok)
@@ -74,11 +70,12 @@ public class TaskController {
     }
 
     @PutMapping("/{taskId}")
-    public ResponseEntity<Task> updateTask(@RequestHeader("Authorization") String authorizationHeader,
-                                           @PathVariable UUID milestoneId, @PathVariable UUID taskId,
-                                           @RequestBody TaskRequest taskRequest) {
+    public ResponseEntity<TaskResponse> updateTask(@RequestHeader("Authorization") String authorizationHeader,
+                                                   @PathVariable UUID milestoneId,
+                                                   @PathVariable UUID taskId,
+                                                   @RequestBody TaskRequest taskRequest) {
         User currentUser = getCurrentUserFromToken(authorizationHeader);
-        Task updatedTask = taskService.updateTask(
+        TaskResponse updatedTask = taskService.updateTask(
                 taskId, milestoneId, currentUser,
                 taskRequest.getDescription(),
                 taskRequest.getDueDate(),
@@ -91,10 +88,10 @@ public class TaskController {
 
     @DeleteMapping("/{taskId}")
     public ResponseEntity<MessageResponse> deleteTask(@RequestHeader("Authorization") String authorizationHeader,
-                                                      @PathVariable UUID milestoneId, @PathVariable UUID taskId) {
+                                                      @PathVariable UUID milestoneId,
+                                                      @PathVariable UUID taskId) {
         User currentUser = getCurrentUserFromToken(authorizationHeader);
         taskService.deleteTask(taskId, milestoneId, currentUser);
         return ResponseEntity.ok(new MessageResponse("Task deleted successfully!"));
     }
-
 }

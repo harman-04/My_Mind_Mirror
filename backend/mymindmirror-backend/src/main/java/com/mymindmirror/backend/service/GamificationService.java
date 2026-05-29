@@ -9,6 +9,8 @@ import com.mymindmirror.backend.payload.response.UserStatsResponse;
 import com.mymindmirror.backend.repository.UserStatsRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +39,7 @@ public class GamificationService {
         return userStatsRepository.save(stats);
     }
 
+    @CacheEvict(value = "gamificationStats", key = "#user.id")
     @Transactional
     public UserStats updateStreakAndBadges(User user, boolean taskCompletedToday) {
         UserStats stats = userStatsRepository.findByUser(user)
@@ -117,6 +120,7 @@ public class GamificationService {
         return new HashSet<>();
     }
 
+    @CacheEvict(value = "gamificationStats", key = "#user.id")
     @Transactional
     public void awardRoadmapCompletedBadge(User user) {
         UserStats stats = userStatsRepository.findByUser(user)
@@ -133,6 +137,7 @@ public class GamificationService {
         }
     }
 
+    @Cacheable(value = "gamificationStats", key = "#user.id")
     public UserStatsResponse getUserStats(User user) {
         UserStats stats = userStatsRepository.findByUser(user)
                 .orElseGet(() -> initializeStats(user));

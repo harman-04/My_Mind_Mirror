@@ -10,10 +10,10 @@ import {
   Filter, AlertTriangle, CheckCircle, RefreshCw, Calendar, HelpCircle,
   ChevronDown, ChevronUp, Activity, Smile, Frown, CircleDot, FileSpreadsheet,
   FileText, Sparkle, Star, Award, CalendarDays, ListTree, Sigma, ScatterChart,
-  Menu, X
+  Menu, X, Video, GraduationCap, Languages, Settings, Clock as ClockIcon,
+  Loader, Calendar as CalendarIcon, Check
 } from 'lucide-react';
 
-// Helper to format markdown-like text (unchanged)
 const formatText = (text) => {
   if (!text) return '';
   const escapeHtml = (str) => {
@@ -75,9 +75,7 @@ function FeaturesGuide() {
 
   const toggleSection = (section) => {
     setOpenSection(openSection === section ? null : section);
-    // On mobile, close the menu after selection
     if (mobileMenuOpen) setMobileMenuOpen(false);
-    // Scroll to section header smoothly
     const element = sectionRefs.current[section];
     if (element) {
       element.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -93,12 +91,11 @@ function FeaturesGuide() {
     textPrimary: isDarkMode ? 'text-gray-100' : 'text-gray-900',
     textSecondary: isDarkMode ? 'text-gray-300' : 'text-gray-600',
     sidebarBg: isDarkMode ? 'bg-gray-900/40 backdrop-blur-sm' : 'bg-white/80 backdrop-blur-sm border-gray-200',
-        sidebarText: isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900',
-        sidebarActiveBg: isDarkMode ? 'bg-white/10' : 'bg-gray-200/70',
-        sidebarActiveText: isDarkMode ? 'text-purple-300 font-medium' : 'text-purple-700 font-medium',
-        drawerBg: isDarkMode ? 'bg-gray-900/95 backdrop-blur-xl' : 'bg-white/95 backdrop-blur-xl',
-        drawerBorder: isDarkMode ? 'border-gray-700' : 'border-gray-200',
-
+    sidebarText: isDarkMode ? 'text-gray-400 hover:text-gray-200' : 'text-gray-600 hover:text-gray-900',
+    sidebarActiveBg: isDarkMode ? 'bg-white/10' : 'bg-gray-200/70',
+    sidebarActiveText: isDarkMode ? 'text-purple-300 font-medium' : 'text-purple-700 font-medium',
+    drawerBg: isDarkMode ? 'bg-gray-900/95 backdrop-blur-xl' : 'bg-white/95 backdrop-blur-xl',
+    drawerBorder: isDarkMode ? 'border-gray-700' : 'border-gray-200',
   };
 
   const sections = [
@@ -110,78 +107,79 @@ function FeaturesGuide() {
       content: `
         **How to use:**
         - Write your thoughts in the textarea on the Journal page.
-        - Click "Analyze & Save Entry".
+        - Click "Analyze & Save Entry". The entry saves instantly – AI analysis runs **asynchronously** in the background, so you can continue using the app without waiting.
         - The AI will process your entry and provide:
           - **Mood score** (from -1 = very negative to +1 = very positive)
           - **Emotion breakdown** (percentages for joy, sadness, anger, fear, surprise, love, anxiety, etc.)
           - **Core concerns** identified (e.g., "work stress", "relationship issues")
           - **Concise summary** of the entry
-          - **Actionable growth tips** to improve well-being
+          - **Actionable growth tips** (rich markdown) to improve well-being
           - **Key phrases** extracted (used for word cloud and trends)
-        - You can edit or delete entries anytime.
+        - While analysis is in progress, a toast notification keeps you informed, and the dashboard updates automatically as soon as analysis completes (polling every 2–3 seconds).
+        - You can edit or delete entries anytime. Editing triggers a re‑analysis.
 
         **How it works:**
-        - Your entry is encrypted on the backend using AES-CBC with a key derived from your password hash.
+        - Your entry is encrypted on the backend using AES‑CBC with a key derived from your password hash.
         - The raw text is sent to our Flask ML service, which calls Google's Gemini AI with a structured prompt.
         - Gemini returns a JSON object containing emotions, concerns, summary, tips, and key phrases.
         - Results are stored encrypted in the database.
         - When you view entries, they are decrypted on the fly.
+        - **Performance:** A pre‑aggregated summary table (\`daily_journal_summary\`) and triggers ensure that mood charts and anomaly detection queries run in milliseconds, even with thousands of entries.
       `,
     },
     {
       id: 'roadmap',
-      title: 'AI Roadmap Generator',
+      title: 'AI Roadmap Generator (Chunked)',
       icon: <MapPin size={24} />,
       color: 'text-teal-400',
       content: `
         **How to use:**
         - Go to the Roadmap tab (next to Milestones).
-        - Enter a goal (e.g., "Learn React Native in 3 months") and optional timeframe in weeks.
-        - Click "Generate Roadmap".
-        - The AI creates a structured plan with:
-          - **Title and total duration** (weeks)
-          - **Phases** (each phase groups several weeks)
-          - **Daily/Weekly tasks** with descriptions, detailed instructions, and subtasks
-          - **Recommended resources** (links to articles, videos, courses)
-          - **Key milestones** to celebrate progress
-        - You can:
-          - **Mark tasks as complete** – updates your streak and unlocks badges.
-          - **Click on any task** – opens a modal with full details, subtasks, and elaboration buttons.
-          - **Add to Milestones** – imports the task into the MilestoneTracker (creates a milestone "Roadmap: X" and a task under it).
-          - **Regenerate** – re‑generate the current task's details (if you want a different explanation).
-          - **Enhance (More detail)** – get an even deeper, example‑rich explanation.
-          - **Continue Roadmap** – after completing some tasks, generate the next set of tasks.
-          - **Smart Reschedule** – if you fall behind, AI re‑plans the remaining weeks.
-          - **Delete Roadmap** – remove the entire roadmap.
-        - Tasks are grouped by week and can be expanded/collapsed.
+        - Enter a goal, select duration (number + unit: days/weeks/months/years), and optionally override personal preferences (difficulty, language, learning style, hours per week, avoid weekends).
+        - Click **"Generate Roadmap"**. The AI creates a **detailed plan for the first 12 weeks** (or all weeks if less than 12). For longer durations (e.g., 26 weeks), the remaining weeks appear as placeholders.
+        - **Load Next Weeks** – Click the button below the tasks list to generate the next 6 weeks (e.g., weeks 13‑18). The AI continues exactly where it left off, using the summary of previous weeks to avoid repetition. You can keep clicking until the roadmap is fully generated.
+        - **Expand/Collapse All** – Use buttons to quickly expand or collapse all weeks.
+
+        Each week's tasks are displayed with:
+        - **Detailed instructions** (markdown with headings, lists, links)
+        - **Subtasks** (array of actionable steps)
+        - **Resources** (articles, videos, courses) – AI can also provide these; otherwise fallback resources appear.
+        - **Mark as complete** (syncs with Milestones if imported)
+        - **Add to Milestones** – imports the task into the MilestoneTracker, preserving details and subtasks.
+        - **Elaborate / Enhance** – generate a deeper, example‑rich explanation for any task.
+
+        Additional actions:
+        - **Continue (based on progress)** – only works after completing some tasks; adds a few extra tasks to keep you moving.
+        - **Smart Reschedule** – if you fall behind, AI re‑plans the remaining weeks.
 
         **How it works:**
-        - Your goal is sent to Gemini AI with a prompt that requests a JSON roadmap.
-        - The AI returns tasks, resources, milestones, and phases.
-        - The backend saves the roadmap, tasks, resources, and milestones in separate database tables.
-        - Task elaboration and enhancement use additional AI calls.
-        - When you import a task to Milestones, a link is stored so completion status syncs both ways.
+        - The first generation requests at most 12 weeks (chunk size). The backend stores \`generatedWeeks\` = number of weeks with AI content.
+        - Each continuation call sends a list of already covered weeks (summarised) to the AI, ensuring logical progression without repetition.
+        - The frontend lazy‑loads weeks gradually, showing only generated weeks initially, with a “Load Next Weeks” button.
+        - Personalisation preferences (difficulty, language, learning style, hours/week, avoid weekends) are stored in \`UserRoadmapPreferences\` and applied to every generation.
+        - The AI returns a flat JSON tasks array – no complex nesting – making parsing robust.
       `,
     },
     {
       id: 'milestones',
-      title: 'Milestones & Tasks',
+      title: 'Milestones & Tasks (with Subtasks & Details)',
       icon: <Target size={24} />,
       color: 'text-rose-400',
       content: `
         **How to use:**
         - In the Milestones tab, create milestones (long‑term goals) with a title, description, and due date.
-        - Under each milestone, add tasks (actionable steps) with descriptions and due dates.
-        - You can edit, delete, or mark tasks as complete.
+        - Under each milestone, add tasks – now you can include **detailed instructions** (textarea) and a **list of subtasks** (dynamic add/remove).
+        - When you add a task, you can also specify \`details\` and \`subtasks\` directly, just like imported roadmap tasks.
+        - Edit any task to update its details, subtasks, status, or due date.
         - The milestone progress bar updates automatically based on completed tasks.
-        - Tasks imported from roadmaps appear with a "from Roadmap" badge.
-        - When you complete an imported task, the corresponding roadmap task is also marked complete (and vice versa).
+        - Tasks imported from roadmaps appear with a **"from Roadmap"** badge, and their details/subtasks are preserved.
+        - When you complete an imported task, the corresponding roadmap task is also marked complete (two‑way sync).
 
         **How it works:**
-        - Milestones and tasks are stored in the database with user ownership.
+        - Milestones and tasks are stored with separate columns for \`details\` (TEXT) and \`subtasksJson\` (JSON array).
+        - When a roadmap task is imported, its \`details\` and \`subtasks\` are copied to the new milestone task.
         - Completion percentage is calculated dynamically: (completed tasks / total tasks) * 100.
-        - When a task is toggled, the milestone's status (PENDING, IN_PROGRESS, COMPLETED, OVERDUE) is updated.
-        - Imported tasks store a roadmap_task_id to enable two‑way sync.
+        - Status (PENDING, IN_PROGRESS, COMPLETED, OVERDUE) is automatically updated based on tasks and due dates.
       `,
     },
     {
@@ -203,10 +201,11 @@ function FeaturesGuide() {
         - The widget shows your current streak, earned badges, and next badge to unlock.
 
         **How it works:**
-        - A UserStats table stores currentStreak, longestStreak, lastActiveDate, badges (JSON), and totalTasksCompleted.
+        - A \`UserStats\` table stores \`currentStreak\`, \`longestStreak\`, \`lastActiveDate\`, \`badges\` (JSON), and \`totalTasksCompleted\`.
         - Each time you complete a task, the backend updates the streak (checks if lastActiveDate was yesterday) and checks badge conditions.
         - Badges are stored as a JSON array (e.g., ["FIRST_STEP", "THREE_DAY_STREAK"]).
         - The frontend displays badges with icons and tooltips.
+        - **Caching:** Gamification stats are cached in Redis for 5 minutes to reduce database load.
       `,
     },
     {
@@ -219,7 +218,7 @@ function FeaturesGuide() {
         - Navigate to the Journal page and switch between tabs:
           - **Today Dashboard:** Shows today's AI reflection, emotion snapshot (doughnut chart), and all today's entries.
           - **Weekly Dashboard:** Shows mood trends, emotion intensity, concerns, and entries for the current week.
-          - **All Entries Dashboard:** Shows overall charts, word cloud, clustering, and paginated entry list.
+          - **All Entries Dashboard:** Shows overall charts, word cloud, clustering, paginated entry list, and anomaly alerts.
 
         **Chart Details:**
 
@@ -256,16 +255,14 @@ function FeaturesGuide() {
            - The algorithm uses Sentence Transformers (all-MiniLM-L6-v2) and KMeans clustering.
 
         7. **Anomaly Alerts**
-           - Detects unusual mood or word count patterns using EWMA (Exponentially Weighted Moving Average).
+           - Detects unusual mood or word count patterns using EWMA (Exponentially Weighted Moving Average) directly in the Flask service.
            - Alerts appear when your mood drops significantly or you write much more/less than usual.
            - Helps you notice emotional shifts early.
 
-        **How it works:**
-        - Charts use Chart.js and Recharts. Data is fetched from the backend, decrypted, and processed.
-        - For line charts, we calculate averages per day.
-        - For correlation, we compute linear regression on the client side.
-        - Clustering runs in the Flask ML service using sentence-transformers and scikit‑learn.
-        - Anomaly detection uses pandas and EWMA statistics.
+        **Performance Optimisations:**
+        - A pre‑aggregated summary table (\`daily_journal_summary\`) and database triggers keep daily averages pre‑computed. Queries for mood charts and anomaly detection run in <10ms.
+        - Redis caching caches key phrase frequencies and gamification stats.
+        - Frontend lazy‑loads the “All Entries” tab only when selected, reducing initial page load.
       `,
     },
     {
@@ -347,7 +344,7 @@ function FeaturesGuide() {
     },
     {
       id: 'export',
-      title: 'Export Data',
+      title: 'Export Data to CSV/PDF',
       icon: <Download size={24} />,
       color: 'text-green-400',
       content: `
@@ -363,9 +360,101 @@ function FeaturesGuide() {
       `,
     },
     {
-      id: 'encryption',
-      title: 'Security & Encryption',
-      icon: <Lock size={24} />,
+      id: 'schedule',
+      title: 'Smart Timetable (AI Scheduling)',
+      icon: <CalendarIcon size={24} />,
+      color: 'text-orange-400',
+      content: `
+        **How to use:**
+        - Go to the **Schedule** tab (calendar icon in the Journal page navigation).
+        - First, define your **available hours** in Profile → “Your Available Hours”. Set time slots for each day of the week (e.g., Monday 9:00‑12:00, 13:00‑18:00). These hours are used by the AI scheduler.
+        - Select a mode:
+          - **All Tasks** – schedules every pending task (from roadmaps, milestones, and custom tasks).
+          - **Custom Tasks** – schedules only tasks you created manually in the Custom Tasks section.
+        - Click **Generate** – the AI (or a fallback deterministic scheduler) will place your tasks into your available time slots, respecting priorities, due dates, and task durations.
+        - You can **drag and drop** any task to a different day/time directly on the calendar.
+        - Mark tasks as complete from the calendar – they will be checked off and sync with the original task (custom tasks, milestones, or roadmaps).
+        - Add **custom tasks** using the “Add Task” button (title, description, due date, estimated hours, priority). These tasks appear in the custom tasks list and can be dragged onto the calendar.
+
+        **How it works:**
+        - The backend collects unscheduled tasks (based on mode) and sends them to the Flask ML service with the user’s available hours.
+        - The AI returns a schedule JSON (or fallback if AI fails). The schedule is saved in the \`scheduled_tasks\` table.
+        - Drag‑and‑drop updates are sent via \`PUT /api/schedule/task/{id}/move\`.
+        - Completion toggles are sent via \`PATCH /api/schedule/task/{id}/complete\` and sync back to the original task (roadmap/milestone/custom).
+        - Custom tasks can be edited or deleted; changes are reflected in the calendar automatically.
+      `,
+    },
+    {
+      id: 'ai-coach',
+      title: 'AI Reflection Coach',
+      icon: <Sparkles size={24} />,
+      color: 'text-pink-400',
+      content: `
+        **How to use:**
+        - Go to the **AI Coach** tab in the Journal page.
+        - A reflective question is automatically generated based on your recent journal entries. You can answer it, or ask your own question.
+        - Type your message and press Enter (or click Send). The AI, using the context of your past entries, will provide a thoughtful, personalised response.
+        - Use the **refresh button** to get a new reflective question.
+        - You can choose **Append** (adds new answer after existing) or **Replace** (overwrites the last AI response) mode.
+        - Copy any message with the copy button.
+
+        **How it works:**
+        - The backend fetches the last 30 days of journal entries (summaries and emotions), builds a context string, and sends it to Gemini API via the Flask service.
+        - The response is returned as plain text and displayed with markdown formatting (headings, lists, code blocks, blockquotes).
+        - Reflective questions are cached for 5 minutes to avoid repeated calls.
+      `,
+    },
+    {
+      id: 'personalization',
+      title: 'Roadmap Personalization & User Preferences',
+      icon: <Settings size={24} />,
+      color: 'text-teal-400',
+      content: `
+        **How to use:**
+        - In the Profile page, under **“Roadmap Preferences”**, you can set:
+          - **Difficulty** – Beginner (explain basics), Intermediate, Advanced (skip fundamentals)
+          - **Preferred Language** – English, Hindi, Spanish, French, German, Chinese, Arabic (output text will be in that language)
+          - **Learning Style** – Reading (articles, docs), Visual (videos, diagrams), Hands‑on (exercises, projects)
+          - **Hours per Week** – Used to spread tasks realistically.
+          - **Avoid Weekends** – Schedule tasks only on weekdays.
+        - These preferences are used as defaults when generating a new roadmap. You can **override** them per roadmap in the generation form.
+        - Additionally, under **“Your Available Hours”**, you can set custom time slots for each day (e.g., Monday 9‑12, 13‑18). The Smart Timetable will use these hours for scheduling.
+
+        **How it works:**
+        - The \`UserRoadmapPreferences\` and \`UserPreferences\` tables store these settings.
+        - They are loaded via the combined \`/profile-full\` endpoint in a single request, then cached in Redis.
+        - When generating a roadmap, the preferences are sent to the ML service and incorporated into the AI prompt.
+        - When generating a schedule, the available hours are sent to the AI scheduler.
+      `,
+    },
+    {
+      id: 'performance',
+      title: 'Performance Optimizations',
+      icon: <Zap size={24} />,
+      color: 'text-yellow-400',
+      content: `
+        **What we did to make the app fast:**
+
+        - **Database indexes** – Added indexes on foreign keys and frequently filtered columns (e.g., \`user_id\`, \`entry_date\`, \`created_at\`).
+        - **N+1 query elimination** – Used \`@EntityGraph\` to fetch tasks, resources, and milestones in a single query.
+        - **Pre‑aggregated summary table** – \`daily_journal_summary\` maintains daily average mood and total words via triggers, making mood charts and anomaly detection instant.
+        - **Redis caching** – Caches user preferences, gamification stats, key phrase frequencies, API key status, and combined profile. Cache invalidation is automatic on update.
+        - **Lazy‑loaded routes** – JournalPage, ProfilePage, AchievementsPage, etc., are split into separate chunks and loaded only when needed.
+        - **Deferred “All Entries” tab** – The paginated journal history is only fetched when the user switches to the History tab.
+        - **Asynchronous journal analysis** – Saving an entry does not block the UI. Analysis runs in background, and the frontend polls for completion.
+        - **Frontend memoisation** – Used \`React.memo\` on heavy components (\`JournalHistory\`, \`MoodChart\`, \`RoadmapTimeline\`) and \`useCallback\`/\`useMemo\` for derived data.
+        - **Gzip compression** – Enabled for API responses (size reduced by 70‑80%).
+        - **Lazy‑loading of weeks** – Roadmap weeks are loaded incrementally; initially only generated weeks are shown, and “Load Next Weeks” fetches more.
+        - **Debounced search** – Prevents excessive API calls while typing.
+        - **Virtualised lists** – Not needed because pagination is already used.
+
+        These optimisations result in sub‑second initial load, smooth scrolling, and minimal database load even with thousands of entries.
+      `,
+    },
+    {
+      id: 'security-privacy',
+      title: 'Security, Encryption & Bring‑Your‑Own‑Key',
+      icon: <Shield size={24} />,
       color: 'text-indigo-400',
       content: `
         **How it works:**
@@ -373,49 +462,52 @@ function FeaturesGuide() {
         - Encryption happens on the backend before storage; decryption happens on retrieval.
         - Your Gemini API key (if you provide your own) is encrypted using AES‑GCM with a master key stored in environment variables.
         - Passwords are hashed using BCrypt.
-        - Communication between frontend and backend uses HTTPS (in production) and JWT tokens.
-
-        **Privacy:**
-        - Your data is never shared with third parties.
-        - If you use your own Gemini API key, your journal entries are sent directly to Google Gemini using your key – the app's backend never sees your key or the unencrypted content.
-        - You can delete your account and all data at any time.
+        - Communication between frontend and backend uses HTTPS (in production) and JWT tokens (stored in localStorage – we recommend switching to httpOnly cookies for production).
+        - **Privacy:**
+          - Your data is never shared with third parties.
+          - If you use your own Gemini API key, your journal entries are sent directly to Google Gemini using your key – the app's backend never sees your key or the unencrypted content.
+          - You can delete your account and all data at any time (cascading delete handles all related tables).
+        - **Bring Your Own Key (BYOK):**
+          - In the Profile page, you can paste your own Gemini API key. It is encrypted and stored in the database.
+          - When AI features are used, the Flask service will use your key instead of the shared one, improving privacy and avoiding shared quota exhaustion.
+          - You can test and manage your key at any time.
       `,
     },
     {
-      id: 'ai',
+      id: 'ai-tech-stack',
       title: 'AI Technology Stack',
       icon: <Brain size={24} />,
       color: 'text-pink-400',
       content: `
         **How it works:**
-        - This app uses Google's **Gemini 2.5 Flash** model for all AI features:
+        - This app uses Google's **Gemini 2.5 Flash** model for all generative AI features:
           - Journal analysis (emotions, concerns, summary, tips, key phrases)
-          - Roadmap generation
+          - Roadmap generation (chunked, with personalisation)
           - Task elaboration and enhancement
           - Continuous roadmap suggestions
           - Smart rescheduling
-        - The AI is accessed via our Flask ML service, which handles:
+          - Reflection chat and question generation
+        - The AI is accessed via a **Flask ML service** (separate container) that handles:
           - Rate limiting (RPM and TPM)
           - Exponential backoff retries
           - Fallback responses (if AI fails, return default/empty data)
           - Support for user‑provided API keys (better privacy and quota control)
-        - The ML service also runs:
-          - Semantic clustering (sentence-transformers + KMeans)
+        - The ML service also runs **data science** tasks:
+          - Semantic clustering (sentence-transformers \`all-MiniLM-L6-v2\` + KMeans)
           - Anomaly detection (EWMA using pandas)
-          - Sentiment analysis (optional, using Hugging Face transformers)
-
-        **Model details:**
-        - Gemini 2.5 Flash is chosen for its low latency, high throughput, and excellent instruction‑following capabilities.
-        - Sentence‑transformers (all-MiniLM-L6-v2) is a lightweight model (80 MB) that creates 384‑dimensional embeddings for clustering.
-        - All models run on CPU (no GPU required), making deployment simple.
+        - **Model details:**
+          - Gemini 2.5 Flash is chosen for its low latency, high throughput, and excellent instruction‑following capabilities.
+          - Sentence‑transformers (all-MiniLM-L6-v2) is a lightweight model (80 MB) that creates 384‑dimensional embeddings for clustering.
+          - All models run on CPU (no GPU required), making deployment simple.
+        - **Performance:**
+          - The ML service uses caching for reflective questions (5 minutes) and Redis for Gemini rate limiting.
+          - Journal analysis is fully asynchronous, so the user never waits.
       `,
     },
   ];
 
-  // Sticky Table of Contents (desktop) + mobile drawer
   return (
     <div className={`min-h-screen w-full ${colors.background} ${colors.textPrimary} transition-colors duration-300 relative`}>
-      {/* Animated Background Grid */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-teal-500/5" />
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse" />
@@ -436,10 +528,8 @@ function FeaturesGuide() {
             </span>
           </h1>
           <p className={`text-xl ${colors.textSecondary} max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-5 duration-700 delay-100`}>
-            Explore every feature in detail – from AI analysis to gamification, charts, and security.
+            Explore every feature in detail – from AI analysis to gamification, smart scheduling, and enterprise‑grade performance.
           </p>
-
-          {/* Floating icons */}
           <div className="absolute top-20 left-5 opacity-30 animate-float hidden lg:block">
             <Sparkles size={32} className="text-purple-400" />
           </div>
@@ -452,75 +542,71 @@ function FeaturesGuide() {
         </div>
       </section>
 
-      {/* Main Content with Sidebar (Desktop) */}
+      {/* Main Content with Sidebar + Accordion */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 relative z-10">
-              <div className="flex flex-col lg:flex-row gap-8">
-                {/* Sticky Table of Contents (Desktop) – FIXED LIGHT MODE */}
-                <aside className="hidden lg:block w-80 shrink-0">
-                  <div className={`sticky top-24 rounded-xl ${colors.sidebarBg} border ${colors.cardBorder} p-5 shadow-sm`}>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                      <Menu size={18} /> Contents
-                    </h3>
-                    <nav className="space-y-1 max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar">
-                      {sections.map((section) => (
-                        <button
-                          key={section.id}
-                          onClick={() => toggleSection(section.id)}
-                          className={`w-full text-left px-3 py-2 rounded-lg transition flex items-center gap-2 text-sm ${
-                            openSection === section.id
-                              ? `${colors.sidebarActiveText} ${colors.sidebarActiveBg}`
-                              : `${colors.sidebarText} hover:bg-white/5`
-                          }`}
-                        >
-                          <span className="shrink-0">{section.icon}</span>
-                          <span className="truncate">{section.title}</span>
-                        </button>
-                      ))}
-                    </nav>
-                  </div>
-                </aside>
-
-                {/* Mobile TOC Button – unchanged */}
-                <div className="lg:hidden fixed bottom-6 right-6 z-40">
+        <div className="flex flex-col lg:flex-row gap-8">
+          <aside className="hidden lg:block w-80 shrink-0">
+            <div className={`sticky top-24 rounded-xl ${colors.sidebarBg} border ${colors.cardBorder} p-5 shadow-sm`}>
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Menu size={18} /> Contents
+              </h3>
+              <nav className="space-y-1 max-h-[calc(100vh-8rem)] overflow-y-auto custom-scrollbar">
+                {sections.map((section) => (
                   <button
-                    onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                    className="p-3 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 text-white shadow-lg hover:shadow-xl transition"
+                    key={section.id}
+                    onClick={() => toggleSection(section.id)}
+                    className={`w-full text-left px-3 py-2 rounded-lg transition flex items-center gap-2 text-sm ${
+                      openSection === section.id
+                        ? `${colors.sidebarActiveText} ${colors.sidebarActiveBg}`
+                        : `${colors.sidebarText} hover:bg-white/5`
+                    }`}
                   >
-                    {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+                    <span className="shrink-0">{section.icon}</span>
+                    <span className="truncate">{section.title}</span>
+                  </button>
+                ))}
+              </nav>
+            </div>
+          </aside>
+
+          <div className="lg:hidden fixed bottom-6 right-6 z-40">
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="p-3 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 text-white shadow-lg hover:shadow-xl transition"
+            >
+              {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+            </button>
+          </div>
+
+          {mobileMenuOpen && (
+            <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm lg:hidden" onClick={() => setMobileMenuOpen(false)}>
+              <div className={`absolute right-0 top-0 bottom-0 w-80 ${colors.drawerBg} border-l ${colors.drawerBorder} shadow-xl p-5 overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-semibold">Contents</h3>
+                  <button onClick={() => setMobileMenuOpen(false)} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800">
+                    <X size={20} />
                   </button>
                 </div>
+                <nav className="space-y-2">
+                  {sections.map((section) => (
+                    <button
+                      key={section.id}
+                      onClick={() => toggleSection(section.id)}
+                      className={`w-full text-left px-3 py-2 rounded-lg transition flex items-center gap-2 ${
+                        openSection === section.id
+                          ? `${colors.sidebarActiveText} ${colors.sidebarActiveBg}`
+                          : `${colors.sidebarText} hover:bg-white/5`
+                      }`}
+                    >
+                      {section.icon}
+                      <span>{section.title}</span>
+                    </button>
+                  ))}
+                </nav>
+              </div>
+            </div>
+          )}
 
-                {/* Mobile Drawer – FIXED LIGHT MODE */}
-                {mobileMenuOpen && (
-                  <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm lg:hidden" onClick={() => setMobileMenuOpen(false)}>
-                    <div className={`absolute right-0 top-0 bottom-0 w-80 ${colors.drawerBg} border-l ${colors.drawerBorder} shadow-xl p-5 overflow-y-auto`} onClick={(e) => e.stopPropagation()}>
-                      <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-xl font-semibold">Contents</h3>
-                        <button onClick={() => setMobileMenuOpen(false)} className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-800">
-                          <X size={20} />
-                        </button>
-                      </div>
-                      <nav className="space-y-2">
-                        {sections.map((section) => (
-                          <button
-                            key={section.id}
-                            onClick={() => toggleSection(section.id)}
-                            className={`w-full text-left px-3 py-2 rounded-lg transition flex items-center gap-2 ${
-                              openSection === section.id
-                                ? `${colors.sidebarActiveText} ${colors.sidebarActiveBg}`
-                                : `${colors.sidebarText} hover:bg-white/5`
-                            }`}
-                          >
-                            {section.icon}
-                            <span>{section.title}</span>
-                          </button>
-                        ))}
-                      </nav>
-                    </div>
-                  </div>
-                )}
-
-          {/* Accordion Sections */}
           <div className="flex-1 space-y-5">
             {sections.map((section) => (
               <div
@@ -547,7 +633,6 @@ function FeaturesGuide() {
                     <div className="guide-content prose prose-sm dark:prose-invert max-w-none">
                       <div dangerouslySetInnerHTML={{ __html: formatText(section.content) }} />
                     </div>
-                    {/* Tiny anchor hint */}
                     <div className="mt-4 text-right">
                       <button
                         onClick={() => toggleSection(section.id)}
@@ -564,7 +649,6 @@ function FeaturesGuide() {
         </div>
       </div>
 
-      {/* Global styles */}
       <style>{`
         .guide-content p.guide-paragraph {
           margin-bottom: 1rem;
@@ -587,18 +671,17 @@ function FeaturesGuide() {
           color: ${isDarkMode ? '#8DE2DD' : '#5CC8C2'};
         }
 
-
         .custom-scrollbar::-webkit-scrollbar {
-                  width: 4px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-track {
-                  background: ${isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'};
-                  border-radius: 10px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb {
-                  background: ${isDarkMode ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'};
-                  border-radius: 10px;
-                }
+          width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: ${isDarkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'};
+          border-radius: 10px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: ${isDarkMode ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.2)'};
+          border-radius: 10px;
+        }
         @keyframes float {
           0% { transform: translateY(0px); }
           50% { transform: translateY(-10px); }

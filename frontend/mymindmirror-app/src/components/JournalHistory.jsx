@@ -5,9 +5,9 @@ import { format, parseISO } from "date-fns";
 import { Doughnut } from "react-chartjs-2";
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { useTheme } from "../contexts/ThemeContext";
-import { useUpdateJournalEntry, useDeleteJournalEntry,  useImportGrowthTip } from '../hooks/useJournalData';
+import { useUpdateJournalEntry, useDeleteJournalEntry,  useImportGrowthTip, useJournalEntryById  } from '../hooks/useJournalData';
 import { SkeletonCard } from './Skeleton';
-import { AlertTriangle, Download, ChevronDown, ChevronUp, Edit, Trash2, Save, X, BookOpen, Lightbulb, Heart, Brain, Target, Clock, Plus } from 'lucide-react';
+import { AlertTriangle, Download, ChevronDown, ChevronUp, Edit, Trash2, Save, X, BookOpen, Lightbulb, Heart, Brain, Target, Clock, Plus, Loader } from 'lucide-react';
 import { downloadChartAsPng } from '../utils/downloadChart';
 
 // Helper to format markdown-like text (headings, blockquotes, lists, bold, italic, line breaks)
@@ -22,20 +22,32 @@ const formatText = (text) => {
     });
   };
 
+  // 💡 HELPER: Applies Bold, Italic, and Link formatting to any string
+  const applyMarkdown = (str) => {
+    return str
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+
+      .replace(
+        /\[([^\]]+)\]\(([^)]+)\)/g,
+        `<a href="$2" target="_blank" rel="noopener noreferrer" class="resource-link">
+          $1 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline; margin-left:2px; vertical-align:middle;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+        </a>`
+      );
+  };
+
   const lines = text.split('\n');
   const result = [];
   let i = 0;
   const total = lines.length;
 
-  // Helper to process a block of consecutive lines that start with '> '
   const processBlockquote = (startIdx) => {
     const quoteLines = [];
     let j = startIdx;
     while (j < total && lines[j].startsWith('> ')) {
-      quoteLines.push(lines[j].substring(2)); // remove '> '
+      quoteLines.push(lines[j].substring(2));
       j++;
     }
-    // Recursively format the inner content of the blockquote (may contain lists, etc.)
     const innerHtml = formatText(quoteLines.join('\n'));
     result.push(`<blockquote class="guide-blockquote">${innerHtml}</blockquote>`);
     return j;
@@ -44,33 +56,25 @@ const formatText = (text) => {
   while (i < total) {
     const line = lines[i];
 
-    // 1. Horizontal rule
     if (/^(\*{3,}|-{3,}|_{3,})$/.test(line.trim())) {
       result.push('<hr class="guide-hr" />');
       i++;
       continue;
     }
 
-    // 2. Headings (level 1-6)
     const headingMatch = line.match(/^(#{1,6})\s+(.*)/);
     if (headingMatch) {
       const level = headingMatch[1].length;
-      const content = escapeHtml(headingMatch[2]);
-      // Inline formatting inside heading
-      const formattedContent = content.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                      .replace(/\*(.*?)\*/g, '<em>$1</em>');
-      result.push(`<h${level} class="guide-heading">${formattedContent}</h${level}>`);
+      result.push(`<h${level} class="guide-heading">${applyMarkdown(escapeHtml(headingMatch[2]))}</h${level}>`);
       i++;
       continue;
     }
 
-    // 3. Blockquote (starts with '> ')
     if (line.startsWith('> ')) {
       i = processBlockquote(i);
       continue;
     }
 
-    // 4. Lists (unordered/ordered)
     const bulletMatch = line.match(/^\s*(\*|\-)\s+(.*)/);
     const numberMatch = line.match(/^\s*(\d+)\.\s+(.*)/);
     if (bulletMatch || numberMatch) {
@@ -82,32 +86,23 @@ const formatText = (text) => {
         const number = currentLine.match(/^\s*(\d+)\.\s+(.*)/);
         if (bullet || number) {
           const content = bullet ? bullet[2] : number[2];
-          let formatted = escapeHtml(content);
-          formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-          formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
-          listItems.push(`<li>${formatted}</li>`);
+          listItems.push(`<li>${applyMarkdown(escapeHtml(content))}</li>`);
           i++;
         } else {
           break;
         }
       }
-      const listTag = isOrdered ? 'ol' : 'ul';
-      result.push(`<${listTag} class="guide-list">${listItems.join('')}</${listTag}>`);
+      result.push(`<${isOrdered ? 'ol' : 'ul'} class="guide-list">${listItems.join('')}</${isOrdered ? 'ol' : 'ul'}>`);
       continue;
     }
 
-    // 5. Normal paragraph (or empty line)
-    let formatted = escapeHtml(line);
-    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    if (formatted.trim()) {
-      result.push(`<p class="guide-paragraph">${formatted}</p>`);
+    if (line.trim()) {
+      result.push(`<p class="guide-paragraph">${applyMarkdown(escapeHtml(line))}</p>`);
     } else if (line === '') {
       result.push('<br/>');
     }
     i++;
   }
-
   return result.join('');
 };
 const TRUNCATION_LENGTH = 150;
@@ -145,7 +140,7 @@ const emotionChipColors = {
 // ------------------------------------------------------------------
 // Portal-based Delete Confirmation Modal (glass version)
 // ------------------------------------------------------------------
-const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, theme }) => {
+const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, theme, isDeleting }) => {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
@@ -167,8 +162,21 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, theme }) => {
           <h3 className="text-xl font-poppins font-semibold mb-2">Delete Journal Entry</h3>
           <p className="text-gray-600 dark:text-gray-300 mb-6">Are you sure you want to delete this entry? This action cannot be undone.</p>
           <div className="flex justify-center gap-3">
-            <button onClick={onConfirm} className="px-5 py-2 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition shadow-md">Delete</button>
-            <button onClick={onClose} className="px-5 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition">Cancel</button>
+            <button
+                                onClick={onConfirm}
+                                disabled={isDeleting} // 💡 Disable when deleting
+                                className="px-5 py-2 rounded-full bg-red-600 text-white flex items-center gap-2 disabled:opacity-50"
+                            >
+                                {isDeleting ? <Loader size={16} className="animate-spin" /> : null}
+                                {isDeleting ? "Deleting..." : "Delete"}
+                            </button>
+                            <button
+                                onClick={onClose}
+                                disabled={isDeleting} // 💡 Prevent closing while request is in flight
+                                className="px-5 py-2 rounded-full bg-gray-200 text-gray-800 disabled:opacity-50"
+                            >
+                                Cancel
+                            </button>
           </div>
         </div>
       </div>
@@ -177,8 +185,211 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, theme }) => {
   );
 };
 
+const ExpandedEntryContent = ({ entry, isDarkMode, chartRefs, sectionBg, cardBorder, getMoodColorClass, getMoodLabel, getChipStyle, emotionChartOptions, importGrowthTipMutation, isPending }) => {
+  const parsedEmotions = entry.emotions && typeof entry.emotions === "string" ? JSON.parse(entry.emotions) : entry.emotions || {};
+  const parsedCoreConcerns = entry.coreConcerns && typeof entry.coreConcerns === "string" ? JSON.parse(entry.coreConcerns) : entry.coreConcerns || [];
+  const parsedGrowthTips = entry.growthTips && typeof entry.growthTips === "string" ? JSON.parse(entry.growthTips) : entry.growthTips || [];
+  const parsedKeyPhrases = Array.isArray(entry.keyPhrases) ? entry.keyPhrases : [];
+  const chartData = (() => {
+    if (!entry.emotions) return null;
+    try {
+      const emotions = typeof entry.emotions === "string" ? JSON.parse(entry.emotions) : entry.emotions;
+      if (!emotions || Object.keys(emotions).length === 0) return null;
+      const labels = Object.keys(emotions);
+      const data = Object.values(emotions);
+      const filteredLabels = [];
+      const filteredData = [];
+      labels.forEach((label, idx) => {
+        if (data[idx] > 0.01) {
+          filteredLabels.push(label.charAt(0).toUpperCase() + label.slice(1));
+          filteredData.push(data[idx]);
+        }
+      });
+      if (filteredLabels.length === 0) return null;
+      const palette = isDarkMode ? EMOTION_CHART_COLORS_DARK : EMOTION_CHART_COLORS;
+      const backgroundColors = filteredLabels.map(l => palette[l.toLowerCase()] || "#CCCCCC");
+      return {
+        labels: filteredLabels,
+        datasets: [{
+          data: filteredData,
+          backgroundColor: backgroundColors,
+          borderColor: backgroundColors.map(c => c + "CC"),
+          borderWidth: 1,
+        }],
+      };
+    } catch (e) {
+      return null;
+    }
+  })();
+
+  return (
+    <div className="space-y-4">
+      {/* Raw Text */}
+      <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
+        <div className="flex items-center gap-2 mb-2">
+          <BookOpen size={14} className="text-purple-400" />
+          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Journal Entry</span>
+        </div>
+        <p className="text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">{entry.rawText}</p>
+      </div>
+
+      {/* Summary */}
+      {entry.summary && (
+        <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
+          <div className="flex items-center gap-2 mb-2">
+            <Brain size={14} className="text-teal-400" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Summary</span>
+          </div>
+          <p className="text-sm text-gray-700 dark:text-gray-300">{entry.summary}</p>
+        </div>
+      )}
+
+
+
+      {/* Mood Score */}
+      <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
+        <div className="flex justify-between items-center">
+          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Mood Score</span>
+          <span className={`font-bold text-lg ${getMoodColorClass(entry.moodScore)}`}>
+            {entry.moodScore?.toFixed(2) ?? "N/A"} ({getMoodLabel(entry.moodScore)})
+          </span>
+        </div>
+      </div>
+
+      {/* Emotions */}
+      {Object.keys(parsedEmotions).length > 0 && (
+        <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
+          <div className="flex items-center gap-2 mb-2">
+            <Heart size={14} className="text-pink-400" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Emotions</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(parsedEmotions).filter(([,score]) => score > 0).sort((a,b)=>b[1]-a[1]).map(([emotion, score]) => (
+              <span key={emotion} className={`${getChipStyle(emotion)} inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs shadow-sm`}>
+                {emotion} <span className="opacity-80 text-[10px]">({score.toFixed(2)})</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Core Concerns */}
+      {parsedCoreConcerns.length > 0 && (
+        <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
+          <div className="flex items-center gap-2 mb-2">
+            <Target size={14} className="text-blue-400" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Core Concerns</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {parsedCoreConcerns.map((c, idx) => (
+              <span key={idx} className="bg-blue-500/20 dark:bg-blue-500/30 text-blue-700 dark:text-blue-200 px-2 py-1 rounded-full text-xs border border-blue-200 dark:border-blue-500/30">{c}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Growth Tips Section */}
+      {/* Growth Tips Section */}
+      {parsedGrowthTips.length > 0 && (
+        <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
+          <div className="flex items-center gap-2 mb-3">
+            <Lightbulb size={14} className="text-amber-400" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Growth Tips & Resources</span>
+          </div>
+          <div className="space-y-4">
+            {parsedGrowthTips.map((tip, idx) => (
+              <div key={idx} className="relative group">
+                {/* 💡 Vertical line logic removed for a cleaner look */}
+                <div className="pr-12 prose prose-sm dark:prose-invert max-w-none">
+                  <div
+                    className="growth-tip-content"
+                    dangerouslySetInnerHTML={{ __html: formatText(tip) }}
+                  />
+                </div>
+
+                {/* Import Button */}
+                <button
+                  onClick={() => importGrowthTipMutation.mutate(tip)}
+                  disabled={isPending}
+                  className="absolute top-0 right-0 p-1.5 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-300 hover:bg-blue-500/30 transition disabled:opacity-50"
+                  title="Add to Milestones"
+                >
+                  <Plus size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {/* Key Phrases */}
+      {parsedKeyPhrases.length > 0 && (
+        <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
+          <div className="flex items-center gap-2 mb-2">
+            <Target size={14} className="text-purple-400" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Key Phrases</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {parsedKeyPhrases.map((p, idx) => (
+              <span key={idx} className="bg-purple-500/20 dark:bg-purple-500/30 text-purple-700 dark:text-purple-200 px-2 py-1 rounded-full text-xs border border-purple-200 dark:border-purple-500/30">{p}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Emotion Breakdown Chart */}
+      {chartData && chartData.datasets[0].data.length > 0 ? (
+        <div className={`rounded-2xl ${sectionBg} border ${cardBorder} overflow-hidden`}>
+          <div className="flex justify-between items-center p-3 border-b border-gray-200 dark:border-gray-700">
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Emotion Breakdown</span>
+            <button
+              onClick={() => {
+                const el = chartRefs.current[entry.id];
+                if (el) downloadChartAsPng(el, `entry_emotion_breakdown_${entry.id}`, isDarkMode);
+              }}
+              className="p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+              title="Download chart as PNG"
+            >
+              <Download size={16} className="text-gray-600 dark:text-gray-300" />
+            </button>
+          </div>
+          <div ref={el => { if (el) chartRefs.current[entry.id] = el; }} className="p-4 flex flex-col items-center" style={{ backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }}>
+            <div className="text-center mb-2 text-xs text-gray-500 dark:text-gray-400">
+              {format(parseISO(entry.entryDate), 'EEEE, MMMM d, yyyy')}
+              {entry.creationTimestamp && <span className="ml-2">• {format(parseISO(entry.creationTimestamp), 'h:mm a')}</span>}
+            </div>
+            <div className="h-48 w-full max-w-xs mx-auto">
+              <Doughnut data={chartData} options={emotionChartOptions} />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="text-center p-4 rounded-xl bg-gray-100 dark:bg-gray-800/50 text-gray-500 italic text-sm">No detailed emotion data for this entry.</div>
+      )}
+    </div>
+  );
+};
+
+const AnalysisLoadingState = ({ sectionBg, cardBorder }) => (
+  <div className={`space-y-4 p-4 rounded-xl ${sectionBg} border ${cardBorder} animate-pulse`}>
+    <div className="flex items-center gap-2 mb-2">
+      <Brain size={14} className="text-purple-400 animate-bounce" />
+      <div className="h-3 w-24 bg-gray-300 dark:bg-gray-600 rounded"></div>
+    </div>
+    <div className="space-y-2">
+      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
+      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
+    </div>
+    <div className="flex gap-2 pt-4">
+      <div className="h-8 w-20 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+      <div className="h-8 w-20 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+    </div>
+    <div className="h-48 w-48 mx-auto rounded-full border-4 border-dashed border-gray-200 dark:border-gray-700 flex items-center justify-center">
+       <span className="text-[10px] text-gray-400">Processing Insights...</span>
+    </div>
+  </div>
+);
 // ------------------------------------------------------------------
-// Main JournalHistory Component (enhanced UI/UX, all logic preserved)
+// Main JournalHistory Component
 // ------------------------------------------------------------------
 function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase, isLoading }) {
   const [expandedEntryId, setExpandedEntryId] = useState(null);
@@ -195,16 +406,29 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
   const deleteMutation = useDeleteJournalEntry();
   const importGrowthTipMutation = useImportGrowthTip();
 
+
+// Helper to detect if an entry is still being analysed (AI fields missing)
+  const isProcessing = (entry) => entry && entry.moodScore === null;
+
+  // Fetch a single entry only when expanded and the list entry is still processing
+  const { data: fetchedEntry, isLoading: isFetchingEntry } = useJournalEntryById(
+    expandedEntryId,
+    expandedEntryId !== null &&
+      editingEntryId !== expandedEntryId &&
+      isProcessing(entries?.find(e => e.id === expandedEntryId))
+  );
+
+
+
   // Glass‑morphic styles
   const cardBg = isDarkMode ? 'bg-gray-800/60 backdrop-blur-md' : 'bg-white/70 backdrop-blur-md';
   const cardBorder = isDarkMode ? 'border-gray-700/50' : 'border-gray-200/50';
   const sectionBg = isDarkMode ? 'bg-gray-800/40 backdrop-blur-sm' : 'bg-white/80 backdrop-blur-sm';
-  const textPrimary = isDarkMode ? 'text-gray-100' : 'text-gray-900';
   const textSecondary = isDarkMode ? 'text-gray-300' : 'text-gray-600';
 
   if (isLoading) return <SkeletonCard count={3} />;
 
-  // --- Filter entries (unchanged) ---
+  // Filter and group entries (same as before)
   let filteredEntries = entries;
   if (filterClusterId !== null && filterClusterId !== undefined) {
     filteredEntries = filteredEntries.filter(entry => entry.clusterId === filterClusterId);
@@ -216,7 +440,6 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
     );
   }
 
-  // Group by date
   const groupedEntries = filteredEntries.reduce((acc, entry) => {
     const dateKey = format(parseISO(entry.entryDate), "EEEE, MMMM dd, yyyy");
     if (!acc[dateKey]) acc[dateKey] = [];
@@ -230,6 +453,7 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
     return dateB - dateA;
   });
 
+  // --- Handlers (unchanged) ---
   const toggleExpand = (id) => {
     setExpandedEntryId(expandedEntryId === id ? null : id);
     if (expandedEntryId === id && editingEntryId === id) handleCancelEdit();
@@ -276,12 +500,23 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
     setShowDeleteConfirm(true);
   };
 
+  // --- FIND THIS IN JournalHistory.js ---
   const confirmDelete = async () => {
     try {
-      await deleteMutation.mutateAsync(deleteEntryId);
+      const idToDelete = deleteEntryId; // Capture the ID
+      await deleteMutation.mutateAsync(idToDelete);
+
+      // 💡 NEW: If the entry we just deleted was expanded, close it!
+      if (expandedEntryId === idToDelete) {
+        setExpandedEntryId(null);
+      }
+
+      setShowDeleteConfirm(false);
+      setDeleteEntryId(null);
+      toast.success("Entry deleted successfully");
     } catch (err) {
-      setEditError("Failed to delete entry. Please try again.");
-    } finally {
+      // Note: deleteMutation.isError is already handled in the UI,
+      // but we clear the modal anyway on major failure
       setShowDeleteConfirm(false);
       setDeleteEntryId(null);
     }
@@ -292,6 +527,7 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
     setDeleteEntryId(null);
   };
 
+  // Helper functions for mood, chart, etc.
   const getMoodColorClass = (moodScore) => {
     if (moodScore === null || isNaN(moodScore)) return "text-gray-500 dark:text-gray-400";
     if (moodScore >= 0.7) return "text-green-500 dark:text-green-400";
@@ -310,34 +546,9 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
     return "Negative";
   };
 
-  const getEmotionChartData = (emotionsData) => {
-    let emotions;
-    try {
-      emotions = typeof emotionsData === "string" ? JSON.parse(emotionsData) : emotionsData;
-    } catch (e) { return null; }
-    if (!emotions || Object.keys(emotions).length === 0) return null;
-    const labels = Object.keys(emotions);
-    const data = Object.values(emotions);
-    const filteredLabels = [];
-    const filteredData = [];
-    labels.forEach((label, idx) => {
-      if (data[idx] > 0.01) {
-        filteredLabels.push(label.charAt(0).toUpperCase() + label.slice(1));
-        filteredData.push(data[idx]);
-      }
-    });
-    if (filteredLabels.length === 0) return null;
-    const palette = isDarkMode ? EMOTION_CHART_COLORS_DARK : EMOTION_CHART_COLORS;
-    const backgroundColors = filteredLabels.map(l => palette[l.toLowerCase()] || "#CCCCCC");
-    return {
-      labels: filteredLabels,
-      datasets: [{
-        data: filteredData,
-        backgroundColor: backgroundColors,
-        borderColor: backgroundColors.map(c => c + "CC"),
-        borderWidth: 1,
-      }],
-    };
+  const getChipStyle = (emotion) => {
+    const base = emotionChipColors[emotion.toLowerCase()] || "bg-gray-500";
+    return `${base} text-white text-xs px-2 py-1 rounded-full`;
   };
 
   const emotionChartOptions = {
@@ -360,12 +571,6 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
     cutout: "60%",
   };
 
-  const getChipStyle = (emotion) => {
-    const base = emotionChipColors[emotion.toLowerCase()] || "bg-gray-500";
-    return `${base} text-white text-xs px-2 py-1 rounded-full`;
-  };
-
-  // Empty state
   if (filteredEntries.length === 0) {
     let msg = "No journal entries yet. Start writing your first reflection!";
     if (filterClusterId !== null && filterClusterId !== undefined) {
@@ -374,11 +579,7 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
     } else if (filterPhrase) {
       msg = `No entries found containing the phrase "${filterPhrase}".`;
     }
-    return (
-      <div className="text-center py-12 text-gray-500 dark:text-gray-400 font-inter">
-        {msg}
-      </div>
-    );
+    return <div className="text-center py-12 text-gray-500 dark:text-gray-400 font-inter">{msg}</div>;
   }
 
   return (
@@ -389,58 +590,68 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
             {dateKey}
           </h3>
           {groupedEntries[dateKey].map(entry => {
-            const parsedEmotions = entry.emotions && typeof entry.emotions === "string" ? JSON.parse(entry.emotions) : entry.emotions || {};
-            const parsedCoreConcerns = entry.coreConcerns && typeof entry.coreConcerns === "string" ? JSON.parse(entry.coreConcerns) : entry.coreConcerns || [];
-            const parsedGrowthTips = entry.growthTips && typeof entry.growthTips === "string" ? JSON.parse(entry.growthTips) : entry.growthTips || [];
-            const parsedKeyPhrases = Array.isArray(entry.keyPhrases) ? entry.keyPhrases : [];
-            const chartData = getEmotionChartData(parsedEmotions);
-            const themeName = (entry.clusterId !== null && entry.clusterId !== undefined && clusterThemes)
-              ? clusterThemes[`Theme ${entry.clusterId + 1}`] || `Theme ${entry.clusterId + 1}`
-              : "Unassigned";
+              const isThisEntryExpanded = expandedEntryId === entry.id;
 
-            return (
-              <div
-                key={entry.id}
-                className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg transition-all duration-300 hover:shadow-xl overflow-hidden`}
-              >
-                {/* Card Header (collapsible) */}
-                <div
-                  className="p-4 cursor-pointer flex justify-between items-center bg-white/10 dark:bg-black/10"
-                  onClick={() => toggleExpand(entry.id)}
-                >
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Clock size={14} className="text-purple-400" />
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                      {entry.creationTimestamp ? format(parseISO(entry.creationTimestamp), "h:mm a") : "N/A"}
-                    </span>
-                    <span className={`text-sm font-semibold ${getMoodColorClass(entry.moodScore)}`}>
-                      {getMoodLabel(entry.moodScore)} ({entry.moodScore?.toFixed(2) ?? "N/A"})
-                    </span>
-                    {entry.clusterId !== null && entry.clusterId !== undefined && (
-                      <span className="text-xs bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-full">
-                        Theme: {themeName}
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-gray-500">
-                    {expandedEntryId === entry.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                  </div>
-                </div>
+              // 1. Favor the detailed poll (fetchedEntry) if available
+              const displayEntry = (isThisEntryExpanded && fetchedEntry && fetchedEntry.id === entry.id)
+                  ? fetchedEntry
+                  : entry;
 
-                {/* Collapsed preview (truncated text) */}
-                {expandedEntryId !== entry.id && (
-                  <div className="p-4 pt-0 text-sm text-gray-600 dark:text-gray-400">
-                    {entry.rawText.length > TRUNCATION_LENGTH
-                      ? `${entry.rawText.slice(0, TRUNCATION_LENGTH)}...`
-                      : entry.rawText}
-                  </div>
-                )}
+              // 2. 💡 Use displayEntry here so it updates live when polling finishes
+              const themeName = (displayEntry.clusterId !== null && displayEntry.clusterId !== undefined && clusterThemes)
+                ? clusterThemes[`Theme ${displayEntry.clusterId + 1}`] || `Theme ${displayEntry.clusterId + 1}`
+                : "Unassigned";
 
-                {/* Expanded content */}
-                {expandedEntryId === entry.id && (
-                  <div className="p-4 pt-0 space-y-4">
-                    {editingEntryId === entry.id ? (
-                      // Edit mode
+              const isProcessing = displayEntry.moodScore === null;
+              const showSkeleton = isThisEntryExpanded && isProcessing;
+                return (
+                        <div key={entry.id} className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg transition-all duration-500 overflow-hidden`}>
+                            {/* Card Header */}
+                            <div
+                                className="p-4 cursor-pointer flex justify-between items-center bg-white/10 dark:bg-black/10"
+                                onClick={() => toggleExpand(entry.id)}
+                            >
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <Clock size={14} className="text-purple-400" />
+                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                                        {entry.creationTimestamp ? format(parseISO(entry.creationTimestamp), "h:mm a") : "N/A"}
+                                    </span>
+
+                                    {/* 💡 LIVE BADGE UPDATED */}
+                                   {/* 💡 REFINED LIVE BADGE */}
+                                   <span className={`text-sm font-semibold flex items-center gap-2 ${isProcessing ? 'text-purple-500' : getMoodColorClass(displayEntry.moodScore)}`}>
+                                     {isProcessing ? (
+                                       <span className="inline-flex items-center gap-1 bg-purple-500/10 px-2 py-0.5 rounded-md animate-pulse">
+                                         <Loader size={12} className="animate-spin" /> Analyzing...
+                                       </span>
+                                     ) : (
+                                       <>
+                                         {getMoodLabel(displayEntry.moodScore)}
+                                         <span className="text-xs opacity-60">({displayEntry.moodScore?.toFixed(2)})</span>
+                                       </>
+                                     )}
+                                   </span>
+                                </div>
+                                <div className="text-gray-500">
+                                    {expandedEntryId === entry.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+                                </div>
+                            </div>
+
+
+               {/* Collapsed Preview */}
+                           {expandedEntryId !== entry.id && (
+                               <div className="p-4 pt-0 text-sm text-gray-600 dark:text-gray-400">
+                                   {entry.rawText.length > TRUNCATION_LENGTH
+                                       ? `${entry.rawText.slice(0, TRUNCATION_LENGTH)}...`
+                                       : entry.rawText}
+                               </div>
+                           )}
+
+                           {/* Expanded Content */}
+                           {expandedEntryId === entry.id && (
+                               <div className="p-4 pt-0 space-y-4">
+                                   {editingEntryId === entry.id ? (
+                      // 1. Edit mode logic
                       <div id={`edit-area-${entry.id}`} className="space-y-3">
                         <textarea
                           value={editedText}
@@ -457,155 +668,41 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
                           </button>
                         </div>
                       </div>
-                    ) : (
-                      // Full expanded view (non‑editing)
-                      <div className="space-y-4">
-                        {/* Raw Text */}
-                        <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
-                          <div className="flex items-center gap-2 mb-2">
-                            <BookOpen size={14} className="text-purple-400" />
-                            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Journal Entry</span>
-                          </div>
-                          <p className="text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">{entry.rawText}</p>
-                        </div>
-
-                        {/* Summary */}
-                        {entry.summary && (
-                          <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
-                            <div className="flex items-center gap-2 mb-2">
-                              <Brain size={14} className="text-teal-400" />
-                              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Summary</span>
-                            </div>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">{entry.summary}</p>
-                          </div>
-                        )}
-
-                        {/* Mood Score (inline) */}
-                        <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
-                          <div className="flex justify-between items-center">
-                            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Mood Score</span>
-                            <span className={`font-bold text-lg ${getMoodColorClass(entry.moodScore)}`}>
-                              {entry.moodScore?.toFixed(2) ?? "N/A"} ({getMoodLabel(entry.moodScore)})
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Emotions */}
-                        {Object.keys(parsedEmotions).length > 0 && (
-                          <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
-                            <div className="flex items-center gap-2 mb-2">
-                              <Heart size={14} className="text-pink-400" />
-                              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Emotions</span>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {Object.entries(parsedEmotions).filter(([,score]) => score > 0).sort((a,b)=>b[1]-a[1]).map(([emotion, score]) => (
-                                <span key={emotion} className={`${getChipStyle(emotion)} inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs shadow-sm`}>
-                                  {emotion} <span className="opacity-80 text-[10px]">({score.toFixed(2)})</span>
-                                </span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Core Concerns */}
-                        {parsedCoreConcerns.length > 0 && (
-                          <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
-                            <div className="flex items-center gap-2 mb-2">
-                              <Target size={14} className="text-blue-400" />
-                              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Core Concerns</span>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {parsedCoreConcerns.map((c, idx) => (
-                                <span key={idx} className="bg-blue-500/20 dark:bg-blue-500/30 text-blue-700 dark:text-blue-200 px-2 py-1 rounded-full text-xs border border-blue-200 dark:border-blue-500/30">{c}</span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Growth Tips */}
-                        {parsedGrowthTips.length > 0 && (
-                          <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
-                            <div className="flex items-center gap-2 mb-2">
-                              <Lightbulb size={14} className="text-amber-400" />
-                              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Growth Tips</span>
-                            </div>
-                            <div className="space-y-4">
-                              {parsedGrowthTips.map((tip, idx) => (
-                                <div key={idx} className="relative group">
-                                  <div className="prose prose-sm dark:prose-invert max-w-none pr-12">
-                                    <div dangerouslySetInnerHTML={{ __html: formatText(tip) }} />
-                                  </div>
-                                  <button
-                                    onClick={() => importGrowthTipMutation.mutate(tip)}
-                                    disabled={importGrowthTipMutation.isPending}
-                                    className="absolute top-0 right-0 p-1.5 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-300 hover:bg-blue-500/30 transition disabled:opacity-50"
-                                    title="Add to Milestones"
-                                  >
-                                    <Plus size={14} />
-                                  </button>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Key Phrases */}
-                        {parsedKeyPhrases.length > 0 && (
-                          <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
-                            <div className="flex items-center gap-2 mb-2">
-                              <Target size={14} className="text-purple-400" />
-                              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Key Phrases</span>
-                            </div>
-                            <div className="flex flex-wrap gap-2">
-                              {parsedKeyPhrases.map((p, idx) => (
-                                <span key={idx} className="bg-purple-500/20 dark:bg-purple-500/30 text-purple-700 dark:text-purple-200 px-2 py-1 rounded-full text-xs border border-purple-200 dark:border-purple-500/30">{p}</span>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Emotion Breakdown Chart (with download) */}
-                        {chartData && chartData.datasets[0].data.length > 0 ? (
-                          <div className={`rounded-2xl ${sectionBg} border ${cardBorder} overflow-hidden`}>
-                            <div className="flex justify-between items-center p-3 border-b border-gray-200 dark:border-gray-700">
-                              <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Emotion Breakdown</span>
-                              <button
-                                onClick={() => {
-                                  const el = chartRefs.current[entry.id];
-                                  if (el) downloadChartAsPng(el, `entry_emotion_breakdown_${entry.id}`, isDarkMode);
-                                }}
-                                className="p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-                                title="Download chart as PNG"
-                              >
-                                <Download size={16} className="text-gray-600 dark:text-gray-300" />
-                              </button>
-                            </div>
-                            <div ref={el => { chartRefs.current[entry.id] = el; }} className="p-4 flex flex-col items-center" style={{ backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }}>
-                              <div className="text-center mb-2 text-xs text-gray-500 dark:text-gray-400">
-                                {format(parseISO(entry.entryDate), 'EEEE, MMMM d, yyyy')}
-                                {entry.creationTimestamp && <span className="ml-2">• {format(parseISO(entry.creationTimestamp), 'h:mm a')}</span>}
-                              </div>
-                              <div className="h-48 w-full max-w-xs mx-auto">
-                                <Doughnut data={chartData} options={{
-                                  ...emotionChartOptions,
-                                  plugins: {
-                                    ...emotionChartOptions.plugins,
-                                    legend: { ...emotionChartOptions.plugins.legend, labels: { color: isDarkMode ? '#E0E0E0' : '#2D3748', font: { size: 10 } } }
-                                  }
-                                }} />
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="text-center p-4 rounded-xl bg-gray-100 dark:bg-gray-800/50 text-gray-500 italic text-sm">No detailed emotion data for this entry.</div>
-                        )}
-
-                        {/* Edit/Delete buttons */}
+                    ) : showSkeleton ? (
+                                                /* 💡 SKELETON */
+                                                <AnalysisLoadingState sectionBg={sectionBg} cardBorder={cardBorder} />
+                                            ) : (
+                                                /* 💡 FINAL CONTENT */
+                                                <>
+                                                    <ExpandedEntryContent
+                                                        entry={displayEntry}
+                                                        isDarkMode={isDarkMode}
+                                                        chartRefs={chartRefs}
+                                                        sectionBg={sectionBg}
+                                                        cardBorder={cardBorder}
+                                                        getMoodColorClass={getMoodColorClass}
+                                                        getMoodLabel={getMoodLabel}
+                                                        getChipStyle={getChipStyle}
+                                                        emotionChartOptions={emotionChartOptions}
+                                                        importGrowthTipMutation={importGrowthTipMutation}
+                                                        isPending={importGrowthTipMutation.isPending}
+                                                    />
+                        {/* Action Buttons */}
                         <div className="flex justify-end gap-2 pt-2">
-                          <button onClick={() => handleEditClick(entry)} className="px-3 py-1.5 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-300 hover:bg-blue-500/30 transition flex items-center gap-1 text-sm"><Edit size={14} /> Edit</button>
-                          <button onClick={() => handleDeleteClick(entry.id)} className="px-3 py-1.5 rounded-full bg-red-500/20 text-red-600 dark:text-red-300 hover:bg-red-500/30 transition flex items-center gap-1 text-sm"><Trash2 size={14} /> Delete</button>
+                          <button
+                            onClick={() => handleEditClick(entry)}
+                            className="px-3 py-1.5 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-300 hover:bg-blue-500/30 transition flex items-center gap-1 text-sm"
+                          >
+                            <Edit size={14} /> Edit
+                          </button>
+                          <button
+                            onClick={() => handleDeleteClick(entry.id)}
+                            className="px-3 py-1.5 rounded-full bg-red-500/20 text-red-600 dark:text-red-300 hover:bg-red-500/30 transition flex items-center gap-1 text-sm"
+                          >
+                            <Trash2 size={14} /> Delete
+                          </button>
                         </div>
-                      </div>
+                      </>
                     )}
                   </div>
                 )}
@@ -615,7 +712,7 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
         </div>
       ))}
 
-      <DeleteConfirmationModal isOpen={showDeleteConfirm} onClose={cancelDelete} onConfirm={confirmDelete} theme={theme} />
+      <DeleteConfirmationModal isOpen={showDeleteConfirm} onClose={cancelDelete} onConfirm={confirmDelete} theme={theme}  isDeleting={deleteMutation.isPending}/>
 
       {(updateMutation.isError || deleteMutation.isError) && (
         <div className="fixed bottom-4 right-4 bg-red-100 dark:bg-red-900/80 text-red-800 dark:text-red-200 px-4 py-2 rounded-lg shadow-lg z-50">
@@ -627,4 +724,4 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
   );
 }
 
-export default JournalHistory;
+export default React.memo(JournalHistory);

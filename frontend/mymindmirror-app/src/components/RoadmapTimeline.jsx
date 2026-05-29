@@ -147,4 +147,4 @@ const RoadmapTimeline = ({ tasks, durationWeeks }) => {
   );
 };
 
-export default RoadmapTimeline;
+export default React.memo(RoadmapTimeline);

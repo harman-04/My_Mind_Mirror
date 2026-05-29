@@ -1,15 +1,16 @@
 package com.mymindmirror.backend.service;
 
-import com.mymindmirror.backend.model.JournalEntry;
-import com.mymindmirror.backend.model.User;
-import com.mymindmirror.backend.model.UserRoadmapPreferences;
+import com.mymindmirror.backend.model.*;
 import com.mymindmirror.backend.payload.request.UserProfileRequest;
-import com.mymindmirror.backend.repository.JournalEntryRepository;
-import com.mymindmirror.backend.repository.UserRepository;
-import com.mymindmirror.backend.repository.UserRoadmapPreferencesRepository;
+import com.mymindmirror.backend.payload.response.UserFullProfileResponse;
+import com.mymindmirror.backend.payload.response.UserRoadmapPreferencesDto;
+import com.mymindmirror.backend.repository.*;
 import com.mymindmirror.backend.util.EncryptionUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -30,6 +31,12 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final JournalEntryRepository journalEntryRepository;
     private final UserRoadmapPreferencesRepository userRoadmapPreferencesRepository;
+    private final UserPreferencesRepository userPreferencesRepository;
+    private final UserStatsRepository userStatsRepository;
+    private final MilestoneRepository milestoneRepository;
+    private final RoadmapRepository roadmapRepository;
+    private final CustomTaskRepository customTaskRepository;
+    private final ScheduledTaskRepository scheduledTaskRepository;
 
 
     public User registerNewUser(String username, String email, String password) {
@@ -72,6 +79,7 @@ public class UserService {
         return userRepository.findByUsername(username).orElse(null);
     }
 
+    @CacheEvict(value = "userFullProfile", key = "#userId")
     public User updateUser(UUID userId, UserProfileRequest request) {
         log.info("Attempting to update user with ID: {}", userId);
         User user = userRepository.findById(userId)
@@ -114,16 +122,51 @@ public class UserService {
         }
     }
 
+
+//    @CacheEvict(value = {"userFullProfile", "userPreferencesDto", "gamificationStats", "apiKeyStatus", "keyPhraseFrequencies"}, key = "#userId")
+//    public void deleteUser(UUID userId) {
+//        log.info("Attempting to delete user with ID: {}", userId);
+//        if (!userRepository.existsById(userId)) {
+//            log.warn("User deletion failed: User with ID {} not found.", userId);
+//            throw new IllegalArgumentException("User not found.");
+//        }
+//        userRepository.deleteById(userId);
+//        log.info("User with ID {} deleted successfully.", userId);
+//    }
+
+    @CacheEvict(value = {"userFullProfile", "userPreferencesDto", "gamificationStats", "apiKeyStatus", "keyPhraseFrequencies"}, key = "#userId")
+    @Transactional
     public void deleteUser(UUID userId) {
         log.info("Attempting to delete user with ID: {}", userId);
-        if (!userRepository.existsById(userId)) {
-            log.warn("User deletion failed: User with ID {} not found.", userId);
-            throw new IllegalArgumentException("User not found.");
-        }
-        userRepository.deleteById(userId);
-        log.info("User with ID {} deleted successfully.", userId);
-    }
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found."));
 
+        // Delete dependent data in correct order (child to parent)
+        // 1. Scheduled tasks
+        scheduledTaskRepository.deleteByUser(user);
+        // 2. Custom tasks
+        List<CustomTask> customTasks = customTaskRepository.findByUser(user);
+        customTaskRepository.deleteAll(customTasks);
+        // 3. Roadmap tasks, resources, milestones are cascade-deleted when roadmap is deleted
+        List<Roadmap> roadmaps = roadmapRepository.findByUserOrderByCreatedAtDesc(user);
+        roadmapRepository.deleteAll(roadmaps);
+        // 4. Milestones (their tasks will be cascade-deleted if `@OneToMany` has `cascade = ALL`)
+        List<Milestone> milestones = milestoneRepository.findByUserOrderByCreationDateDesc(user);
+        milestoneRepository.deleteAll(milestones);
+        // 5. Journal entries
+        List<JournalEntry> entries = journalEntryRepository.findByUser(user);
+        journalEntryRepository.deleteAll(entries);
+        // 6. UserStats
+        userStatsRepository.findByUser(user).ifPresent(stats -> userStatsRepository.delete(stats));
+        // 7. UserPreferences
+        userPreferencesRepository.findByUser(user).ifPresent(prefs -> userPreferencesRepository.delete(prefs));
+        // 8. UserRoadmapPreferences
+        userRoadmapPreferencesRepository.findByUser(user).ifPresent(prefs -> userRoadmapPreferencesRepository.delete(prefs));
+
+        // Finally delete the user
+        userRepository.delete(user);
+        log.info("User with ID {} and all associated data deleted successfully.", userId);
+    }
     /**
      * Changes a user's password after verifying the current password.
      * @param userId The ID of the user whose password is to be changed.
@@ -132,6 +175,8 @@ public class UserService {
      * @throws IllegalArgumentException if user not found, current password is incorrect,
      * or new password is the same as the old password.
      */
+
+    @CacheEvict(value = "userFullProfile", key = "#userId")
     @Transactional
     public void changeUserPassword(UUID userId, String currentPassword, String newPassword) {
         log.info("Attempting to change password for user ID: {}", userId);
@@ -187,14 +232,48 @@ public class UserService {
         return userRepository.save(user);
     }
 
-    // In UserService.java, add:
+//
+//    @Transactional(readOnly = true)
+//    @Cacheable(value = "userPreferences", key = "#user.id")
+//    public UserRoadmapPreferences getRoadmapPreferences(User user) {
+//        return userRoadmapPreferencesRepository.findByUser(user)
+//                .orElseGet(() -> createDefaultRoadmapPreferences(user));
+//    }
 
+    // In UserService.java
+
+    /**
+     * Returns roadmap preferences as a DTO (cached).
+     */
+    @Transactional(readOnly = true)
+    @Cacheable(value = "userPreferencesDto", key = "#user.id")
+    public UserRoadmapPreferencesDto getRoadmapPreferencesDto(User user) {
+        UserRoadmapPreferences prefs = getRoadmapPreferences(user); // no cache on entity method
+        return new UserRoadmapPreferencesDto(
+                prefs.getDifficulty(),
+                prefs.getLanguagePreference(),
+                prefs.getLearningStyle(),
+                prefs.getHoursPerWeek(),
+                prefs.isAvoidWeekends()
+        );
+    }
+
+    /**
+     * Internal method – not cached, serves as a source of truth.
+     * (If you want to keep caching on entity, you can, but it's okay to remove @Cacheable here.)
+     */
     @Transactional(readOnly = true)
     public UserRoadmapPreferences getRoadmapPreferences(User user) {
         return userRoadmapPreferencesRepository.findByUser(user)
                 .orElseGet(() -> createDefaultRoadmapPreferences(user));
     }
+    
 
+
+    @Caching(evict = {
+            @CacheEvict(value = "userPreferencesDto", key = "#user.id"),
+            @CacheEvict(value = "userFullProfile", key = "#user.id")
+    })
     @Transactional
     public UserRoadmapPreferences updateRoadmapPreferences(User user, String difficulty, String languagePreference,
                                                            String learningStyle, Integer hoursPerWeek, Boolean avoidWeekends) {
@@ -218,4 +297,62 @@ public class UserService {
         return userRoadmapPreferencesRepository.save(prefs);
     }
 
+
+
+    @Cacheable(value = "userFullProfile", key = "#user.id")
+    public UserFullProfileResponse getFullUserProfile(User user, String decryptedApiKey) {
+        UserFullProfileResponse response = new UserFullProfileResponse();
+        response.setId(user.getId());
+        response.setUsername(user.getUsername());
+        response.setEmail(user.getEmail());
+
+        // API key status
+        boolean usingOwnKey = decryptedApiKey != null && !decryptedApiKey.isBlank();
+        response.setUsingOwnKey(usingOwnKey);
+        if (usingOwnKey) {
+            int len = decryptedApiKey.length();
+            String masked = "••••••••" + decryptedApiKey.substring(Math.max(0, len - 4));
+            response.setMaskedKey(masked);
+        } else {
+            response.setMaskedKey(null);
+        }
+
+        // Roadmap preferences – now using the DTO directly from cache
+        response.setRoadmapPreferences(getRoadmapPreferencesDto(user));
+
+        UserPreferences prefs = userPreferencesRepository.findByUser(user)
+                .orElseGet(() -> createDefaultPreferences(user));
+        response.setAvailableHoursJson(prefs.getAvailableHoursJson());
+        response.setTimezone(prefs.getTimezone());
+
+        return response;
+    }
+    private UserPreferences createDefaultPreferences(User user) {
+        UserPreferences prefs = new UserPreferences();
+        prefs.setUser(user);
+        // Default: weekdays 9-12, 13-17
+        String defaultHours = "{\"monday\":[[\"09:00\",\"12:00\"],[\"13:00\",\"17:00\"]],\"tuesday\":[[\"09:00\",\"12:00\"],[\"13:00\",\"17:00\"]],\"wednesday\":[[\"09:00\",\"12:00\"],[\"13:00\",\"17:00\"]],\"thursday\":[[\"09:00\",\"12:00\"],[\"13:00\",\"17:00\"]],\"friday\":[[\"09:00\",\"12:00\"],[\"13:00\",\"17:00\"]],\"saturday\":[],\"sunday\":[]}";
+        prefs.setAvailableHoursJson(defaultHours);
+        prefs.setTimezone("Asia/Kolkata");
+        return userPreferencesRepository.save(prefs);
+    }
+
+    public UserPreferences getUserPreferences(User user) {
+        return userPreferencesRepository.findByUser(user)
+                .orElseGet(() -> createDefaultPreferences(user));
+    }
+
+    @CacheEvict(value = "userFullProfile", key = "#user.id")
+    @Transactional
+    public UserPreferences updateUserPreferences(User user, String availableHoursJson, String timezone) {
+        UserPreferences prefs = userPreferencesRepository.findByUser(user)
+                .orElseGet(() -> createDefaultPreferences(user));
+        if (availableHoursJson != null) {
+            prefs.setAvailableHoursJson(availableHoursJson);
+        }
+        if (timezone != null) {
+            prefs.setTimezone(timezone);
+        }
+        return userPreferencesRepository.save(prefs);
+    }
 }

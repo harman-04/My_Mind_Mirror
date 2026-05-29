@@ -1,9 +1,10 @@
 // src/components/JournalSearch.jsx
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import JournalHistory from './JournalHistory';
 import { useTheme } from '../contexts/ThemeContext';
 import { format, parseISO } from 'date-fns';
+import { debounce } from 'lodash';
 import { useSearchJournalEntries } from '../hooks/useJournalData';
 import {
   Search,
@@ -52,7 +53,7 @@ function JournalSearch({ userId }) {
     : 'bg-gray-200/80 text-gray-700 hover:bg-gray-300/80';
   const errorColor = isDarkMode ? 'text-red-300' : 'text-red-600';
 
-  const handleSearch = async () => {
+  const handleSearch = useCallback(async () => {
     setLocalError('');
     try {
       let params = { searchType };
@@ -85,8 +86,17 @@ function JournalSearch({ userId }) {
       setLocalError(err.message);
       setActiveSearchParams(null);
     }
-  };
+  }, [searchType, keyword, minMood, maxMood, startDate, endDate]);
 
+  // Then create the debounced version AFTER handleSearch is defined
+  const debouncedSearch = useMemo(() => debounce(handleSearch, 500), [handleSearch]);
+
+
+useEffect(() => {
+  return () => {
+    debouncedSearch.cancel();
+  };
+}, [debouncedSearch]);
   const clearSearch = () => {
     setActiveSearchParams(null);
     setKeyword('');
@@ -204,7 +214,7 @@ function JournalSearch({ userId }) {
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row gap-3 mt-6">
           <button
-            onClick={handleSearch}
+            onClick={debouncedSearch}
             disabled={isLoading}
             className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-teal-500 text-white font-semibold shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50"
           >

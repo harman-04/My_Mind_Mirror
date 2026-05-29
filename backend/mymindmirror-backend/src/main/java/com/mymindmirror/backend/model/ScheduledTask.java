@@ -10,7 +10,11 @@ import java.time.LocalTime;
 import java.util.UUID;
 
 @Entity
-@Table(name = "scheduled_tasks")
+@Table(name = "scheduled_tasks",
+indexes = {
+@Index(name = "idx_scheduled_user_date", columnList = "user_id, scheduled_date"),
+@Index(name = "idx_scheduled_reminder", columnList = "reminder_sent")
+       })
 @Data
 @NoArgsConstructor
 @AllArgsConstructor

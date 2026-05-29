@@ -44,10 +44,19 @@ const fetchScheduledTasks = async ({ queryKey }) => {
   return response.data;
 };
 
-const generateSchedule = async () => {
+// const generateSchedule = async () => {
+//   const token = getToken();
+//   if (!token) throw new Error('Not authenticated');
+//   await axios.post(`${API_BASE_URL}/schedule/generate`, {}, { headers: { Authorization: `Bearer ${token}` } });
+// };
+
+// Modify generateSchedule function to accept mode
+const generateSchedule = async (mode) => {
   const token = getToken();
   if (!token) throw new Error('Not authenticated');
-  await axios.post(`${API_BASE_URL}/schedule/generate`, {}, { headers: { Authorization: `Bearer ${token}` } });
+  await axios.post(`${API_BASE_URL}/schedule/generate?mode=${mode}`, {}, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
 };
 
 const moveTask = async ({ taskId, date, startTime, endTime }) => {
@@ -284,6 +293,8 @@ function SchedulePage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [draggedTask, setDraggedTask] = useState(null);
   const [taskToDelete, setTaskToDelete] = useState(null);
+  const [scheduleMode, setScheduleMode] = useState('all'); // 'all' or 'custom'
+
   // Drag and Drop Handlers
   const handleDragStart = useCallback((task) => {
     setDraggedTask(task);
@@ -317,14 +328,24 @@ function SchedulePage() {
     placeholderData: keepPreviousData,
   });
 
-  const generateMutation = useMutation({
-    mutationFn: generateSchedule,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['scheduledTasks'] });
-      toast.success('Schedule generated!');
-    },
-    onError: () => toast.error('Generation failed'),
-  });
+//   const generateMutation = useMutation({
+//     mutationFn: generateSchedule,
+//     onSuccess: () => {
+//       queryClient.invalidateQueries({ queryKey: ['scheduledTasks'] });
+//       toast.success('Schedule generated!');
+//     },
+//     onError: () => toast.error('Generation failed'),
+//   });
+
+const generateMutation = useMutation({
+  mutationFn: () => generateSchedule(scheduleMode),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ['scheduledTasks'] });
+    toast.success(`Schedule generated (${scheduleMode === 'custom' ? 'custom only' : 'all tasks'})!`);
+  },
+  onError: () => toast.error('Generation failed'),
+});
+
 
   const moveMutation = useMutation({
     mutationFn: moveTask,
@@ -548,36 +569,83 @@ function SchedulePage() {
       )}
 
       {/* Header */}
-      <div className="flex flex-wrap justify-between items-center gap-4 mb-6">
-        <div>
-          <h2 className="text-2xl sm:text-3xl font-poppins font-bold bg-gradient-to-r from-purple-400 to-teal-400 bg-clip-text text-transparent">
-            Smart Timetable
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            AI‑powered scheduling · Drag to reschedule
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => generateMutation.mutate()}
-            disabled={generateMutation.isPending}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 text-white font-medium shadow-md hover:shadow-lg transition disabled:opacity-50"
-          >
-            {generateMutation.isPending ? <Loader size={18} className="animate-spin" /> : <RefreshCw size={18} />}
-            Generate
-          </button>
-          <button
-            onClick={() => {
-              setShowCustomForm(!showCustomForm);
-              if (showCustomForm) setEditingCustomTask(null);
-            }}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
-          >
-            <Plus size={18} /> Add Task
-          </button>
-        </div>
-      </div>
+     <div className="relative w-full mb-8">
+       {/* Main Container */}
+       <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-5 rounded-3xl border border-gray-200/60 dark:border-gray-700/60 bg-white/70 dark:bg-gray-900/60 backdrop-blur-xl p-5 sm:p-6 shadow-sm">
 
+         {/* Left Section */}
+         <div className="min-w-0">
+           <h2 className="text-2xl sm:text-3xl font-poppins font-bold bg-gradient-to-r from-purple-400 to-teal-400 bg-clip-text text-transparent leading-tight">
+             Smart Timetable
+           </h2>
+
+           <p className="mt-1 text-sm sm:text-[15px] text-gray-500 dark:text-gray-400">
+             AI-powered scheduling · Drag to reschedule
+           </p>
+         </div>
+
+         {/* Right Controls */}
+         <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-3 w-full xl:w-auto">
+
+           {/* Generate Button */}
+           <button
+             onClick={() => generateMutation.mutate()}
+             disabled={generateMutation.isPending}
+             className="group relative flex items-center justify-center gap-2 h-12 px-5 rounded-2xl bg-gradient-to-r from-purple-600 via-purple-500 to-teal-500 text-white font-medium shadow-md hover:shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all duration-200 disabled:opacity-50 disabled:hover:scale-100 w-full sm:w-auto"
+           >
+             {generateMutation.isPending ? (
+               <Loader size={18} className="animate-spin" />
+             ) : (
+               <RefreshCw
+                 size={18}
+                 className="transition-transform duration-300 group-hover:rotate-180"
+               />
+             )}
+
+             <span className="whitespace-nowrap">Generate</span>
+           </button>
+
+           {/* Segmented Toggle */}
+           <div className="flex items-center p-1 rounded-2xl bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 w-full sm:w-auto">
+
+             <button
+               onClick={() => setScheduleMode("all")}
+               className={`flex-1 sm:flex-none px-4 sm:px-5 h-10 rounded-xl text-sm font-medium transition-all duration-200 whitespace-nowrap ${
+                 scheduleMode === "all"
+                   ? "bg-gradient-to-r from-purple-500 to-teal-500 text-white shadow-sm"
+                   : "text-gray-700 dark:text-gray-200 hover:bg-white/70 dark:hover:bg-gray-700"
+               }`}
+             >
+               All Tasks
+             </button>
+
+             <button
+               onClick={() => setScheduleMode("custom")}
+               className={`flex-1 sm:flex-none px-4 sm:px-5 h-10 rounded-xl text-sm font-medium transition-all duration-200 whitespace-nowrap ${
+                 scheduleMode === "custom"
+                   ? "bg-gradient-to-r from-purple-500 to-teal-500 text-white shadow-sm"
+                   : "text-gray-700 dark:text-gray-200 hover:bg-white/70 dark:hover:bg-gray-700"
+               }`}
+             >
+               Custom Tasks
+             </button>
+           </div>
+
+           {/* Add Task Button */}
+           <button
+             onClick={() => {
+               setShowCustomForm(!showCustomForm);
+               if (showCustomForm) setEditingCustomTask(null);
+             }}
+             className="flex items-center justify-center gap-2 h-12 px-5 rounded-2xl bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 hover:shadow-md active:scale-[0.98] transition-all duration-200 w-full sm:w-auto"
+             title="Add Task"
+           >
+             <Plus size={18} />
+             <span className="whitespace-nowrap">Add Task</span>
+           </button>
+         </div>
+       </div>
+     </div>
       {/* Filters & Navigation */}
       <div className="flex flex-wrap justify-between items-center gap-3 mb-4">
         <div className="flex flex-wrap items-center gap-2">

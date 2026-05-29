@@ -12,4 +12,6 @@ import java.util.UUID;
 public interface CustomTaskRepository extends JpaRepository<CustomTask, UUID> {
     List<CustomTask> findByUserOrderByCreatedAtDesc(User user);
     List<CustomTask> findByUserAndCompletedFalse(User user);
+
+    List<CustomTask> findByUser(User user);
 }

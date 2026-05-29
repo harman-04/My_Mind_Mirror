@@ -16,7 +16,11 @@ import java.util.UUID;
  * Each milestone can have multiple associated tasks.
  */
 @Entity
-@Table(name = "milestones")
+@Table(name = "milestones" ,
+        indexes = {
+                @Index(name = "idx_milestone_user", columnList = "user_id"),
+                @Index(name = "idx_milestone_due", columnList = "due_date")
+        })
 @Data
 public class Milestone {
 
@@ -46,7 +50,7 @@ public class Milestone {
     @Column(nullable = false)
     private Status status; // E.g., PENDING, IN_PROGRESS, COMPLETED, OVERDUE
 
-    @OneToMany(mappedBy = "milestone", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
+    @OneToMany(mappedBy = "milestone", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @OrderBy("creationTimestamp ASC") // Order tasks by creation time
     private List<Task> tasks = new ArrayList<>();
 

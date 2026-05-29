@@ -15,7 +15,11 @@ import java.util.UUID;
  * Represents a specific action or sub-goal associated with a Milestone.
  */
 @Entity
-@Table(name = "tasks")
+@Table(name = "tasks" ,
+        indexes = {
+                @Index(name = "idx_task_milestone", columnList = "milestone_id"),
+                @Index(name = "idx_task_status", columnList = "status")
+        })
 @Data
 @AllArgsConstructor
 public class Task {

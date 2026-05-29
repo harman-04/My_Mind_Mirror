@@ -28,21 +28,21 @@ public class ApiKeyController {
      * Get masked Gemini API key for the authenticated user.
      * Returns e.g. "••••••••1234" if set, otherwise null.
      */
-    @GetMapping("/api-key")
-    public ResponseEntity<ApiKeyResponse> getApiKeyMasked(@AuthenticationPrincipal UserDetails userDetails) {
-        Optional<User> userOpt = userService.findByUsername(userDetails.getUsername());
-        if (userOpt.isEmpty()) {
-            return ResponseEntity.status(401).build();
-        }
-        User user = userOpt.get();
-        String decrypted = apiKeyService.getDecryptedApiKey(user);
-        String masked = null;
-        if (decrypted != null && !decrypted.isBlank()) {
-            int len = decrypted.length();
-            masked = "••••••••" + decrypted.substring(Math.max(0, len - 4));
-        }
-        return ResponseEntity.ok(new ApiKeyResponse(masked, decrypted != null && !decrypted.isBlank()));
-    }
+//    @GetMapping("/api-key")
+//    public ResponseEntity<ApiKeyResponse> getApiKeyMasked(@AuthenticationPrincipal UserDetails userDetails) {
+//        Optional<User> userOpt = userService.findByUsername(userDetails.getUsername());
+//        if (userOpt.isEmpty()) {
+//            return ResponseEntity.status(401).build();
+//        }
+//        User user = userOpt.get();
+//        String decrypted = apiKeyService.getDecryptedApiKey(user);
+//        String masked = null;
+//        if (decrypted != null && !decrypted.isBlank()) {
+//            int len = decrypted.length();
+//            masked = "••••••••" + decrypted.substring(Math.max(0, len - 4));
+//        }
+//        return ResponseEntity.ok(new ApiKeyResponse(masked, decrypted != null && !decrypted.isBlank()));
+//    }
 
     /**
      * Update Gemini API key for the authenticated user.
@@ -74,16 +74,7 @@ public class ApiKeyController {
             return ResponseEntity.status(401).build();
         }
         User user = userOpt.get();
-        String decrypted = apiKeyService.getDecryptedApiKey(user);
-        boolean usingOwnKey = decrypted != null && !decrypted.isBlank();
-        String masked = null;
-        if (usingOwnKey) {
-            int len = decrypted.length();
-            masked = "••••••••" + decrypted.substring(Math.max(0, len - 4));
-        }
-        String message = usingOwnKey
-                ? "Using your own Gemini API key."
-                : "Using shared API key. For better privacy, add your own key.";
-        return ResponseEntity.ok(new ApiKeyStatusResponse(usingOwnKey, masked, message));
+        ApiKeyStatusResponse response = apiKeyService.getApiKeyStatus(user);
+        return ResponseEntity.ok(response);
     }
 }

@@ -2,11 +2,14 @@
 package com.mymindmirror.backend.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mymindmirror.backend.enums.Status;
 import com.mymindmirror.backend.model.Milestone;
 import com.mymindmirror.backend.model.Task;
 import com.mymindmirror.backend.model.User;
+import com.mymindmirror.backend.payload.response.MilestoneResponse;
+import com.mymindmirror.backend.payload.response.TaskResponse;
 import com.mymindmirror.backend.repository.MilestoneRepository;
 import com.mymindmirror.backend.repository.TaskRepository;
 import lombok.RequiredArgsConstructor;
@@ -19,6 +22,7 @@ import org.springframework.web.reactive.function.client.WebClient;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Service class for managing Milestone-related business logic.
@@ -242,5 +246,69 @@ public class MilestoneService {
         updateMilestoneStatusBasedOnTasks(milestone.getId());
 
         return createdTasks;
+    }
+
+    @Transactional(readOnly = true)
+    public List<MilestoneResponse> getAllMilestonesForUserAsDTO(User user) {
+        List<Milestone> milestones = milestoneRepository.findByUserOrderByCreationDateDesc(user);
+        return milestones.stream().map(this::toMilestoneResponse).collect(Collectors.toList());
+    }
+
+    public MilestoneResponse getMilestoneResponseById(UUID milestoneId, User user) {
+        Milestone milestone = getMilestoneByIdForUser(milestoneId, user)
+                .orElseThrow(() -> new IllegalArgumentException("Milestone not found"));
+        return toMilestoneResponse(milestone);
+    }
+
+    public MilestoneResponse createMilestoneAsDTO(User user, String title, String description, LocalDate dueDate) {
+        Milestone milestone = createMilestone(user, title, description, dueDate);
+        return toMilestoneResponse(milestone);
+    }
+
+    public MilestoneResponse updateMilestoneAsDTO(UUID milestoneId, User user,
+                                                  String title, String description,
+                                                  LocalDate dueDate, Status status) {
+        Milestone updated = updateMilestone(milestoneId, user, title, description, dueDate, status);
+        return toMilestoneResponse(updated);
+    }
+
+    private MilestoneResponse toMilestoneResponse(Milestone milestone) {
+        MilestoneResponse dto = new MilestoneResponse();
+        dto.setId(milestone.getId());
+        dto.setTitle(milestone.getTitle());
+        dto.setDescription(milestone.getDescription());
+        dto.setCreationDate(milestone.getCreationDate());
+        dto.setDueDate(milestone.getDueDate());
+        dto.setStatus(milestone.getStatus());
+        dto.setCompletionPercentage(milestone.getCompletionPercentage());
+        if (milestone.getTasks() != null) {
+            List<TaskResponse> taskDTOs = milestone.getTasks().stream()
+                    .map(this::toTaskResponse)
+                    .collect(Collectors.toList());
+            dto.setTasks(taskDTOs);
+        }
+        return dto;
+    }
+
+    private TaskResponse toTaskResponse(Task task) {
+        TaskResponse dto = new TaskResponse();
+        dto.setId(task.getId());
+        dto.setDescription(task.getDescription());
+        dto.setCreationTimestamp(task.getCreationTimestamp());
+        dto.setDueDate(task.getDueDate());
+        dto.setStatus(task.getStatus());
+        dto.setDetails(task.getDetails());
+        dto.setRoadmapTaskId(task.getRoadmapTaskId());
+        if (task.getSubtasksJson() != null) {
+            try {
+                dto.setSubtasks(objectMapper.readValue(task.getSubtasksJson(),
+                        new TypeReference<List<String>>() {}));
+            } catch (JsonProcessingException e) {
+                dto.setSubtasks(List.of());
+            }
+        } else {
+            dto.setSubtasks(List.of());
+        }
+        return dto;
     }
 }

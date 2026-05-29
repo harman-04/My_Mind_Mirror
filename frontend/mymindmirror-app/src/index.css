@@ -140,3 +140,60 @@ h6.guide-heading { font-size: 0.9rem; }
   margin-bottom: 0.25rem;
   line-height: 1.5;
 }
+
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+.animate-pulse-soft {
+  animation: pulse-soft 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Custom styling for AI-generated resource links */
+.resource-link {
+  display: inline-flex;
+  align-items: center;
+  background-color: rgba(20, 184, 166, 0.1); /* Teal-500 with opacity */
+  color: #14b8a6;
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-weight: 500;
+  border: 1px solid rgba(20, 184, 166, 0.2);
+  transition: all 0.2s ease;
+}
+
+.dark .resource-link {
+  background-color: rgba(45, 212, 191, 0.1);
+  color: #5eead4;
+  border-color: rgba(45, 212, 191, 0.2);
+}
+
+.resource-link:hover {
+  background-color: #14b8a6;
+  color: white;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.dark .resource-link:hover {
+  background-color: #2dd4bf;
+  color: #0f172a;
+}
+
+/* Styling for > symbols that appear inside paragraphs */
+.inline-quote {
+  display: block;
+  margin-top: 0.5rem;
+  padding: 0.5rem 1rem;
+  background-color: rgba(179, 153, 212, 0.1);
+  border-left: 3px solid #B399D4;
+  border-radius: 4px;
+  font-style: italic;
+  color: #6b7280; /* text-gray-500 */
+}
+.dark .inline-quote {
+  background-color: rgba(141, 226, 221, 0.05);
+  border-left-color: #8DE2DD;
+  color: #9ca3af; /* text-gray-400 */
+}

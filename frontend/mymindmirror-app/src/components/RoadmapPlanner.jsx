@@ -1,5 +1,5 @@
 // src/components/RoadmapPlanner.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo  } from 'react';
 import ReactDOM from 'react-dom';
 import { useRoadmaps, useGenerateRoadmap, useDeleteRoadmap, useImportTaskToMilestone,
     useToggleTaskCompletion, useContinueRoadmap, useElaborateTask,
@@ -504,37 +504,36 @@ useEffect(() => {
     }
   }, [roadmaps]);
 
-  const handleGenerate = (e) => {
-    e.preventDefault();
-    if (!goal.trim()) return;
-    const payload = {
-      goal: goal.trim(),
-      timeframeValue: timeframeValue,
-      timeframeUnit: timeframeUnit,
-      difficulty: difficulty,
-      language: language,
-      learningStyle: learningStyle,
-      hoursPerWeek: hoursPerWeek,
-      avoidWeekends: avoidWeekends,
-    };
-    // If the user kept the old weeks input, also send for backward compatibility
-    if (timeframeUnit === 'WEEKS') {
-      payload.timeframeWeeks = timeframeValue;
-    }
-    generateMutation.mutate(payload, {
-      onSuccess: () => {
-        setGoal('');
-        setTimeframeValue(4);
-        setTimeframeUnit('WEEKS');
-        setShowForm(false);
-        refetch();
-        toast.success('Roadmap generated successfully!');
-      },
-    });
-  };
-  const handleDeleteClick = (id, title) => {
-    setDeleteModal({ isOpen: true, roadmapId: id, roadmapTitle: title });
-  };
+ const handleGenerate = useCallback((e) => {
+     e.preventDefault();
+     if (!goal.trim()) return;
+     const payload = {
+       goal: goal.trim(),
+       timeframeValue: timeframeValue,
+       timeframeUnit: timeframeUnit,
+       difficulty: difficulty,
+       language: language,
+       learningStyle: learningStyle,
+       hoursPerWeek: hoursPerWeek,
+       avoidWeekends: avoidWeekends,
+     };
+     if (timeframeUnit === 'WEEKS') {
+       payload.timeframeWeeks = timeframeValue;
+     }
+     generateMutation.mutate(payload, {
+       onSuccess: () => {
+         setGoal('');
+         setTimeframeValue(4);
+         setTimeframeUnit('WEEKS');
+         setShowForm(false);
+         refetch();
+         toast.success('Roadmap generated successfully!');
+       },
+     });
+   }, [goal, timeframeValue, timeframeUnit, difficulty, language, learningStyle, hoursPerWeek, avoidWeekends, generateMutation]);
+  const handleDeleteClick = useCallback((id, title) => {
+      setDeleteModal({ isOpen: true, roadmapId: id, roadmapTitle: title });
+  }, []);
 
   const confirmDelete = () => {
     setIsDeleting(true);
@@ -573,8 +572,9 @@ useEffect(() => {
     setExpandedTaskId(expandedTaskId === taskId ? null : taskId);
   };
 
-  const toggleWeekExpand = (week) => {
-    setExpandedWeeks(prev => ({ ...prev, [week]: !prev[week] }));
+  const toggleWeekExpand = (roadmapId, week) => {
+    const key = `${roadmapId}-${week}`;
+    setExpandedWeeks(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   const bgClass = theme === 'dark' ? 'bg-gray-800/40 backdrop-blur-sm' : 'bg-white/60 backdrop-blur-sm';
@@ -803,37 +803,40 @@ useEffect(() => {
           const isContinuable = generatedWeeks > 0 && generatedWeeks < totalWeeks;
 
           // Prepare tasks grouped by week for list view
-          const tasksByWeek = {};
-          roadmap.tasks?.forEach(task => {
-            const week = task.weekNumber || 1;
-            if (!tasksByWeek[week]) tasksByWeek[week] = [];
-            tasksByWeek[week].push(task);
-          });
-
-          // Sort tasks within each week: daily tasks (day 1-5) first, then weekly (day null)
-          Object.keys(tasksByWeek).forEach(week => {
-            tasksByWeek[week].sort((a, b) => {
-              // If both are daily or both are weekly, sort by dayNumber
-              if (a.dayNumber === null && b.dayNumber !== null) return 1;   // weekly after daily
-              if (a.dayNumber !== null && b.dayNumber === null) return -1;  // daily before weekly
-              if (a.dayNumber === null && b.dayNumber === null) return 0;
-              return (a.dayNumber || 999) - (b.dayNumber || 999);
-            });
-          });
-          // Ensure every week from 1 to totalWeeks has an entry (even if empty)
-          for (let i = 1; i <= totalWeeks; i++) {
-            if (!tasksByWeek[i]) tasksByWeek[i] = [];
-          }
-          const sortedWeeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
-
+const tasksByWeek = {};
+roadmap.tasks?.forEach(task => {
+  const week = task.weekNumber || 1;
+  if (!tasksByWeek[week]) tasksByWeek[week] = [];
+  tasksByWeek[week].push(task);
+});
+// Sort tasks within each week (same as before)
+Object.keys(tasksByWeek).forEach(week => {
+  tasksByWeek[week].sort((a, b) => {
+    if (a.dayNumber === null && b.dayNumber !== null) return 1;
+    if (a.dayNumber !== null && b.dayNumber === null) return -1;
+    if (a.dayNumber === null && b.dayNumber === null) return 0;
+    return (a.dayNumber || 999) - (b.dayNumber || 999);
+  });
+});
+// Ensure every week from 1 to totalWeeks has an entry
+for (let i = 1; i <= totalWeeks; i++) {
+  if (!tasksByWeek[i]) tasksByWeek[i] = [];
+}
+const sortedWeeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
           const handleExpandAll = () => {
             const newExpanded = {};
-            sortedWeeks.forEach(week => { newExpanded[week] = true; });
-            setExpandedWeeks(newExpanded);
+            sortedWeeks.forEach(week => {
+              newExpanded[`${roadmap.id}-${week}`] = true;
+            });
+            setExpandedWeeks(prev => ({ ...prev, ...newExpanded }));
           };
 
           const handleCollapseAll = () => {
-            setExpandedWeeks({});
+            const newExpanded = { ...expandedWeeks };
+            sortedWeeks.forEach(week => {
+              delete newExpanded[`${roadmap.id}-${week}`];
+            });
+            setExpandedWeeks(newExpanded);
           };
 
           return (
@@ -937,12 +940,12 @@ useEffect(() => {
                       <div className="space-y-4">
                         {sortedWeeks.map((week) => {
                           const tasks = tasksByWeek[week];
-                          const isExpanded = expandedWeeks[week];
+                          const isExpanded = expandedWeeks[`${roadmap.id}-${week}`];
                           const weekCompleted = tasks.every(t => t.completed);
                           return (
                             <div key={week} className="border-l-2 border-purple-300 dark:border-purple-700 pl-4">
                               <button
-                                onClick={() => toggleWeekExpand(week)}
+                                onClick={() => toggleWeekExpand(roadmap.id, week)}
                                 className="flex items-center gap-2 text-sm font-semibold text-purple-600 dark:text-purple-400 mb-2 hover:opacity-80 transition"
                               >
                                 {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}

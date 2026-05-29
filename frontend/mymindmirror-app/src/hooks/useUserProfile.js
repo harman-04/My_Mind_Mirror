@@ -1,29 +1,21 @@
 // src/hooks/useUserProfile.js
+
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
+import { toast } from 'sonner'; // if you want toast inside the hook (optional)
 
 const API_BASE_URL = 'http://localhost:8080/api';
 
 const getAuthHeader = () => {
     const token = localStorage.getItem('jwtToken');
-    if (!token) {
-        console.error("Authentication token missing.");
-        return null;
-    }
+    if (!token) return null;
     return { Authorization: `Bearer ${token}` };
 };
 
-const fetchUserProfile = async () => {
+const fetchUserFullProfile = async () => {
     const headers = getAuthHeader();
     if (!headers) throw new Error("Authentication required.");
-    const response = await axios.get(`${API_BASE_URL}/users/profile`, { headers });
-    return response.data;
-};
-
-const fetchApiKeyStatus = async () => {
-    const headers = getAuthHeader();
-    if (!headers) throw new Error("Authentication required.");
-    const response = await axios.get(`${API_BASE_URL}/users/api-key/status`, { headers });
+    const response = await axios.get(`${API_BASE_URL}/users/profile-full`, { headers });
     return response.data;
 };
 
@@ -54,13 +46,6 @@ const updateApiKey = async (apiKey) => {
     await axios.put(`${API_BASE_URL}/users/api-key`, { apiKey }, { headers });
 };
 
-const fetchRoadmapPreferences = async () => {
-    const headers = getAuthHeader();
-    if (!headers) throw new Error("Authentication required.");
-    const response = await axios.get(`${API_BASE_URL}/users/roadmap-preferences`, { headers });
-    return response.data;
-};
-
 const updateRoadmapPreferences = async (preferences) => {
     const headers = getAuthHeader();
     if (!headers) throw new Error("Authentication required.");
@@ -68,77 +53,102 @@ const updateRoadmapPreferences = async (preferences) => {
     return response.data;
 };
 
+const updateUserPreferences = async ({ availableHoursJson, timezone }) => {
+    const headers = getAuthHeader();
+    if (!headers) throw new Error("Authentication required.");
+    const response = await axios.put(`${API_BASE_URL}/users/preferences`,
+        { availableHoursJson, timezone },
+        { headers }
+    );
+    return response.data;
+};
+
 export function useUserProfile() {
     const queryClient = useQueryClient();
 
-    // --- All hook calls at the top level ---
+    // Single query for full profile – NO 'select', keep all fields
     const profileQuery = useQuery({
-        queryKey: ['userProfile'],
-        queryFn: fetchUserProfile,
+        queryKey: ['userFullProfile'],
+        queryFn: fetchUserFullProfile,
         staleTime: 5 * 60 * 1000,
-        gcTime: 10 * 60 * 1000,      // React Query v5 uses gcTime (was cacheTime)
-        retry: 1,
+        gcTime: 10 * 60 * 1000,
     });
 
     const updateProfileMutation = useMutation({
         mutationFn: updateUserProfile,
         onSuccess: () => {
-            queryClient.invalidateQueries({ queryKey: ['userProfile'] });
+            queryClient.invalidateQueries({ queryKey: ['userFullProfile'] });
         },
     });
 
     const changePasswordMutation = useMutation({
         mutationFn: changeUserPassword,
+        onSuccess: () => {
+            // optionally log out or show toast
+        },
     });
 
     const deleteProfileMutation = useMutation({
         mutationFn: deleteUserProfile,
         onSuccess: () => {
-            queryClient.removeQueries({ queryKey: ['userProfile'] });
+            queryClient.removeQueries({ queryKey: ['userFullProfile'] });
             localStorage.removeItem('jwtToken');
             window.location.href = '/login';
         },
     });
 
-    const apiKeyStatusQuery = useQuery({
-        queryKey: ['apiKeyStatus'],
-        queryFn: fetchApiKeyStatus,
-        staleTime: 5 * 60 * 1000,
-    });
-
     const updateApiKeyMutation = useMutation({
         mutationFn: updateApiKey,
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['apiKeyStatus'] }),
-    });
-
-    const roadmapPreferencesQuery = useQuery({
-        queryKey: ['roadmapPreferences'],
-        queryFn: fetchRoadmapPreferences,
-        staleTime: 5 * 60 * 1000,
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['userFullProfile'] }),
     });
 
     const updateRoadmapPreferencesMutation = useMutation({
         mutationFn: updateRoadmapPreferences,
-        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['roadmapPreferences'] }),
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['userFullProfile'] }),
     });
 
-    // --- Return object with all the data and functions ---
+    const updatePreferencesMutation = useMutation({
+        mutationFn: updateUserPreferences,
+        onSuccess: () => queryClient.invalidateQueries({ queryKey: ['userFullProfile'] }),
+    });
+
+    // Derived values for convenience (optional – you can also compute in component)
+    const apiKeyStatus = profileQuery.data
+        ? {
+              usingOwnKey: profileQuery.data.usingOwnKey,
+              maskedKey: profileQuery.data.maskedKey,
+              message: profileQuery.data.usingOwnKey
+                  ? "Using your own Gemini API key."
+                  : "Using shared key – add your own for privacy",
+          }
+        : null;
+
+    const roadmapPreferences = profileQuery.data?.roadmapPreferences;
+
     return {
+        // Raw profile – contains id, username, email, usingOwnKey, maskedKey,
+        // roadmapPreferences, availableHoursJson, timezone
         profile: profileQuery.data,
         isLoading: profileQuery.isLoading,
         isError: profileQuery.isError,
         error: profileQuery.error,
+
+        // Convenience fields (also available inside profile, but kept for backward compatibility)
+        apiKeyStatus: { data: apiKeyStatus, isLoading: profileQuery.isLoading },
+        roadmapPreferences: { data: roadmapPreferences, isLoading: profileQuery.isLoading },
+
+        // Mutations
         updateProfile: updateProfileMutation.mutateAsync,
         deleteProfile: deleteProfileMutation.mutateAsync,
         changePassword: changePasswordMutation.mutateAsync,
-        isUpdating: updateProfileMutation.isPending,
-        isDeleting: deleteProfileMutation.isPending,
-        isChangingPassword: changePasswordMutation.isPending,
-        apiKeyStatus: apiKeyStatusQuery,
-        updateApiKey: updateApiKeyMutation,
+        updateApiKey: updateApiKeyMutation.mutateAsync,
+        updateRoadmapPreferences: updateRoadmapPreferencesMutation.mutateAsync,
+        updatePreferences: updatePreferencesMutation.mutateAsync,
 
-        // Roadmap preferences
-        roadmapPreferences: roadmapPreferencesQuery,
-        updateRoadmapPreferences: updateRoadmapPreferencesMutation,
+        // Loading states
+        isUpdating: updateProfileMutation.isLoading,
+        isDeleting: deleteProfileMutation.isLoading,
+        isChangingPassword: changePasswordMutation.isLoading,
+        isUpdatingPreferences: updatePreferencesMutation.isLoading,
     };
 }

@@ -1,16 +1,22 @@
 package com.mymindmirror.backend.model;
 
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
+import lombok.*;
+import org.hibernate.annotations.BatchSize;
+
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 @Entity
-@Table(name = "roadmaps")
+@NamedEntityGraph(name = "Roadmap.withAll", attributeNodes = {
+        @NamedAttributeNode("resources"),
+        @NamedAttributeNode("milestones")
+})
+@Table(name = "roadmaps" ,
+        indexes = {
+                @Index(name = "idx_roadmap_user", columnList = "user_id"),
+                @Index(name = "idx_roadmap_created", columnList = "created_at")
+        })
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -37,14 +43,21 @@ public class Roadmap {
     @Column(nullable = false)
     private String status; // PLANNED, ACTIVE, COMPLETED
 
-    @OneToMany(mappedBy = "roadmap", cascade = CascadeType.ALL, orphanRemoval = true)
+
+    @BatchSize(size = 10)
+    @OrderBy("weekNumber ASC, dayNumber ASC")
+    @OneToMany(mappedBy = "roadmap", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<RoadmapTask> tasks = new ArrayList<>();
 
-    @OneToMany(mappedBy = "roadmap", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<RoadmapResource> resources = new ArrayList<>();
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @OneToMany(mappedBy = "roadmap", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private Set<RoadmapResource> resources = new HashSet<>();
 
-    @OneToMany(mappedBy = "roadmap", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<RoadmapMilestone> milestones = new ArrayList<>();
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
+    @OneToMany(mappedBy = "roadmap", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    private Set<RoadmapMilestone> milestones = new HashSet<>();
 
     @Column(name = "duration_weeks")
     private Integer durationWeeks;

@@ -10,6 +10,7 @@ import com.mymindmirror.backend.payload.request.ClusterRequest;
 import com.mymindmirror.backend.payload.response.JournalEntryResponse;
 import com.mymindmirror.backend.payload.response.MoodDataResponse;
 import com.mymindmirror.backend.payload.response.ClusterResult;
+import com.mymindmirror.backend.payload.response.PageResponse;
 import com.mymindmirror.backend.service.JournalService;
 import com.mymindmirror.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -366,24 +367,43 @@ public class JournalController {
     @GetMapping("/key-phrases")
     public ResponseEntity<Map<String, Long>> getKeyPhraseFrequencies() {
         User currentUser = getCurrentUser();
-        List<JournalEntry> entries = journalService.getAllEntriesForUser(currentUser);
-        Map<String, Long> freq = new HashMap<>();
-        for (JournalEntry entry : entries) {
-            if (entry.getKeyPhrases() != null) {
-                for (KeyPhrase kp : entry.getKeyPhrases()) {
-                    String phrase = kp.getPhrase().toLowerCase();
-                    freq.put(phrase, freq.getOrDefault(phrase, 0L) + 1);
-                }
-            }
-        }
+        Map<String, Long> freq = journalService.getKeyPhraseFrequencies(currentUser);
         return ResponseEntity.ok(freq);
     }
 
+//    @GetMapping("/history/paginated")
+//    public ResponseEntity<Page<JournalEntryResponse>> getJournalHistoryPaginated(
+//            @RequestParam(required = false) String startDate,
+//            @RequestParam(required = false) String endDate,
+//            @PageableDefault(size = 20) Pageable pageable) {
+//        log.info("Received request for paginated journal history.");
+//        User currentUser = getCurrentUser();
+//
+//        LocalDate start, end;
+//        if (startDate == null && endDate == null) {
+//            start = LocalDate.of(1900, 1, 1);
+//            end = LocalDate.of(2100, 12, 31);
+//        } else {
+//            try {
+//                start = (startDate != null) ? LocalDate.parse(startDate) : LocalDate.now().minusDays(30);
+//                end = (endDate != null) ? LocalDate.parse(endDate) : LocalDate.now();
+//            } catch (DateTimeParseException e) {
+//                log.error("Invalid date format: {}", e.getMessage());
+//                return ResponseEntity.badRequest().build();
+//            }
+//        }
+//
+//        Page<JournalEntry> entriesPage = journalService.getJournalEntriesPage(currentUser, start, end, pageable);
+//        Page<JournalEntryResponse> responsePage = entriesPage.map(JournalEntryResponse::new);
+//        return ResponseEntity.ok(responsePage);
+//    }
+
     @GetMapping("/history/paginated")
-    public ResponseEntity<Page<JournalEntryResponse>> getJournalHistoryPaginated(
+    public ResponseEntity<PageResponse<JournalEntryResponse>> getJournalHistoryPaginated(
             @RequestParam(required = false) String startDate,
             @RequestParam(required = false) String endDate,
             @PageableDefault(size = 20) Pageable pageable) {
+
         log.info("Received request for paginated journal history.");
         User currentUser = getCurrentUser();
 
@@ -401,9 +421,9 @@ public class JournalController {
             }
         }
 
-        Page<JournalEntry> entriesPage = journalService.getJournalEntriesPage(currentUser, start, end, pageable);
-        Page<JournalEntryResponse> responsePage = entriesPage.map(JournalEntryResponse::new);
-        return ResponseEntity.ok(responsePage);
+        PageResponse<JournalEntryResponse> response = journalService.getJournalEntriesPageResponse(currentUser, start, end, pageable);
+
+        return ResponseEntity.ok(response);
     }
 
 }

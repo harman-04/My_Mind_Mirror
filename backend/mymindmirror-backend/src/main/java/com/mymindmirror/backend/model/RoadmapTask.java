@@ -2,14 +2,16 @@ package com.mymindmirror.backend.model;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
+import lombok.*;
 
 import java.util.UUID;
 
 @Entity
-@Table(name = "roadmap_tasks")
+@Table(name = "roadmap_tasks" ,
+        indexes = {
+                @Index(name = "idx_roadmap_task_roadmap", columnList = "roadmap_id"),
+                @Index(name = "idx_roadmap_task_week", columnList = "week_number")
+        })
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -20,6 +22,9 @@ public class RoadmapTask {
     @Column(name = "id", updatable = false, nullable = false)
     private UUID id;
 
+
+    @EqualsAndHashCode.Exclude
+    @ToString.Exclude
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "roadmap_id", nullable = false)
     @JsonIgnore

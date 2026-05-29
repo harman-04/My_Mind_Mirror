@@ -254,4 +254,4 @@ const MoodChart = ({ entries, isLoading }) => {
     );
 };
 
-export default MoodChart;
+export default React.memo(MoodChart);

@@ -34,13 +34,25 @@ public class ScheduleController {
     // NEW: Inject CustomTaskRepository to allow backwards syncing
     private final CustomTaskRepository customTaskRepository;
 
+//    @PostMapping("/generate")
+//    public ResponseEntity<?> generateSchedule(@AuthenticationPrincipal UserDetails userDetails) {
+//        Optional<User> userOpt = userService.findByUsername(userDetails.getUsername());
+//        if (userOpt.isEmpty()) {
+//            return ResponseEntity.status(401).body("User not found");
+//        }
+//        scheduleService.generateSchedule(userOpt.get());
+//        return ResponseEntity.ok().body("Schedule generated");
+//    }
+
+    // In ScheduleController.java
     @PostMapping("/generate")
-    public ResponseEntity<?> generateSchedule(@AuthenticationPrincipal UserDetails userDetails) {
+    public ResponseEntity<?> generateSchedule(@AuthenticationPrincipal UserDetails userDetails,
+                                              @RequestParam(required = false, defaultValue = "all") String mode) {
         Optional<User> userOpt = userService.findByUsername(userDetails.getUsername());
         if (userOpt.isEmpty()) {
             return ResponseEntity.status(401).body("User not found");
         }
-        scheduleService.generateSchedule(userOpt.get());
+        scheduleService.generateSchedule(userOpt.get(), mode);
         return ResponseEntity.ok().body("Schedule generated");
     }
 

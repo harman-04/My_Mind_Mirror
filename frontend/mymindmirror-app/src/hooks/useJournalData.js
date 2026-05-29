@@ -31,17 +31,19 @@ const fetchAllJournalEntries = async () => {
 };
 
 export const useJournalEntries = () => {
+  const queryClient = useQueryClient();
+
   return useQuery({
     queryKey: ['journalEntries'],
     queryFn: fetchAllJournalEntries,
-    // When switching tabs, we don't want to refetch *all* entries unnecessarily
-    // if the user hasn't explicitly added/edited/deleted something.
-    // We'll rely on explicit invalidation after mutations.
-    staleTime: 10 * 60 * 1000, // Data considered fresh for 10 minutes
-    // By default, refetchOnMount is true. For a list that's often viewed,
-    // you might want to keep it true, or set a longer staleTime.
-    // Keeping it true for now, as it ensures data is fresh on initial load/remount.
+    staleTime: 5000,
     refetchOnMount: true,
+    // 💡 SMART POLLING:
+    // Checks every 3 seconds ONLY if an entry is still being analyzed.
+    refetchInterval: (query) => {
+      const isAnalyzing = query.state.data?.some(entry => entry.moodScore === null);
+      return isAnalyzing ? 3000 : false;
+    },
   });
 };
 
@@ -157,6 +159,7 @@ export const useTodaysReflection = (todayEntries) => {
 
 
 // --- Mutations (Add, Update, Delete) ---
+// --- Updated useAddJournalEntry ---
 export const useAddJournalEntry = () => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -167,21 +170,40 @@ export const useAddJournalEntry = () => {
         headers: { Authorization: `Bearer ${token}` },
       });
     },
-    onSuccess: () => {
-      // Invalidate all relevant queries to force re-fetch on next access
+    onSuccess: (data) => {
+      const newEntry = data.data;
+
+      // 1. Update local cache immediately
+      queryClient.setQueryData(['journalEntries'], (old) => [newEntry, ...(old || [])]);
+
+      // 2. 💡 CRITICAL: Force an immediate refetch to start the polling "loop"
       queryClient.invalidateQueries({ queryKey: ['journalEntries'] });
 
-            queryClient.invalidateQueries({ queryKey: ['journalEntries', 'paginated'] });
-
-
-        clearTodayReflectionCache();
-      // Invalidate today's reflection because a new entry might make it the latest one
+      clearTodayReflectionCache();
       queryClient.invalidateQueries({ queryKey: ['todaysReflection'] });
-      // You might also want to invalidate 'weeklyEntries', 'moodData', etc. if they are separate queries
+
+      // 3. Toast Promise (remains the same)
+      toast.promise(
+        new Promise((resolve) => {
+          const check = () => {
+            const entries = queryClient.getQueryData(['journalEntries']);
+            const updated = entries?.find(e => e.id === newEntry.id);
+            if (updated && updated.moodScore !== null) resolve(updated);
+            else setTimeout(check, 2000);
+          };
+          check();
+        }),
+        {
+          loading: 'AI is reading your thoughts...',
+          success: 'Analysis complete!',
+          error: 'Analysis took a bit longer, checking back...',
+        }
+      );
     },
   });
 };
 
+// --- Updated useUpdateJournalEntry ---
 export const useUpdateJournalEntry = () => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -193,16 +215,36 @@ export const useUpdateJournalEntry = () => {
       });
     },
     onSuccess: (data, variables) => {
+      // 1. Refresh cache
       queryClient.invalidateQueries({ queryKey: ['journalEntries'] });
-      queryClient.invalidateQueries({ queryKey: ['journalEntries', 'paginated'] });
-
+      queryClient.invalidateQueries({ queryKey: ['journalEntry', variables.entryId] });
       clearTodayReflectionCache();
-      // Invalidate the reflection query (base key)
       queryClient.invalidateQueries({ queryKey: ['todaysReflection'] });
+
+      // 2. 💡 ANALYSIS NOTIFICATION (Promise version)
+      if (data.data.moodScore === null) {
+        toast.promise(
+          new Promise((resolve) => {
+            const check = () => {
+              const entries = queryClient.getQueryData(['journalEntries']);
+              const updated = entries?.find(e => e.id === variables.entryId);
+              if (updated && updated.moodScore !== null) resolve(updated);
+              else setTimeout(check, 2000);
+            };
+            check();
+          }),
+          {
+            loading: 'Re-analyzing your updated entry...',
+            success: 'Update analysis complete!',
+            error: 'Analysis taking longer than expected.',
+          }
+        );
+      } else {
+        toast.success("Entry updated!");
+      }
     },
   });
 };
-
 export const useDeleteJournalEntry = () => {
   const queryClient = useQueryClient();
   return useMutation({
@@ -214,14 +256,29 @@ export const useDeleteJournalEntry = () => {
       });
     },
     onSuccess: (data, entryIdToDelete) => {
-      // Optimistically update the cache to remove the deleted entry immediately
-      queryClient.setQueryData(['journalEntries'], (oldEntries) =>
-        oldEntries ? oldEntries.filter((entry) => entry.id !== entryIdToDelete) : []
+      // 1. Remove from the main history list cache
+      queryClient.setQueryData(['journalEntries'], (old) =>
+        old ? old.filter((e) => e.id !== entryIdToDelete) : []
       );
-            queryClient.invalidateQueries({ queryKey: ['journalEntries', 'paginated'] });
 
-        clearTodayReflectionCache();
-      // Invalidate today's reflection to force it to re-evaluate (it might now be based on a different entry or no entry)
+      // 2. Remove from paginated cache (if you use infinite scroll)
+      queryClient.setQueryData(['journalEntries', 'paginated'], (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map(page => ({
+            ...page,
+            content: page.content.filter(e => e.id !== entryIdToDelete)
+          }))
+        };
+      });
+
+      // 3. Wipe single entry cache
+      queryClient.removeQueries({ queryKey: ['journalEntry', entryIdToDelete] });
+
+      // 4. Force a background refresh of everything to keep counts in sync
+      queryClient.invalidateQueries({ queryKey: ['journalEntries'] });
+      clearTodayReflectionCache();
       queryClient.invalidateQueries({ queryKey: ['todaysReflection'] });
     },
   });
@@ -306,7 +363,33 @@ export const useKeyPhraseFrequencies = () => {
  * Fetches paginated journal entries using the new /history/paginated endpoint.
  * @param {number} pageSize - Number of entries per page (default 20).
  */
-export const usePaginatedJournalEntries = (pageSize = 20) => {
+//export const usePaginatedJournalEntries = (pageSize = 20, options = {}) => {
+//  return useInfiniteQuery({
+//    queryKey: ['journalEntries', 'paginated', pageSize],
+//    queryFn: async ({ pageParam = 0 }) => {
+//      const token = getToken();
+//      if (!token) throw new Error('Not authenticated');
+//      const response = await axios.get(
+//        `${API_BASE_URL}/journal/history/paginated?page=${pageParam}&size=${pageSize}`,
+//        { headers: { Authorization: `Bearer ${token}` } }
+//      );
+//      return response.data; // expects { content: [], pageable, totalPages, ... }
+//    },
+//    getNextPageParam: (lastPage) => {
+//      // Return next page number if available
+//      if (lastPage.pageable && lastPage.pageable.pageNumber < lastPage.totalPages - 1) {
+//        return lastPage.pageable.pageNumber + 1;
+//      }
+//      return undefined;
+//    },
+//    staleTime: 10 * 60 * 1000,
+//    cacheTime: 15 * 60 * 1000,
+//      ...options,
+//  });
+//};
+
+
+export const usePaginatedJournalEntries = (pageSize = 20, options = {}) => {
   return useInfiniteQuery({
     queryKey: ['journalEntries', 'paginated', pageSize],
     queryFn: async ({ pageParam = 0 }) => {
@@ -316,20 +399,20 @@ export const usePaginatedJournalEntries = (pageSize = 20) => {
         `${API_BASE_URL}/journal/history/paginated?page=${pageParam}&size=${pageSize}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      return response.data; // expects { content: [], pageable, totalPages, ... }
+      return response.data; // { content: [], pageNumber, totalPages, ... }
     },
     getNextPageParam: (lastPage) => {
-      // Return next page number if available
-      if (lastPage.pageable && lastPage.pageable.pageNumber < lastPage.totalPages - 1) {
-        return lastPage.pageable.pageNumber + 1;
+      // Use lastPage.pageNumber and lastPage.totalPages directly
+      if (lastPage.pageNumber < lastPage.totalPages - 1) {
+        return lastPage.pageNumber + 1;
       }
       return undefined;
     },
     staleTime: 10 * 60 * 1000,
     cacheTime: 15 * 60 * 1000,
+    ...options,
   });
 };
-
 
 /**
  * Fetches only today's journal entries.
@@ -393,5 +476,39 @@ export const useImportGrowthTip = () => {
     onError: (error) => {
       toast.error('Failed to add growth tip: ' + (error.response?.data?.message || error.message));
     },
+  });
+};
+
+// Fetch a single journal entry by ID
+const fetchJournalEntryById = async (entryId) => {
+  const token = getToken();
+  if (!token) throw new Error('Not authenticated.');
+  const response = await axios.get(`${API_BASE_URL}/journal/${entryId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return response.data;
+};
+
+// --- FIND THIS AT THE BOTTOM OF useJournalData.js ---
+export const useJournalEntryById = (entryId, enabled = true) => {
+  return useQuery({
+    queryKey: ['journalEntry', entryId],
+    queryFn: () => fetchJournalEntryById(entryId),
+    // Ensure we don't fetch if the ID is missing or explicitly disabled
+    enabled: !!entryId && enabled,
+
+    refetchInterval: (data) => {
+      // Only poll if we have data AND the AI is still processing
+      return (data && data.moodScore === null) ? 2000 : false;
+    },
+
+    // 💡 NEW: Stop the loop if the server says the entry is gone (404)
+    retry: (failureCount, error) => {
+      if (error?.response?.status === 404) return false; // Stop immediately on 404
+      return failureCount < 3; // Otherwise retry 3 times
+    },
+
+    staleTime: 0,
+    cacheTime: 5 * 60 * 1000,
   });
 };

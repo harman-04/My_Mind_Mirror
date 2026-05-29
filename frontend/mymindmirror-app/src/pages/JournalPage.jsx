@@ -35,12 +35,18 @@ import {
   Feather,
   User,
 } from 'lucide-react';
+const ALL_TABS = ['today', 'weekly', 'all', 'search', 'milestones', 'roadmap', 'chat', 'schedule'];
 
 function JournalPage() {
   const [username, setUsername] = useState('');
   const [userId, setUserId] = useState(null);
   const [currentClusterResults, setCurrentClusterResults] = useState(null);
-  const [activeTab, setActiveTab] = useState('today');
+const [activeTab, setActiveTab] = useState(() => {
+    const saved = sessionStorage.getItem('journalActiveTab');
+    const validTabs = ['today', 'weekly', 'all', 'search', 'milestones', 'roadmap', 'chat', 'schedule'];
+    return saved && validTabs.includes(saved) ? saved : 'today';
+});
+
   const navigate = useNavigate();
   const { theme } = useTheme();
   const isDarkMode = theme === 'dark';
@@ -57,7 +63,9 @@ function JournalPage() {
     format(startOfCurrentWeek, 'yyyy-MM-dd'),
     format(endOfCurrentWeek, 'yyyy-MM-dd')
   );
-  const paginatedQuery = usePaginatedJournalEntries(20);
+  const paginatedQuery = usePaginatedJournalEntries(20, {
+    enabled: activeTab === 'all',   // <<< key change
+  });
 
   const totalEntries = paginatedQuery.data?.pages[0]?.totalElements || 0;
 
@@ -97,6 +105,17 @@ function JournalPage() {
 
   const todayEntries = activeTab === 'today' ? entriesData : [];
   const weeklyEntries = activeTab === 'weekly' ? entriesData : [];
+
+useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (hash && ALL_TABS.includes(hash)) {
+      setActiveTab(hash);
+      window.history.replaceState(null, '', window.location.pathname);
+    }
+  }, []);
+useEffect(() => {
+    sessionStorage.setItem('journalActiveTab', activeTab);
+}, [activeTab]);
 
   useEffect(() => {
     const token = localStorage.getItem('jwtToken');
