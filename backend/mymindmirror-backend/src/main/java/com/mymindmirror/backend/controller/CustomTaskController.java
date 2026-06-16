@@ -3,6 +3,7 @@ package com.mymindmirror.backend.controller;
 import com.mymindmirror.backend.model.CustomTask;
 import com.mymindmirror.backend.model.ScheduledTask;
 import com.mymindmirror.backend.model.User;
+import com.mymindmirror.backend.payload.request.CustomTaskRequest; // NEW IMPORT
 import com.mymindmirror.backend.payload.response.CustomTaskResponse;
 import com.mymindmirror.backend.repository.CustomTaskRepository;
 import com.mymindmirror.backend.repository.ScheduledTaskRepository;
@@ -26,7 +27,6 @@ public class CustomTaskController {
 
     private final CustomTaskRepository customTaskRepository;
     private final UserService userService;
-    // INJECT THE SCHEDULED TASK REPOSITORY
     private final ScheduledTaskRepository scheduledTaskRepository;
 
     @GetMapping
@@ -47,14 +47,20 @@ public class CustomTaskController {
 
     @PostMapping
     public ResponseEntity<CustomTaskResponse> createCustomTask(@AuthenticationPrincipal UserDetails userDetails,
-                                                               @RequestBody CustomTask task) {
+                                                               @RequestBody CustomTaskRequest request) { // CHANGED HERE
         Optional<User> userOpt = userService.findByUsername(userDetails.getUsername());
         if (userOpt.isEmpty()) return ResponseEntity.status(401).build();
 
-        task.setId(null);
+        // Map DTO to Entity manually
+        CustomTask task = new CustomTask();
         task.setUser(userOpt.get());
+        task.setTitle(request.getTitle());
+        task.setDescription(request.getDescription() != null ? request.getDescription() : "");
+        task.setDueDate(request.getDueDate());
+        task.setEstimatedHours(request.getEstimatedHours() != null ? request.getEstimatedHours() : 1.0);
+        task.setPriority(request.getPriority() != null ? request.getPriority() : "MEDIUM");
+        task.setCompleted(request.getCompleted() != null ? request.getCompleted() : false);
         task.setCreatedAt(LocalDate.now());
-        task.setCompleted(false);
 
         // Save to DB
         CustomTask saved = customTaskRepository.save(task);
@@ -71,7 +77,7 @@ public class CustomTaskController {
     @PutMapping("/{id}")
     public ResponseEntity<CustomTaskResponse> updateCustomTask(@AuthenticationPrincipal UserDetails userDetails,
                                                                @PathVariable UUID id,
-                                                               @RequestBody CustomTask updatedTask) {
+                                                               @RequestBody CustomTaskRequest request) { // CHANGED HERE
         Optional<User> userOpt = userService.findByUsername(userDetails.getUsername());
         if (userOpt.isEmpty()) return ResponseEntity.status(401).build();
 
@@ -81,20 +87,22 @@ public class CustomTaskController {
         }
 
         CustomTask existing = existingOpt.get();
-        existing.setTitle(updatedTask.getTitle());
-        existing.setDescription(updatedTask.getDescription());
-        existing.setDueDate(updatedTask.getDueDate());
-        existing.setEstimatedHours(updatedTask.getEstimatedHours());
+        existing.setTitle(request.getTitle());
+        existing.setDescription(request.getDescription() != null ? request.getDescription() : "");
+        existing.setDueDate(request.getDueDate());
+        existing.setEstimatedHours(request.getEstimatedHours() != null ? request.getEstimatedHours() : 1.0);
 
-        if (updatedTask.getPriority() != null) {
-            existing.setPriority(updatedTask.getPriority());
+        if (request.getPriority() != null) {
+            existing.setPriority(request.getPriority());
         }
-        existing.setCompleted(updatedTask.isCompleted());
+        if (request.getCompleted() != null) {
+            existing.setCompleted(request.getCompleted());
+        }
 
         // Save Custom Task to DB
         CustomTask saved = customTaskRepository.save(existing);
 
-        // --- NEW SYNC LOGIC: Update all corresponding tasks on the calendar! ---
+        // --- SYNC LOGIC: Update all corresponding tasks on the calendar! ---
         List<ScheduledTask> linkedTasks = scheduledTaskRepository.findByCustomTaskId(saved.getId());
         for(ScheduledTask st : linkedTasks) {
             st.setTitle(saved.getTitle());         // Sync title changes
@@ -121,7 +129,7 @@ public class CustomTaskController {
         if (task.isEmpty() || !task.get().getUser().getId().equals(userOpt.get().getId()))
             return ResponseEntity.status(404).build();
 
-        // --- NEW SYNC LOGIC: Delete all corresponding tasks from the calendar! ---
+        // Delete all corresponding tasks from the calendar!
         List<ScheduledTask> linkedTasks = scheduledTaskRepository.findByCustomTaskId(id);
         scheduledTaskRepository.deleteAll(linkedTasks);
 

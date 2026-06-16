@@ -24,25 +24,25 @@ public class MLServiceClient {
         this.mlServiceWebClient = mlServiceWebClient;
     }
 
-    @CircuitBreaker(name = "mlServiceCircuitBreaker", fallbackMethod = "fallbackJournalAnalysis")
-    public Mono<Map<String, Object>> analyzeJournal(String journalText, String apiKey) {
-        return mlServiceWebClient.post()
-                .uri("/ml/journal/analyze_journal")
-                .header("X-Gemini-Key", apiKey != null ? apiKey : "")
-                .bodyValue(Map.of("text", journalText))
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                .flatMap(response -> {
-                    Object warning = response.get("warning");
-                    Object error = response.get("error");
-                    boolean hasError = (warning != null && !"null".equals(warning) && !"".equals(warning)) || error != null;
-                    if (hasError) {
-                        log.warn("ML service returned warning/error: {}", response);
-                        return Mono.error(new RuntimeException("ML service error: " + response));
-                    }
-                    return Mono.just(response);
-                });
-    }
+//    @CircuitBreaker(name = "mlServiceCircuitBreaker", fallbackMethod = "fallbackJournalAnalysis")
+//    public Mono<Map<String, Object>> analyzeJournal(String journalText, String apiKey) {
+//        return mlServiceWebClient.post()
+//                .uri("/ml/journal/analyze_journal")
+//                .header("X-Gemini-Key", apiKey != null ? apiKey : "")
+//                .bodyValue(Map.of("text", journalText))
+//                .retrieve()
+//                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
+//                .flatMap(response -> {
+//                    Object warning = response.get("warning");
+//                    Object error = response.get("error");
+//                    boolean hasError = (warning != null && !"null".equals(warning) && !"".equals(warning)) || error != null;
+//                    if (hasError) {
+//                        log.warn("ML service returned warning/error: {}", response);
+//                        return Mono.error(new RuntimeException("ML service error: " + response));
+//                    }
+//                    return Mono.just(response);
+//                });
+//    }
 
     private Mono<Map<String, Object>> fallbackJournalAnalysis(String journalText, String apiKey, Throwable t) {
         log.warn("Fallback for analyzeJournal: {}", t.getMessage());
@@ -136,7 +136,7 @@ public class MLServiceClient {
                 .retrieve()
                 .bodyToMono(MilestoneInsightResponse.class)
                 .flatMap(response -> {
-                    if (response.getStatus() == InsightStatus.ERROR) {
+                    if (response.status() == InsightStatus.ERROR) {
                         log.warn("Milestone insights returned ERROR status: {}", response);
                         return Mono.error(new RuntimeException("Milestone insights failed"));
                     }

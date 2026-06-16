@@ -3,10 +3,14 @@ package com.mymindmirror.backend.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mymindmirror.backend.enums.AITask;
 import com.mymindmirror.backend.enums.Status;
 import com.mymindmirror.backend.model.*;
 import com.mymindmirror.backend.payload.request.ScheduleTaskRequest;
+import com.mymindmirror.backend.payload.response.ScheduleItem;
+import com.mymindmirror.backend.payload.response.ScheduleResponse;
 import com.mymindmirror.backend.repository.*;
+import com.mymindmirror.backend.service.ai.DynamicAiClientService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,140 +40,19 @@ public class ScheduleService {
     private final TaskRepository milestoneTaskRepository;
     private final CustomTaskRepository customTaskRepository;
     private final ObjectMapper objectMapper;
-
-
-//    @Transactional
-//    public void generateSchedule(User user) {
-//        scheduledTaskRepository.deleteByUser(user);
-//
-//        // 1. Get user preferences
-//        UserPreferences preferences = userPreferencesRepository.findByUser(user)
-//                .orElseGet(() -> createDefaultPreferences(user));
-//        String availableHoursJson = preferences.getAvailableHoursJson();
-//
-//        // 2. Collect ALL unscheduled tasks (with logging)
-//        List<ScheduleTaskRequest.TaskItem> tasks = collectUnscheduledTasks(user);
-//        log.info("Collected tasks for schedule generation: {} total (roadmap: {}, milestone: {}, custom: {})",
-//                tasks.size(),
-//                tasks.stream().filter(t -> t.getId().startsWith("roadmap_")).count(),
-//                tasks.stream().filter(t -> t.getId().startsWith("milestone_")).count(),
-//                tasks.stream().filter(t -> t.getId().startsWith("custom_")).count());
-//
-//        if (tasks.isEmpty()) {
-//            log.info("No unscheduled tasks for user {}", user.getUsername());
-//            return;
-//        }
-//
-//        // Limit AI batch to first 20 tasks (Gemini can handle this many)
-//        List<ScheduleTaskRequest.TaskItem> aiTasks = tasks.size() > 20 ? tasks.subList(0, 20) : tasks;
-//        log.info("Sending {} tasks to AI for scheduling", aiTasks.size());
-//
-//        // 3. Call AI for schedule
-//        Map<String, Object> request = Map.of(
-//                "tasks", aiTasks,
-//                "availableHours", availableHoursJson,
-//                "currentDate", LocalDate.now().toString()
-//        );
-//        String apiKey = apiKeyService.getDecryptedApiKey(user);
-//        log.debug("Sending to AI: tasks={}, availableHours={}", aiTasks.size(), availableHoursJson);
-//        Map<String, Object> aiResponse = mlServiceWebClient.post()
-//                .uri("/ml/schedule/generate")
-//                .header("X-Gemini-Key", apiKey != null ? apiKey : "")
-//                .bodyValue(request)
-//                .retrieve()
-//                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-//                .block();
-//
-//        List<Map<String, Object>> schedule = new ArrayList<>();
-//        if (aiResponse != null && aiResponse.containsKey("schedule")) {
-//            schedule = (List<Map<String, Object>>) aiResponse.get("schedule");
-//            log.info("AI returned {} scheduled tasks", schedule.size());
-//        } else {
-//            log.warn("AI returned no schedule, using fallback");
-//        }
-//
-//        // 4. Build a set of task IDs that were scheduled by AI
-//        Set<String> scheduledTaskIds = schedule.stream()
-//                .map(item -> (String) item.get("taskId"))
-//                .collect(Collectors.toSet());
-//
-//        // 5. Identify tasks that were not scheduled
-//        List<ScheduleTaskRequest.TaskItem> unscheduledRemaining = tasks.stream()
-//                .filter(t -> !scheduledTaskIds.contains(t.getId()))
-//                .collect(Collectors.toList());
-//
-//        if (!unscheduledRemaining.isEmpty()) {
-//            log.info("AI failed to schedule {} tasks, using fallback scheduler", unscheduledRemaining.size());
-//            // Use the same deterministic scheduler as in Flask (or a local one)
-//            LocalDate startDate = LocalDate.now();
-//            Map<String, List<TimeSlot>> availableSlots = parseAvailableHours(availableHoursJson);
-//            List<Map<String, Object>> fallbackSchedule = simpleSchedule(unscheduledRemaining, availableSlots, startDate);
-//            schedule.addAll(fallbackSchedule);
-//        }
-//
-//        // 6. Save all scheduled tasks
-//        for (Map<String, Object> item : schedule) {
-//            String taskIdStr = (String) item.get("taskId");
-//            String dateStr = (String) item.get("date");
-//            String startTimeStr = (String) item.get("startTime");
-//            String endTimeStr = (String) item.get("endTime");
-//
-//            if (taskIdStr == null || dateStr == null || startTimeStr == null || endTimeStr == null) {
-//                log.warn("Invalid schedule item, skipping: {}", item);
-//                continue;
-//            }
-//
-//            LocalDate date = LocalDate.parse(dateStr);
-//            LocalTime start = LocalTime.parse(startTimeStr);
-//            LocalTime end = LocalTime.parse(endTimeStr);
-//            UUID taskId = UUID.fromString(taskIdStr);
-//
-//            ScheduledTask scheduled = new ScheduledTask();
-//            scheduled.setUser(user);
-//            scheduled.setScheduledDate(date);
-//            scheduled.setStartTime(start);
-//            scheduled.setEndTime(end);
-//            scheduled.setCompleted(false);
-//            scheduled.setReminderSent(false);
-//
-//            // Find which type of task
-//            // Find which type of task and assign the correct priority
-//            if (roadmapTaskRepository.existsById(taskId)) {
-//                scheduled.setRoadmapTaskId(taskId);
-//                RoadmapTask rt = roadmapTaskRepository.findById(taskId).get();
-//                scheduled.setTitle(rt.getDescription());
-//                scheduled.setPriority("MEDIUM"); // Roadmap is default medium
-//            } else if (milestoneTaskRepository.existsById(taskId)) {
-//                scheduled.setMilestoneTaskId(taskId);
-//                Task mt = milestoneTaskRepository.findById(taskId).get();
-//                scheduled.setTitle(mt.getDescription());
-//                scheduled.setPriority(mt.getStatus() == Status.OVERDUE ? "HIGH" : "MEDIUM");
-//            } else if (customTaskRepository.existsById(taskId)) {
-//                scheduled.setCustomTaskId(taskId);
-//                CustomTask ct = customTaskRepository.findById(taskId).get();
-//                scheduled.setTitle(ct.getTitle());
-//                scheduled.setPriority(ct.getPriority()); // Grab the actual Custom Task priority!
-//            } else {
-//                log.warn("Task ID {} not found in any repository", taskId);
-//                continue;
-//            }
-//            scheduledTaskRepository.save(scheduled);
-//            log.info("Saved scheduled task: {} on {}", scheduled.getTitle(), date);
-//        }
-//    }
-
+    private final DynamicAiClientService aiClientService;
 
     @Transactional
     public void generateSchedule(User user, String mode) {
-        // ✅ Delete ALL scheduled tasks for this user (clean slate)
+        // Delete all scheduled tasks (clean slate)
         scheduledTaskRepository.deleteByUser(user);
 
-        // 1. Get user preferences (unchanged)
+        // Get user preferences (available hours)
         UserPreferences preferences = userPreferencesRepository.findByUser(user)
                 .orElseGet(() -> createDefaultPreferences(user));
         String availableHoursJson = preferences.getAvailableHoursJson();
 
-        // 2. Collect tasks based on mode
+        // Collect tasks based on mode
         List<ScheduleTaskRequest.TaskItem> tasks = collectTasksByMode(user, mode);
         log.info("Collected tasks for schedule generation (mode={}): {} total", mode, tasks.size());
 
@@ -178,51 +61,57 @@ public class ScheduleService {
             return;
         }
 
-
-        // 3. AI scheduling (unchanged)
+        // Limit to first 20 tasks for AI (Gemini can handle)
         List<ScheduleTaskRequest.TaskItem> aiTasks = tasks.size() > 20 ? tasks.subList(0, 20) : tasks;
-        // ... rest of method identical to existing generateSchedule ...
-        // (the rest of the method after collecting tasks remains the same)
+        LocalDateTime currentDateTime = LocalDateTime.now();
 
-        log.info("Sending {} tasks to AI for scheduling", aiTasks.size());
+        // Build prompt and call AI
+        String prompt = buildSchedulePrompt(aiTasks, availableHoursJson, currentDateTime);
+        ScheduleResponse aiResponse = null;
+        boolean useFallback = false;
 
-        // 3. Call AI for schedule
-        Map<String, Object> request = Map.of(
-                "tasks", aiTasks,
-                "availableHours", availableHoursJson,
-                "currentDateTime", LocalDateTime.now().toString()
-        );
-        String apiKey = apiKeyService.getDecryptedApiKey(user);
-        log.debug("Sending to AI: tasks={}, availableHours={}", aiTasks.size(), availableHoursJson);
-        Map<String, Object> aiResponse = mlServiceWebClient.post()
-                .uri("/ml/schedule/generate")
-                .header("X-Gemini-Key", apiKey != null ? apiKey : "")
-                .bodyValue(request)
-                .retrieve()
-                .bodyToMono(new ParameterizedTypeReference<Map<String, Object>>() {})
-                .block();
+        try {
+            aiResponse = aiClientService.generateStructured(prompt, ScheduleResponse.class, user.getId(), AITask.SCHEDULE_GENERATION);
+            if (aiResponse == null || aiResponse.schedule() == null) {
+                useFallback = true;
+            }
+        } catch (Exception e) {
+            log.error("AI schedule generation failed, using fallback", e);
+            useFallback = true;
+        }
 
         List<Map<String, Object>> schedule = new ArrayList<>();
-        if (aiResponse != null && aiResponse.containsKey("schedule")) {
-            schedule = (List<Map<String, Object>>) aiResponse.get("schedule");
+        Set<String> scheduledTaskIds = new HashSet<>();
+
+        if (!useFallback && aiResponse != null) {
+            // Convert AI schedule items to the internal map format
+            for (ScheduleItem item : aiResponse.schedule()) {
+                Map<String, Object> scheduleItem = new HashMap<>();
+                scheduleItem.put("taskId", item.taskId());
+                scheduleItem.put("date", item.date());
+                scheduleItem.put("startTime", item.startTime());
+                scheduleItem.put("endTime", item.endTime());
+                schedule.add(scheduleItem);
+                scheduledTaskIds.add(item.taskId());
+            }
             log.info("AI returned {} scheduled tasks", schedule.size());
         } else {
             log.warn("AI returned no schedule, using fallback");
         }
 
-        // 4. Build a set of task IDs that were scheduled by AI
-        Set<String> scheduledTaskIds = schedule.stream()
-                .map(item -> (String) item.get("taskId"))
-                .collect(Collectors.toSet());
+        // Identify tasks not scheduled by AI (if AI was used) – otherwise all tasks remain unscheduled
+        List<ScheduleTaskRequest.TaskItem> unscheduledRemaining;
+        if (!useFallback) {
+            unscheduledRemaining = tasks.stream()
+                    .filter(t -> !scheduledTaskIds.contains(t.getId()))
+                    .collect(Collectors.toList());
+        } else {
+            unscheduledRemaining = new ArrayList<>(tasks);
+        }
 
-        // 5. Identify tasks that were not scheduled
-        List<ScheduleTaskRequest.TaskItem> unscheduledRemaining = tasks.stream()
-                .filter(t -> !scheduledTaskIds.contains(t.getId()))
-                .collect(Collectors.toList());
-
+        // Use fallback scheduler for any remaining tasks
         if (!unscheduledRemaining.isEmpty()) {
-            log.info("AI failed to schedule {} tasks, using fallback scheduler", unscheduledRemaining.size());
-            // Use the same deterministic scheduler as in Flask (or a local one)
+            log.info("Scheduling {} tasks using fallback scheduler", unscheduledRemaining.size());
             LocalDate startDate = LocalDate.now();
             LocalTime currentTime = LocalTime.now();
             Map<String, List<TimeSlot>> availableSlots = parseAvailableHours(availableHoursJson);
@@ -230,7 +119,7 @@ public class ScheduleService {
             schedule.addAll(fallbackSchedule);
         }
 
-        // 6. Save all scheduled tasks
+        // Save all scheduled tasks (existing save logic unchanged)
         for (Map<String, Object> item : schedule) {
             String taskIdStr = (String) item.get("taskId");
             String dateStr = (String) item.get("date");
@@ -255,13 +144,12 @@ public class ScheduleService {
             scheduled.setCompleted(false);
             scheduled.setReminderSent(false);
 
-            // Find which type of task
-            // Find which type of task and assign the correct priority
+            // Determine task type and set title/priority (same as before)
             if (roadmapTaskRepository.existsById(taskId)) {
                 scheduled.setRoadmapTaskId(taskId);
                 RoadmapTask rt = roadmapTaskRepository.findById(taskId).get();
                 scheduled.setTitle(rt.getDescription());
-                scheduled.setPriority("MEDIUM"); // Roadmap is default medium
+                scheduled.setPriority("MEDIUM");
             } else if (milestoneTaskRepository.existsById(taskId)) {
                 scheduled.setMilestoneTaskId(taskId);
                 Task mt = milestoneTaskRepository.findById(taskId).get();
@@ -271,7 +159,7 @@ public class ScheduleService {
                 scheduled.setCustomTaskId(taskId);
                 CustomTask ct = customTaskRepository.findById(taskId).get();
                 scheduled.setTitle(ct.getTitle());
-                scheduled.setPriority(ct.getPriority()); // Grab the actual Custom Task priority!
+                scheduled.setPriority(ct.getPriority());
             } else {
                 log.warn("Task ID {} not found in any repository", taskId);
                 continue;
@@ -281,6 +169,56 @@ public class ScheduleService {
         }
     }
 
+    private String buildSchedulePrompt(List<ScheduleTaskRequest.TaskItem> tasks,
+                                       String availableHoursJson,
+                                       LocalDateTime currentDateTime) {
+        // Build tasks description
+        StringBuilder tasksDesc = new StringBuilder();
+        for (ScheduleTaskRequest.TaskItem task : tasks) {
+            tasksDesc.append(String.format("- id: %s, title: %s, est: %.1fh, due: %s, priority: %s\n",
+                    task.getId(),
+                    task.getTitle(),
+                    task.getEstimatedHours() != null ? task.getEstimatedHours() : 1.0,
+                    task.getDueDate() != null ? task.getDueDate() : "none",
+                    task.getPriority() != null ? task.getPriority() : "MEDIUM"));
+        }
+
+        return String.format("""
+    You are a smart scheduling assistant. Create a weekly schedule for the following tasks.
+
+    **Start scheduling from %s (current datetime). Do NOT schedule any task before this moment.**
+    **Available hours per day (local time, 24h format):**
+    %s
+
+    **Tasks to schedule:**
+    %s
+
+    **Rules:**
+    - Respect due dates (schedule earlier tasks first).
+    - Higher priority tasks (HIGH > MEDIUM > LOW) come before lower priority.
+    - Do not exceed available time slots per day.
+    - Each task must be assigned a specific day and time slot (startTime and endTime) that is **after the current moment**.
+    - If a task cannot fit into any free slot, add its id to "overflow" list.
+
+    **Output format (ONLY valid JSON, no extra text):**
+    {
+      "schedule": [
+        { "taskId": "task-id-1", "date": "YYYY-MM-DD", "startTime": "09:00", "endTime": "10:00" }
+      ],
+      "overflow": ["task-id-2", "task-id-3"]
+    }
+
+    **Example:**
+    {
+      "schedule": [
+        { "taskId": "abc123", "date": "2026-05-12", "startTime": "09:00", "endTime": "10:30" }
+      ],
+      "overflow": []
+    }
+
+    Now generate the schedule for the given tasks.
+    """, currentDateTime.toString(), availableHoursJson, tasksDesc.toString());
+    }
     // New helper method
     private List<ScheduleTaskRequest.TaskItem> collectTasksByMode(User user, String mode) {
         if ("custom".equals(mode)) {
@@ -525,13 +463,6 @@ public class ScheduleService {
 
         return items;
     }
-
-//    private Double estimateDuration(String details) {
-//        // Simple fallback: 1 hour if no details, otherwise try to extract from text
-//        if (details == null) return 1.0;
-//        // Could call a simple AI or just return default
-//        return 1.5;
-//    }
 
     private Double estimateDuration(String details, String description) {
         if (details != null && details.length() > 100) return 2.0;

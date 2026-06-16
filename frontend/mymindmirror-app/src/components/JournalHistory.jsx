@@ -7,7 +7,7 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { useTheme } from "../contexts/ThemeContext";
 import { useUpdateJournalEntry, useDeleteJournalEntry,  useImportGrowthTip, useJournalEntryById  } from '../hooks/useJournalData';
 import { SkeletonCard } from './Skeleton';
-import { AlertTriangle, Download, ChevronDown, ChevronUp, Edit, Trash2, Save, X, BookOpen, Lightbulb, Heart, Brain, Target, Clock, Plus, Loader } from 'lucide-react';
+import { AlertTriangle, Download, ChevronDown, ChevronUp, Edit, Trash2, Save, X, BookOpen, Lightbulb, Heart, Brain, Target, Clock, Plus, Loader, Sparkles } from 'lucide-react';
 import { downloadChartAsPng } from '../utils/downloadChart';
 
 // Helper to format markdown-like text (headings, blockquotes, lists, bold, italic, line breaks)
@@ -110,7 +110,7 @@ const TRUNCATION_LENGTH = 150;
 // Register Chart.js components
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-// Emotion color palettes (unchanged)
+// Emotion color palettes
 const EMOTION_CHART_COLORS = {
   joy: "#5CC8C2", sadness: "#B399D4", anger: "#FF8A7A", fear: "#A93226",
   surprise: "#85C1E9", neutral: "#E0E0E0", love: "#E74C3C", disgust: "#6C3483",
@@ -129,7 +129,7 @@ const EMOTION_CHART_COLORS_DARK = {
   contentment: "#C0FFC0", frustration: "#FF7F50", gratitude: "#D0FF80", hope: "#C0E0FF",
 };
 
-// Emotion chip styles (unchanged)
+// Emotion chip styles
 const emotionChipColors = {
   joy: "bg-green-500", sadness: "bg-blue-500", anger: "bg-red-500", fear: "bg-purple-500",
   surprise: "bg-yellow-500", disgust: "bg-indigo-500", love: "bg-pink-500", anxiety: "bg-orange-500",
@@ -138,7 +138,7 @@ const emotionChipColors = {
 };
 
 // ------------------------------------------------------------------
-// Portal-based Delete Confirmation Modal (glass version)
+// Portal-based Delete Confirmation Modal
 // ------------------------------------------------------------------
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, theme, isDeleting }) => {
   const [mounted, setMounted] = useState(false);
@@ -164,7 +164,7 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, theme, isDeleting
           <div className="flex justify-center gap-3">
             <button
                                 onClick={onConfirm}
-                                disabled={isDeleting} // 💡 Disable when deleting
+                                disabled={isDeleting}
                                 className="px-5 py-2 rounded-full bg-red-600 text-white flex items-center gap-2 disabled:opacity-50"
                             >
                                 {isDeleting ? <Loader size={16} className="animate-spin" /> : null}
@@ -172,7 +172,7 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, theme, isDeleting
                             </button>
                             <button
                                 onClick={onClose}
-                                disabled={isDeleting} // 💡 Prevent closing while request is in flight
+                                disabled={isDeleting}
                                 className="px-5 py-2 rounded-full bg-gray-200 text-gray-800 disabled:opacity-50"
                             >
                                 Cancel
@@ -244,8 +244,6 @@ const ExpandedEntryContent = ({ entry, isDarkMode, chartRefs, sectionBg, cardBor
         </div>
       )}
 
-
-
       {/* Mood Score */}
       <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
         <div className="flex justify-between items-center">
@@ -289,7 +287,6 @@ const ExpandedEntryContent = ({ entry, isDarkMode, chartRefs, sectionBg, cardBor
       )}
 
       {/* Growth Tips Section */}
-      {/* Growth Tips Section */}
       {parsedGrowthTips.length > 0 && (
         <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
           <div className="flex items-center gap-2 mb-3">
@@ -299,15 +296,12 @@ const ExpandedEntryContent = ({ entry, isDarkMode, chartRefs, sectionBg, cardBor
           <div className="space-y-4">
             {parsedGrowthTips.map((tip, idx) => (
               <div key={idx} className="relative group">
-                {/* 💡 Vertical line logic removed for a cleaner look */}
                 <div className="pr-12 prose prose-sm dark:prose-invert max-w-none">
                   <div
                     className="growth-tip-content"
                     dangerouslySetInnerHTML={{ __html: formatText(tip) }}
                   />
                 </div>
-
-                {/* Import Button */}
                 <button
                   onClick={() => importGrowthTipMutation.mutate(tip)}
                   disabled={isPending}
@@ -321,6 +315,7 @@ const ExpandedEntryContent = ({ entry, isDarkMode, chartRefs, sectionBg, cardBor
           </div>
         </div>
       )}
+
       {/* Key Phrases */}
       {parsedKeyPhrases.length > 0 && (
         <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
@@ -388,10 +383,12 @@ const AnalysisLoadingState = ({ sectionBg, cardBorder }) => (
     </div>
   </div>
 );
+
 // ------------------------------------------------------------------
 // Main JournalHistory Component
 // ------------------------------------------------------------------
-function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase, isLoading }) {
+// 💡 UPDATED: Now receives searchType as a prop
+function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase, isLoading, searchType }) {
   const [expandedEntryId, setExpandedEntryId] = useState(null);
   const [editingEntryId, setEditingEntryId] = useState(null);
   const [editedText, setEditedText] = useState("");
@@ -406,11 +403,8 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
   const deleteMutation = useDeleteJournalEntry();
   const importGrowthTipMutation = useImportGrowthTip();
 
-
-// Helper to detect if an entry is still being analysed (AI fields missing)
   const isProcessing = (entry) => entry && entry.moodScore === null;
 
-  // Fetch a single entry only when expanded and the list entry is still processing
   const { data: fetchedEntry, isLoading: isFetchingEntry } = useJournalEntryById(
     expandedEntryId,
     expandedEntryId !== null &&
@@ -418,17 +412,12 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
       isProcessing(entries?.find(e => e.id === expandedEntryId))
   );
 
-
-
-  // Glass‑morphic styles
   const cardBg = isDarkMode ? 'bg-gray-800/60 backdrop-blur-md' : 'bg-white/70 backdrop-blur-md';
   const cardBorder = isDarkMode ? 'border-gray-700/50' : 'border-gray-200/50';
   const sectionBg = isDarkMode ? 'bg-gray-800/40 backdrop-blur-sm' : 'bg-white/80 backdrop-blur-sm';
-  const textSecondary = isDarkMode ? 'text-gray-300' : 'text-gray-600';
 
   if (isLoading) return <SkeletonCard count={3} />;
 
-  // Filter and group entries (same as before)
   let filteredEntries = entries;
   if (filterClusterId !== null && filterClusterId !== undefined) {
     filteredEntries = filteredEntries.filter(entry => entry.clusterId === filterClusterId);
@@ -440,20 +429,31 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
     );
   }
 
-  const groupedEntries = filteredEntries.reduce((acc, entry) => {
-    const dateKey = format(parseISO(entry.entryDate), "EEEE, MMMM dd, yyyy");
-    if (!acc[dateKey]) acc[dateKey] = [];
-    acc[dateKey].push(entry);
-    acc[dateKey].sort((a, b) => parseISO(b.creationTimestamp) - parseISO(a.creationTimestamp));
-    return acc;
-  }, {});
-  const sortedDates = Object.keys(groupedEntries).sort((a, b) => {
-    const dateA = parseISO(a.split(", ")[1] + ", " + a.split(", ")[2]);
-    const dateB = parseISO(b.split(", ")[1] + ", " + b.split(", ")[2]);
-    return dateB - dateA;
-  });
+  // 💡 NEW: Relevance Bypass Logic
+  let groupedEntries = {};
+  let sortedDates = [];
 
-  // --- Handlers (unchanged) ---
+  if (searchType === 'semantic') {
+    // If it's a semantic search, DO NOT sort by date. Preserve the AI relevance array!
+    const semanticKey = "Matches Ranked by AI Relevance";
+    groupedEntries[semanticKey] = filteredEntries;
+    sortedDates = [semanticKey];
+  } else {
+    // Standard Date grouping for normal history viewing
+    groupedEntries = filteredEntries.reduce((acc, entry) => {
+      const dateKey = format(parseISO(entry.entryDate), "EEEE, MMMM dd, yyyy");
+      if (!acc[dateKey]) acc[dateKey] = [];
+      acc[dateKey].push(entry);
+      acc[dateKey].sort((a, b) => parseISO(b.creationTimestamp) - parseISO(a.creationTimestamp));
+      return acc;
+    }, {});
+    sortedDates = Object.keys(groupedEntries).sort((a, b) => {
+      const dateA = parseISO(a.split(", ")[1] + ", " + a.split(", ")[2]);
+      const dateB = parseISO(b.split(", ")[1] + ", " + b.split(", ")[2]);
+      return dateB - dateA;
+    });
+  }
+
   const toggleExpand = (id) => {
     setExpandedEntryId(expandedEntryId === id ? null : id);
     if (expandedEntryId === id && editingEntryId === id) handleCancelEdit();
@@ -500,23 +500,17 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
     setShowDeleteConfirm(true);
   };
 
-  // --- FIND THIS IN JournalHistory.js ---
   const confirmDelete = async () => {
     try {
-      const idToDelete = deleteEntryId; // Capture the ID
+      const idToDelete = deleteEntryId;
       await deleteMutation.mutateAsync(idToDelete);
-
-      // 💡 NEW: If the entry we just deleted was expanded, close it!
       if (expandedEntryId === idToDelete) {
         setExpandedEntryId(null);
       }
-
       setShowDeleteConfirm(false);
       setDeleteEntryId(null);
       toast.success("Entry deleted successfully");
     } catch (err) {
-      // Note: deleteMutation.isError is already handled in the UI,
-      // but we clear the modal anyway on major failure
       setShowDeleteConfirm(false);
       setDeleteEntryId(null);
     }
@@ -527,7 +521,6 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
     setDeleteEntryId(null);
   };
 
-  // Helper functions for mood, chart, etc.
   const getMoodColorClass = (moodScore) => {
     if (moodScore === null || isNaN(moodScore)) return "text-gray-500 dark:text-gray-400";
     if (moodScore >= 0.7) return "text-green-500 dark:text-green-400";
@@ -587,20 +580,17 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
       {sortedDates.map(dateKey => (
         <div key={dateKey} className="space-y-4">
           <h3 className="text-xl font-poppins font-semibold text-purple-600 dark:text-teal-400 mb-2 pb-2 border-b border-purple-200 dark:border-teal-800">
-            {dateKey}
+            {searchType === 'semantic' ? (
+                <span className="flex items-center gap-2">
+                    <Sparkles size={20} /> {dateKey}
+                </span>
+            ) : dateKey}
           </h3>
-          {groupedEntries[dateKey].map(entry => {
+          {groupedEntries[dateKey].map((entry, index) => {
               const isThisEntryExpanded = expandedEntryId === entry.id;
-
-              // 1. Favor the detailed poll (fetchedEntry) if available
               const displayEntry = (isThisEntryExpanded && fetchedEntry && fetchedEntry.id === entry.id)
                   ? fetchedEntry
                   : entry;
-
-              // 2. 💡 Use displayEntry here so it updates live when polling finishes
-              const themeName = (displayEntry.clusterId !== null && displayEntry.clusterId !== undefined && clusterThemes)
-                ? clusterThemes[`Theme ${displayEntry.clusterId + 1}`] || `Theme ${displayEntry.clusterId + 1}`
-                : "Unassigned";
 
               const isProcessing = displayEntry.moodScore === null;
               const showSkeleton = isThisEntryExpanded && isProcessing;
@@ -614,11 +604,12 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
                                 <div className="flex flex-wrap items-center gap-3">
                                     <Clock size={14} className="text-purple-400" />
                                     <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                                        {entry.creationTimestamp ? format(parseISO(entry.creationTimestamp), "h:mm a") : "N/A"}
+                                        {/* If semantic, show full date next to time since they aren't grouped by date anymore */}
+                                        {searchType === 'semantic' && entry.creationTimestamp
+                                            ? format(parseISO(entry.creationTimestamp), "MMM d, yyyy • h:mm a")
+                                            : entry.creationTimestamp ? format(parseISO(entry.creationTimestamp), "h:mm a") : "N/A"}
                                     </span>
 
-                                    {/* 💡 LIVE BADGE UPDATED */}
-                                   {/* 💡 REFINED LIVE BADGE */}
                                    <span className={`text-sm font-semibold flex items-center gap-2 ${isProcessing ? 'text-purple-500' : getMoodColorClass(displayEntry.moodScore)}`}>
                                      {isProcessing ? (
                                        <span className="inline-flex items-center gap-1 bg-purple-500/10 px-2 py-0.5 rounded-md animate-pulse">
@@ -637,8 +628,7 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
                                 </div>
                             </div>
 
-
-               {/* Collapsed Preview */}
+                           {/* Collapsed Preview */}
                            {expandedEntryId !== entry.id && (
                                <div className="p-4 pt-0 text-sm text-gray-600 dark:text-gray-400">
                                    {entry.rawText.length > TRUNCATION_LENGTH
@@ -651,7 +641,6 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
                            {expandedEntryId === entry.id && (
                                <div className="p-4 pt-0 space-y-4">
                                    {editingEntryId === entry.id ? (
-                      // 1. Edit mode logic
                       <div id={`edit-area-${entry.id}`} className="space-y-3">
                         <textarea
                           value={editedText}
@@ -669,10 +658,8 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
                         </div>
                       </div>
                     ) : showSkeleton ? (
-                                                /* 💡 SKELETON */
                                                 <AnalysisLoadingState sectionBg={sectionBg} cardBorder={cardBorder} />
                                             ) : (
-                                                /* 💡 FINAL CONTENT */
                                                 <>
                                                     <ExpandedEntryContent
                                                         entry={displayEntry}
@@ -687,7 +674,6 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
                                                         importGrowthTipMutation={importGrowthTipMutation}
                                                         isPending={importGrowthTipMutation.isPending}
                                                     />
-                        {/* Action Buttons */}
                         <div className="flex justify-end gap-2 pt-2">
                           <button
                             onClick={() => handleEditClick(entry)}

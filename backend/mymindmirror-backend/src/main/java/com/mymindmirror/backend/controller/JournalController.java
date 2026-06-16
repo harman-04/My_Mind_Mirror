@@ -364,6 +364,33 @@ public class JournalController {
         }
     }
 
+    /**
+     * Searches journal entries based on semantic meaning/concepts using AI Vector RAG.
+     * @param concept The natural language concept to search for.
+     * @return ResponseEntity with a list of matching JournalEntryResponse objects.
+     */
+    @GetMapping("/search/semantic")
+    public ResponseEntity<List<JournalEntryResponse>> searchJournalEntriesSemantically(
+            @RequestParam String concept) {
+        log.info("Received request for semantic search: '{}'", concept);
+        try {
+            User currentUser = getCurrentUser();
+            List<JournalEntry> entries = journalService.searchJournalEntriesSemantically(currentUser, concept);
+
+            log.info("Found {} journal entries matching concept '{}' for user {}.",
+                    entries.size(), concept, currentUser.getUsername());
+
+            List<JournalEntryResponse> responses = entries.stream()
+                    .map(JournalEntryResponse::new)
+                    .collect(Collectors.toList());
+
+            return ResponseEntity.ok(responses);
+        } catch (Exception e) {
+            log.error("Unexpected error during semantic search: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+    }
+
     @GetMapping("/key-phrases")
     public ResponseEntity<Map<String, Long>> getKeyPhraseFrequencies() {
         User currentUser = getCurrentUser();

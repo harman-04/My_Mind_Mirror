@@ -106,14 +106,14 @@ function WeeklyDashboard({
             </div>
 
             {/* Journal Clusters */}
-            <JournalClusters
-                userId={userId}
-                onClusteringComplete={onClusteringComplete}
-                journalEntries={weeklyEntries}
-                currentClusterResults={currentClusterResults}
-                onFilterCluster={handleFilterCluster}
-                isLoading={isLoading}
-            />
+{/*             <JournalClusters */}
+{/*                 userId={userId} */}
+{/*                 onClusteringComplete={onClusteringComplete} */}
+{/*                 journalEntries={weeklyEntries} */}
+{/*                 currentClusterResults={currentClusterResults} */}
+{/*                 onFilterCluster={handleFilterCluster} */}
+{/*                 isLoading={isLoading} */}
+{/*             /> */}
 
             {/* All Weekly Entries */}
             <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl`}>

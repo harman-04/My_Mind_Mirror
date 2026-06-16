@@ -178,15 +178,16 @@ function OverallDashboard({
                 <MoodWordCountChart entries={journalEntries} isLoading={isLoading} />
             </div>
 
-            {/* 7. Journal Clustering */}
-            <JournalClusters
-                userId={userId}
-                onClusteringComplete={onClusteringComplete}
-                journalEntries={journalEntries}
-                currentClusterResults={currentClusterResults}
-                onFilterCluster={handleFilterCluster}
-                isLoading={isLoading}
-            />
+            {/* 7. Journal Clustering */} {/* Clustering feature removed – not useful with mixed-language entries */}
+{/*             <JournalClusters */}
+{/*                 userId={userId} */}
+{/*                 onClusteringComplete={onClusteringComplete} */}
+{/*                 journalEntries={journalEntries} */}
+{/*                 currentClusterResults={currentClusterResults} */}
+{/*                 onFilterCluster={handleFilterCluster} */}
+{/*                 isLoading={isLoading} */}
+{/*             /> */}
+
 
             {/* 8. Key Phrase Cloud */}
             <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl`}>

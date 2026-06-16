@@ -6,6 +6,7 @@ import com.mymindmirror.backend.payload.response.ApiKeyResponse;
 import com.mymindmirror.backend.payload.response.ApiKeyStatusResponse;
 import com.mymindmirror.backend.service.ApiKeyService;
 import com.mymindmirror.backend.service.UserService;
+import com.mymindmirror.backend.service.ai.DynamicAiClientService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -23,26 +24,7 @@ public class ApiKeyController {
 
     private final ApiKeyService apiKeyService;
     private final UserService userService;
-
-    /**
-     * Get masked Gemini API key for the authenticated user.
-     * Returns e.g. "••••••••1234" if set, otherwise null.
-     */
-//    @GetMapping("/api-key")
-//    public ResponseEntity<ApiKeyResponse> getApiKeyMasked(@AuthenticationPrincipal UserDetails userDetails) {
-//        Optional<User> userOpt = userService.findByUsername(userDetails.getUsername());
-//        if (userOpt.isEmpty()) {
-//            return ResponseEntity.status(401).build();
-//        }
-//        User user = userOpt.get();
-//        String decrypted = apiKeyService.getDecryptedApiKey(user);
-//        String masked = null;
-//        if (decrypted != null && !decrypted.isBlank()) {
-//            int len = decrypted.length();
-//            masked = "••••••••" + decrypted.substring(Math.max(0, len - 4));
-//        }
-//        return ResponseEntity.ok(new ApiKeyResponse(masked, decrypted != null && !decrypted.isBlank()));
-//    }
+    private final DynamicAiClientService dynamicAiClientService;
 
     /**
      * Update Gemini API key for the authenticated user.
@@ -64,6 +46,10 @@ public class ApiKeyController {
             apiKeyService.saveApiKey(user, newKey);
             log.info("Updated API key for user {}", user.getUsername());
         }
+
+        //  Evict the old AI client from memory so the new key takes effect instantly
+        dynamicAiClientService.evictUserModel(user.getId());
+
         return ResponseEntity.noContent().build();
     }
 

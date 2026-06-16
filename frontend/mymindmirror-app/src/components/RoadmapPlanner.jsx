@@ -796,12 +796,26 @@ useEffect(() => {
           const currentViewMode = viewModeMap[roadmap.id] || 'list';
 
           // --- NEW: chunked continuation variables ---
-          const totalWeeks = roadmap.durationWeeks || 1;
-          const generatedWeeks = roadmap.generatedWeeks || 0;
-          const maxVisibleWeek = visibleWeeksMap[roadmap.id] || generatedWeeks || Math.min(12, totalWeeks);
-                    const canLoadMore = maxVisibleWeek < totalWeeks;
-          const isContinuable = generatedWeeks > 0 && generatedWeeks < totalWeeks;
+//           const totalWeeks = roadmap.durationWeeks || 1;
+//           const generatedWeeks = roadmap.generatedWeeks || 0;
+//           const maxVisibleWeek = visibleWeeksMap[roadmap.id] || generatedWeeks || Math.min(12, totalWeeks);
+//                     const canLoadMore = maxVisibleWeek < totalWeeks;
+//           const isContinuable = generatedWeeks > 0 && generatedWeeks < totalWeeks;
+// --- SMARTER RENDERING VARIABLES ---
+const totalWeeks = roadmap.durationWeeks || 1;
+const generatedWeeks = roadmap.generatedWeeks || 0;
 
+// Find the absolute highest week that actually contains tasks right now
+const highestTaskWeek = roadmap.tasks?.reduce((max, task) => Math.max(max, task.weekNumber || 1), 0) || 0;
+
+// Render up to the highest task week, OR the generated weeks, OR max 12 for new giant roadmaps
+const displayLimit = Math.max(highestTaskWeek, generatedWeeks, Math.min(12, totalWeeks));
+
+// This safely draws exactly the right amount of weeks without breaking giant roadmaps
+const sortedWeeks = Array.from({ length: displayLimit }, (_, i) => i + 1);
+
+// ONLY show the "Load Next Weeks" button if there are explicitly un-generated weeks left
+const canLoadMore = generatedWeeks > 0 && generatedWeeks < totalWeeks && highestTaskWeek < totalWeeks;
           // Prepare tasks grouped by week for list view
 const tasksByWeek = {};
 roadmap.tasks?.forEach(task => {
@@ -822,7 +836,7 @@ Object.keys(tasksByWeek).forEach(week => {
 for (let i = 1; i <= totalWeeks; i++) {
   if (!tasksByWeek[i]) tasksByWeek[i] = [];
 }
-const sortedWeeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
+// const sortedWeeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
           const handleExpandAll = () => {
             const newExpanded = {};
             sortedWeeks.forEach(week => {
@@ -941,7 +955,7 @@ const sortedWeeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
                         {sortedWeeks.map((week) => {
                           const tasks = tasksByWeek[week];
                           const isExpanded = expandedWeeks[`${roadmap.id}-${week}`];
-                          const weekCompleted = tasks.every(t => t.completed);
+                          const weekCompleted = tasks.length > 0 && tasks.every(t => t.completed);
                           return (
                             <div key={week} className="border-l-2 border-purple-300 dark:border-purple-700 pl-4">
                               <button
@@ -956,7 +970,7 @@ const sortedWeeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
                                 <div className="space-y-3">
                                   {tasks.length === 0 && (
                                     <div className="text-gray-500 italic text-sm py-2 text-center">
-                                      No tasks yet. Use "Generate Next Weeks" to create tasks for this week.
+                                      No tasks yet. Click the "Load Next Weeks" button below to generate your tasks.
                                     </div>
                                   )}
                                   {tasks.map((task) => (
@@ -1062,7 +1076,7 @@ const sortedWeeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
                                                   ) : (
                                                     <Calendar size={16} className="inline mr-2" />
                                                   )}
-                                                  Load Next 6 Weeks ({maxVisibleWeek}/{totalWeeks})
+                                                  Load Next 6 Weeks ({displayLimit}/{totalWeeks})
                                                 </button>
                                               </div>
                                             )}

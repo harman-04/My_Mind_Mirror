@@ -182,10 +182,10 @@ public class MilestoneController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("User not found");
         }
         User user = userOpt.get();
-        String apiKey = apiKeyService.getDecryptedApiKey(user);
-        List<Task> tasks = milestoneService.importGrowthTipAsTask(user, tipText, apiKey);
-        return ResponseEntity.ok(Map.of("message", tasks.size() + " tasks added to Milestones"));
 
+        List<Task> tasks = milestoneService.importGrowthTipAsTask(user, tipText);
+
+        return ResponseEntity.ok(Map.of("message", tasks.size() + " tasks added to Milestones"));
     }
 
 

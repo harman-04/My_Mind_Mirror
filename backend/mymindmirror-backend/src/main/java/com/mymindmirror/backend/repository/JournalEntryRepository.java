@@ -22,19 +22,31 @@ import java.util.UUID;
 public interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID> {
 
 
-    @EntityGraph(attributePaths = "keyPhrases")
-    List<JournalEntry> findByUserAndEntryDateBetweenOrderByCreationTimestampDesc(User user, LocalDate startDate, LocalDate endDate);
+//    @EntityGraph(attributePaths = "keyPhrases")
+//    List<JournalEntry> findByUserAndEntryDateBetweenOrderByCreationTimestampDesc(User user, LocalDate startDate, LocalDate endDate);
 
+    // To this (Adding "user"):
+    @EntityGraph(attributePaths = {"keyPhrases", "user"})
+    List<JournalEntry> findByUserAndEntryDateBetweenOrderByCreationTimestampDesc(User user, LocalDate startDate, LocalDate endDate);
 
     @EntityGraph(attributePaths = "keyPhrases")
     List<JournalEntry> findByUserAndEntryDateBetween(User user, LocalDate startDate, LocalDate endDate);
 
 
-    @EntityGraph(attributePaths = "keyPhrases")
+//    @EntityGraph(attributePaths = "keyPhrases")
+//    List<JournalEntry> findByUserOrderByCreationTimestampDesc(User user);
+
+
+    // 1. Keyword Search base query (Added "user" to EntityGraph)
+    @EntityGraph(attributePaths = {"keyPhrases", "user"})
     List<JournalEntry> findByUserOrderByCreationTimestampDesc(User user);
 
 
+    //    List<JournalEntry> findByUserAndMoodScoreBetweenOrderByCreationTimestampDesc(User user, Double minMoodScore, Double maxMoodScore);
 
+    // 2. Mood Search (Added EntityGraph because it returns a List, not a Page)
+    @EntityGraph(attributePaths = {"keyPhrases", "user"})
+    List<JournalEntry> findByUserAndMoodScoreBetweenOrderByCreationTimestampDesc(User user, Double minMoodScore, Double maxMoodScore);
 
 
     @EntityGraph(attributePaths = {"keyPhrases", "user"})
@@ -64,7 +76,6 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID
 
 
 
-    List<JournalEntry> findByUserAndMoodScoreBetweenOrderByCreationTimestampDesc(User user, Double minMoodScore, Double maxMoodScore);
 
     @Modifying
     @Query("DELETE FROM KeyPhrase k WHERE k.journalEntry.id = :entryId")
@@ -73,4 +84,17 @@ public interface JournalEntryRepository extends JpaRepository<JournalEntry, UUID
 //    @EntityGraph(attributePaths = "keyPhrases")
     Page<JournalEntry> findByUserAndEntryDateBetweenOrderByCreationTimestampDesc(User user, LocalDate startDate, LocalDate endDate, Pageable pageable);
 
+
+    // Change this from Page<JournalEntry> to List<JournalEntry>
+    @Query("SELECT je FROM JournalEntry je WHERE je.user = :user ORDER BY je.creationTimestamp DESC")
+    List<JournalEntry> findLatestEntryByUser(@Param("user") User user, Pageable pageable);
+
+
+//    // Optimized fetch for Semantic RAG Search using the IDs returned from PostgreSQL
+//    @EntityGraph(attributePaths = {"keyPhrases", "user"})
+//    List<JournalEntry> findByIdInOrderByCreationTimestampDesc(List<UUID> ids);
+
+    // Highly optimized fetch for Semantic Searches to prevent N+1 collection spam
+    @EntityGraph(attributePaths = {"keyPhrases", "user"})
+    List<JournalEntry> findByIdIn(List<UUID> ids);
 }

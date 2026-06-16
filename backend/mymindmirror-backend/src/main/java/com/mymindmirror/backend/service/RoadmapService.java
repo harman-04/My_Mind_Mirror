@@ -1,12 +1,13 @@
 package com.mymindmirror.backend.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.mymindmirror.backend.enums.AITask;
 import com.mymindmirror.backend.model.*;
 import com.mymindmirror.backend.payload.request.RoadmapGenerateRequest;
-import com.mymindmirror.backend.payload.response.RoadmapGenerateResponse;
-import com.mymindmirror.backend.payload.response.RoadmapResponse;
+import com.mymindmirror.backend.payload.response.*;
 import com.mymindmirror.backend.repository.RoadmapRepository;
 import com.mymindmirror.backend.repository.RoadmapTaskRepository;
+import com.mymindmirror.backend.service.ai.DynamicAiClientService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatusCode;
@@ -34,6 +35,8 @@ public class RoadmapService {
     private final TaskService taskService;
     private final RoadmapTaskRepository taskRepository;
     private final GamificationService gamificationService;
+    private final DynamicAiClientService aiClientService;
+
 
     @Transactional
     public Roadmap generateRoadmap(User user, String goal, Integer timeframeWeeks, Integer timeframeValue, String timeframeUnit) throws JsonProcessingException {
@@ -52,67 +55,44 @@ public class RoadmapService {
         }
 
         UserRoadmapPreferences prefs = userService.getRoadmapPreferences(user);
-        String apiKey = apiKeyService.getDecryptedApiKey(user);
         int weeksToGenerate = Math.min(weeks, 12);
-
-        Map<String, Object> mlRequest = new HashMap<>();
-        mlRequest.put("goal", goal);
-        mlRequest.put("timeframeValue", timeframeValue);
-        mlRequest.put("timeframeUnit", timeframeUnit);
-        mlRequest.put("difficulty", prefs.getDifficulty());
-        mlRequest.put("language", prefs.getLanguagePreference());
-        mlRequest.put("learningStyle", prefs.getLearningStyle());
-        mlRequest.put("hoursPerWeek", prefs.getHoursPerWeek());
-        mlRequest.put("avoidWeekends", prefs.isAvoidWeekends());
-        mlRequest.put("weeksToGenerate", weeksToGenerate);
+        String prompt = buildRoadmapPrompt(goal, weeks, weeksToGenerate,
+                prefs.getDifficulty(), prefs.getLanguagePreference(),
+                prefs.getLearningStyle(), prefs.getHoursPerWeek(), prefs.isAvoidWeekends());
 
         RoadmapGenerateResponse aiResponse = null;
         boolean isFallback = false;
 
         try {
-            aiResponse = mlServiceWebClient.post()
-                    .uri("/ml/roadmap/generate")
-                    .header("X-Gemini-Key", apiKey != null ? apiKey : "")
-                    .bodyValue(mlRequest)
-                    .retrieve()
-                    .bodyToMono(RoadmapGenerateResponse.class)
-                    .block();
+            // Use the dynamic AI client instead of WebClient
+            RoadmapGenerateResponse response = aiClientService.generateStructured(prompt, RoadmapGenerateResponse.class, user.getId(), AITask.ROADMAP_INITIAL);
+            // The response already contains tasks, resources, milestones, title, durationWeeks
+            aiResponse = response;
 
-            if (aiResponse == null) {
+            // Basic validation – if tasks are missing, treat as fallback
+            if (aiResponse.getTasks() == null || aiResponse.getTasks().isEmpty()) {
                 isFallback = true;
-            } else {
-                // Check if the response itself marks itself as fallback
-                isFallback = Boolean.TRUE.equals(aiResponse.getIsFallback());
-                // Additional detection if title or tasks indicate fallback
-                if (!isFallback && aiResponse.getTitle() != null && aiResponse.getTitle().startsWith("Your Personalized Roadmap to")) {
-                    if (aiResponse.getTasks() != null && !aiResponse.getTasks().isEmpty()) {
-                        String firstTaskDetails = aiResponse.getTasks().get(0).getDetails();
-                        isFallback = firstTaskDetails != null && firstTaskDetails.contains("Continue Roadmap");
-                    }
-                }
             }
         } catch (Exception e) {
-            log.error("Error calling ML service, using fallback roadmap", e);
+            log.error("Error calling AI for roadmap generation, using fallback", e);
             isFallback = true;
         }
 
-        // If we need a fallback, create it and mark it as such
         if (isFallback || aiResponse == null) {
             aiResponse = createFallbackRoadmapResponse(goal, weeks);
-            aiResponse.setIsFallback(true);   // ensure flag is set
+            aiResponse.setIsFallback(true);
         }
 
         // Ensure collections are not null
         if (aiResponse.getTasks() == null) aiResponse.setTasks(new ArrayList<>());
         if (aiResponse.getResources() == null) aiResponse.setResources(new ArrayList<>());
         if (aiResponse.getMilestones() == null) aiResponse.setMilestones(new ArrayList<>());
-        if (aiResponse.getPhases() == null) aiResponse.setPhases(new ArrayList<>());
+        // phases are optional – we may ignore them or keep empty
 
         Roadmap roadmap = new Roadmap(user, aiResponse.getTitle(), goal, weeks);
         roadmap.setOriginalDurationValue(timeframeValue);
         roadmap.setOriginalDurationUnit(timeframeUnit);
 
-        // Set generatedWeeks correctly: 0 for fallback, weeksToGenerate for real AI tasks
         int generated = isFallback ? 0 : weeksToGenerate;
         roadmap.setGeneratedWeeks(generated);
 
@@ -162,6 +142,37 @@ public class RoadmapService {
 
         roadmap.setStatus("ACTIVE");
         return roadmapRepository.save(roadmap);
+    }
+
+    private String buildRoadmapPrompt(String goal, int weeks, int weeksToGenerate, String difficulty, String language,
+                                      String learningStyle, int hoursPerWeek, boolean avoidWeekends) {
+        return String.format("""
+    You are an expert mentor. Create a detailed, actionable JSON roadmap for the goal: "%s" within %d weeks.
+    **You only need to generate detailed tasks for the first %d weeks**.
+    For each of those weeks, provide 3-5 daily tasks (Monday‑Friday, day 1-5) with descriptions, details, and subtasks.
+
+    **User Preferences:**
+    - Difficulty: %s
+    - Language: %s
+    - Learning style: %s
+    - Hours/week: %d
+    - Avoid weekends: %s
+
+    **Output Requirements (STRICT):**
+    - JSON must contain these fields at the root level: title, durationWeeks, tasks, resources, milestones.
+    - "tasks" MUST be a flat array of objects. Do NOT nest tasks inside "phases" or "weeks".
+    - Each task object must have:
+      - week (integer, 1..%d)
+      - day (integer 1-5 for daily tasks, or null for weekly review)
+      - description (short action)
+      - details (longer instructions)
+      - subtasks (array of strings)
+      - type ("daily" or "weekly")
+    - "resources": array of objects with "name", "url", "type" (relevant to the goal).
+    - "milestones": array of objects with "name", "week", "criteria" (descriptive, e.g. "Understand Spring AI core concepts").
+    - Use real resource URLs.
+    - Return ONLY valid JSON, no extra text.
+    """, goal, weeks, weeksToGenerate, difficulty, language, learningStyle, hoursPerWeek, avoidWeekends, weeksToGenerate);
     }
 
     private int convertToWeeks(int value, String unit) {
@@ -397,7 +408,7 @@ public class RoadmapService {
             throw new SecurityException("Not authorized");
         }
 
-        // Collect completed task descriptions
+        // 1. Get completed tasks (same as before)
         List<String> completedTasks = roadmap.getTasks().stream()
                 .filter(RoadmapTask::isCompleted)
                 .map(RoadmapTask::getDescription)
@@ -407,39 +418,53 @@ public class RoadmapService {
             throw new IllegalStateException("No completed tasks yet. Complete some tasks before continuing.");
         }
 
-        String apiKey = apiKeyService.getDecryptedApiKey(user);
-        Map<String, Object> request = Map.of(
-                "goal", roadmap.getDescription(),
-                "completedTasks", completedTasks,
-                "currentTitle", roadmap.getTitle()
+        // 2. Determine the current highest week number
+        int currentWeek = roadmap.getTasks().stream()
+                .mapToInt(t -> t.getWeekNumber() != null ? t.getWeekNumber() : 1)
+                .max()
+                .orElse(0);
+
+        // 3. We'll generate 3 weeks of tasks
+        int weeksToGenerate = 3;
+        int startWeek = currentWeek + 1;
+        int endWeek = startWeek + weeksToGenerate - 1;
+
+        // 4. Build prompt with current week info
+        String prompt = buildContinueByProgressPrompt(
+                roadmap.getDescription(),
+                completedTasks,
+                roadmap.getTitle(),
+                currentWeek,
+                startWeek,
+                endWeek
         );
 
-        Map<String, Object> aiResponse = mlServiceWebClient.post()
-                .uri("/ml/roadmap/continue")
-                .header("X-Gemini-Key", apiKey != null ? apiKey : "")
-                .bodyValue(request)
-                .retrieve()
-                .bodyToMono(Map.class)
-                .block();
-
-        if (aiResponse == null || !aiResponse.containsKey("tasks")) {
+        // 5. Call AI
+        RoadmapContinuationResponse aiResponse;
+        try {
+            aiResponse = aiClientService.generateStructured(prompt, RoadmapContinuationResponse.class, user.getId(), AITask.ROADMAP_NEXT_STEPS);
+        } catch (Exception e) {
+            log.error("Failed to get continuation from AI", e);
             throw new RuntimeException("Failed to get continuation from AI");
         }
 
-        List<Map<String, Object>> newTasks = (List<Map<String, Object>>) aiResponse.get("tasks");
-        for (Map<String, Object> taskMap : newTasks) {
+        if (aiResponse == null || aiResponse.tasks() == null || aiResponse.tasks().isEmpty()) {
+            throw new RuntimeException("AI returned no tasks for continuation");
+        }
+
+        // 6. Add new tasks
+        for (RoadmapGenerateResponse.Task taskDto : aiResponse.tasks()) {
             RoadmapTask task = new RoadmapTask();
             task.setRoadmap(roadmap);
-            task.setDescription((String) taskMap.get("description"));
-            task.setDetails((String) taskMap.get("details"));
-            task.setWeekNumber((Integer) taskMap.getOrDefault("week", 1));
-            task.setDayNumber((Integer) taskMap.getOrDefault("day", 1));
-            task.setTaskType((String) taskMap.getOrDefault("type", "daily"));
+            task.setDescription(taskDto.getDescription());
+            task.setDetails(taskDto.getDetails());
+            task.setWeekNumber(taskDto.getWeek());          // AI should return week within startWeek..endWeek
+            task.setDayNumber(taskDto.getDay());
+            task.setTaskType(taskDto.getType());
             task.setCompleted(false);
-            Object subtasksObj = taskMap.get("subtasks");
-            if (subtasksObj instanceof List) {
+            if (taskDto.getSubtasks() != null && !taskDto.getSubtasks().isEmpty()) {
                 try {
-                    task.setSubtasks(objectMapper.writeValueAsString(subtasksObj));
+                    task.setSubtasks(objectMapper.writeValueAsString(taskDto.getSubtasks()));
                 } catch (JsonProcessingException e) {
                     task.setSubtasks("[]");
                 }
@@ -447,17 +472,53 @@ public class RoadmapService {
             roadmap.getTasks().add(task);
         }
 
-        int currentDuration = roadmap.getDurationWeeks() != null ? roadmap.getDurationWeeks() : 1;
-        int maxWeek = roadmap.getTasks().stream()
+        // 7. Update duration weeks if new weeks go beyond current duration
+        int newMaxWeek = roadmap.getTasks().stream()
                 .mapToInt(t -> t.getWeekNumber() != null ? t.getWeekNumber() : 1)
                 .max()
-                .orElse(currentDuration);
-        roadmap.setDurationWeeks(maxWeek);
-
+                .orElse(roadmap.getDurationWeeks());
+        if (newMaxWeek > roadmap.getDurationWeeks()) {
+            roadmap.setDurationWeeks(newMaxWeek);
+        }
 
         roadmap = roadmapRepository.save(roadmap);
-        // Convert to DTO while still inside transaction (collections are initialized)
         return toResponse(roadmap);
+    }
+    private String buildContinueByProgressPrompt(String goal, List<String> completedTasks, String currentTitle,
+                                                 int currentWeek, int startWeek, int endWeek) {
+        return String.format("""
+    You are an expert mentor continuing a roadmap for the goal: "%s". The roadmap title is "%s".
+    The user has completed the following tasks:
+    %s
+
+    The roadmap currently has tasks planned up to week %d.
+    Now generate detailed, actionable tasks for weeks %d to %d (the next %d weeks).
+    Each week should have 3‑5 daily tasks (Monday‑Friday, days 1‑5).
+
+    **IMPORTANT:** 
+    - Do NOT repeat tasks that are already completed.
+    - The tasks must be for weeks %d, %d, and %d respectively.
+    - Continue logically from where the previous weeks ended.
+
+    Return ONLY JSON with the following structure:
+    {
+        "tasks": [
+            {
+                "week": %d,
+                "day": 1,
+                "description": "...",
+                "details": "...",
+                "subtasks": ["step1", "step2"],
+                "type": "daily"
+            },
+            ...
+        ]
+    }
+    If the goal seems already achieved, return an empty tasks array.
+    """, goal, currentTitle, String.join("\n", completedTasks),
+                currentWeek, startWeek, endWeek, (endWeek - startWeek + 1),
+                startWeek, startWeek+1, startWeek+2,
+                startWeek);
     }
 
     @Transactional
@@ -469,39 +530,86 @@ public class RoadmapService {
         }
 
         String goal = task.getRoadmap().getDescription();
-        String apiKey = apiKeyService.getDecryptedApiKey(user);
+        String prompt = buildElaboratePrompt(goal, task.getDescription(), enhance);
 
-        Map<String, Object> request = Map.of(
-                "goal", goal,
-                "taskDescription", task.getDescription(),
-                "enhance", enhance
-        );
-
-        Map<String, Object> aiResponse = mlServiceWebClient.post()
-                .uri("/ml/roadmap/elaborate")
-                .header("X-Gemini-Key", apiKey != null ? apiKey : "")
-                .bodyValue(request)
-                .retrieve()
-                .bodyToMono(Map.class)
-                .block();
+        ElaborationResponse aiResponse;
+        try {
+            aiResponse = aiClientService.generateStructured(prompt, ElaborationResponse.class, user.getId(), AITask.ROADMAP_ELABORATION);
+        } catch (Exception e) {
+            log.error("Failed to get elaboration from AI", e);
+            // Fallback: keep existing details (or set placeholder)
+            task.setDetails(task.getDescription());
+            task.setSubtasks("[]");
+            return taskRepository.save(task);
+        }
 
         if (aiResponse != null) {
-            String details = (String) aiResponse.getOrDefault("details", task.getDescription());
-            task.setDetails(details);
-            Object subtasksObj = aiResponse.get("subtasks");
-            if (subtasksObj instanceof List) {
+            task.setDetails(aiResponse.details());
+            if (aiResponse.subtasks() != null && !aiResponse.subtasks().isEmpty()) {
                 try {
-                    task.setSubtasks(objectMapper.writeValueAsString(subtasksObj));
+                    task.setSubtasks(objectMapper.writeValueAsString(aiResponse.subtasks()));
                 } catch (JsonProcessingException e) {
                     task.setSubtasks("[]");
                 }
+            } else {
+                task.setSubtasks("[]");
             }
-            // estimatedHours could be stored in a new column if needed
+            // estimatedHours could be stored in a new column if needed (not used currently)
         } else {
             task.setDetails(task.getDescription());
             task.setSubtasks("[]");
         }
+
         return taskRepository.save(task);
+    }
+
+    private String buildElaboratePrompt(String goal, String taskDescription, boolean enhance) {
+        if (enhance) {
+            return String.format("""
+        You are an expert mentor. The user is following a roadmap for the goal: "%s".
+        One task in that roadmap is: "%s".
+        The user has already seen a basic elaboration and wants an **even more detailed, comprehensive guide**.
+
+        **Language & Style Instruction:**
+        - Detect the language(s) and style of the goal and task description.
+        - Generate the details and subtasks in the **same language(s) and style**.
+
+        Provide a **very detailed** step‑by‑step explanation, including:
+        - Concrete examples
+        - Best practices
+        - Common pitfalls to avoid
+        - A list of 4‑6 actionable subtasks (as an array of strings)
+        - Estimated time to complete (in hours, e.g., 3.5)
+
+        Return ONLY valid JSON with this structure:
+        {
+            "details": "very detailed explanation...",
+            "subtasks": ["subtask 1", "subtask 2", ...],
+            "estimatedHours": 3.5
+        }
+        """, goal, taskDescription);
+        } else {
+            return String.format("""
+        You are an expert mentor. The user is following a roadmap for the goal: "%s".
+        One task in that roadmap is: "%s".
+
+        **Language & Style Instruction:**
+        - Detect the language(s) and style of the goal and task description.
+        - Generate the details and subtasks in the **same language(s) and style**.
+
+        Provide a detailed elaboration for this task. Include:
+        - A longer, step‑by‑step explanation (details)
+        - A list of 2‑4 concrete subtasks (as an array of strings)
+        - Estimated time to complete (in hours, e.g., 1.5)
+
+        Return ONLY valid JSON with this structure:
+        {
+            "details": "step-by-step explanation...",
+            "subtasks": ["subtask 1", "subtask 2", ...],
+            "estimatedHours": 1.5
+        }
+        """, goal, taskDescription);
+        }
     }
 
     @Transactional
@@ -526,46 +634,70 @@ public class RoadmapService {
             throw new IllegalStateException("All tasks are already completed.");
         }
 
-        String apiKey = apiKeyService.getDecryptedApiKey(user);
-        Map<String, Object> request = Map.of(
-                "goal", roadmap.getDescription(),
-                "originalDuration", roadmap.getDurationWeeks(),
-                "completedTasks", completedTasks,
-                "remainingTasks", remainingTasks
-        );
+        String prompt = buildReschedulePrompt(roadmap.getDescription(), roadmap.getDurationWeeks(),
+                completedTasks, remainingTasks);
 
-        Map<String, Object> aiResponse = mlServiceWebClient.post()
-                .uri("/ml/roadmap/reschedule")
-                .header("X-Gemini-Key", apiKey != null ? apiKey : "")
-                .bodyValue(request)
-                .retrieve()
-                .bodyToMono(Map.class)
-                .block();
-
-        if (aiResponse == null) {
+        RescheduleResponse aiResponse;
+        try {
+            aiResponse = aiClientService.generateStructured(prompt, RescheduleResponse.class, user.getId(), AITask.ROADMAP_RESCHEDULE);
+        } catch (Exception e) {
+            log.error("Failed to get reschedule plan from AI", e);
             throw new RuntimeException("Failed to get reschedule plan from AI");
         }
 
-        Integer newDuration = (Integer) aiResponse.getOrDefault("newDurationWeeks", roadmap.getDurationWeeks());
-        List<Map<String, Object>> taskUpdates = (List<Map<String, Object>>) aiResponse.getOrDefault("tasks", List.of());
+        if (aiResponse == null) {
+            throw new RuntimeException("AI returned null reschedule response");
+        }
+
+        Integer newDuration = aiResponse.newDurationWeeks();
+        if (newDuration != null && newDuration > 0) {
+            roadmap.setDurationWeeks(newDuration);
+        }
 
         // Apply new week numbers
-        for (Map<String, Object> update : taskUpdates) {
-            Integer taskIndex = (Integer) update.get("taskId");
-            Integer newWeek = (Integer) update.get("newWeek");
-            if (taskIndex != null && newWeek != null && taskIndex >= 0 && taskIndex < remainingTasks.size()) {
-                // Find the actual task by description (since descriptions should be unique enough)
-                String desc = remainingTasks.get(taskIndex);
-                allTasks.stream()
-                        .filter(t -> t.getDescription().equals(desc))
-                        .findFirst()
-                        .ifPresent(t -> t.setWeekNumber(newWeek));
+        if (aiResponse.tasks() != null) {
+            for (RescheduleResponse.TaskUpdate update : aiResponse.tasks()) {
+                Integer taskIndex = update.taskId();
+                Integer newWeek = update.newWeek();
+                if (taskIndex != null && newWeek != null && taskIndex >= 0 && taskIndex < remainingTasks.size()) {
+                    String desc = remainingTasks.get(taskIndex);
+                    allTasks.stream()
+                            .filter(t -> t.getDescription().equals(desc))
+                            .findFirst()
+                            .ifPresent(t -> t.setWeekNumber(newWeek));
+                }
             }
         }
 
-        roadmap.setDurationWeeks(newDuration);
         roadmap = roadmapRepository.save(roadmap);
         return toResponse(roadmap);
+    }
+
+    private String buildReschedulePrompt(String goal, int originalDuration,
+                                         List<String> completedTasks, List<String> remainingTasks) {
+        return String.format("""
+    You are an expert mentor. The user has a roadmap for the goal: "%s" originally planned for %d weeks.
+    They have completed the following tasks: %s
+    They still have these remaining tasks: %s
+
+    **Language & Style Instruction:**
+    - Detect the language(s) and style of the original goal and tasks.
+    - Generate the revised schedule notes (newDurationWeeks) in the same language, but the output is mostly numeric and indices, so minimal text.
+
+    Based on their progress, suggest a **revised weekly schedule** for the remaining tasks.
+    Return ONLY JSON with the following structure:
+    {
+        "newDurationWeeks": integer,
+        "tasks": [
+            {
+                "taskId": integer (index of the task in remaining_tasks list, starting from 0),
+                "newWeek": integer (1‑based week number)
+            }
+        ]
+    }
+    Only include tasks that need a new week assignment. If no change needed, return empty tasks array.
+    """, goal, originalDuration,
+                completedTasks.toString(), remainingTasks.toString());
     }
 
     @Transactional
@@ -618,58 +750,48 @@ public class RoadmapService {
             previousWeeksSummary.append("No previous weeks. Start from week 1.");
         }
 
-        // Build request for ML service
-        Map<String, Object> mlRequest = new HashMap<>();
-        mlRequest.put("goal", roadmap.getDescription());
-        mlRequest.put("currentWeek", currentGenerated);
-        mlRequest.put("weeksToGenerate", weeksToGenerateNow);
-        mlRequest.put("totalWeeks", totalWeeks);
-        mlRequest.put("originalUnit", roadmap.getOriginalDurationUnit());
-        mlRequest.put("previousWeeksSummary", previousWeeksSummary.toString());  // NEW
 
         UserRoadmapPreferences prefs = userService.getRoadmapPreferences(user);
-        mlRequest.put("difficulty", prefs.getDifficulty());
-        mlRequest.put("language", prefs.getLanguagePreference());
-        mlRequest.put("learningStyle", prefs.getLearningStyle());
-        mlRequest.put("hoursPerWeek", prefs.getHoursPerWeek());
-        mlRequest.put("avoidWeekends", prefs.isAvoidWeekends());
 
-        String apiKey = apiKeyService.getDecryptedApiKey(user);
-        Map<String, Object> aiResponse;
+        // Build prompt
+        String prompt = buildContinuationPrompt(
+                roadmap.getDescription(),
+                currentGenerated,
+                weeksToGenerateNow,
+                totalWeeks,
+                previousWeeksSummary.toString(),
+                prefs.getDifficulty(),
+                prefs.getLanguagePreference(),
+                prefs.getLearningStyle(),
+                prefs.getHoursPerWeek(),
+                prefs.isAvoidWeekends()
+        );
+
+        RoadmapContinuationResponse aiResponse;
         try {
-            aiResponse = mlServiceWebClient.post()
-                    .uri("/ml/roadmap/continue")
-                    .header("X-Gemini-Key", apiKeyService.getDecryptedApiKey(user))
-                    .bodyValue(mlRequest)
-                    .retrieve()
-                    .onStatus(HttpStatusCode::isError, clientResponse ->
-                            clientResponse.bodyToMono(Map.class).flatMap(errorBody ->
-                                    Mono.error(new RuntimeException("ML service error: " + errorBody))
-                            ))
-                    .bodyToMono(Map.class)
-                    .block();
+            aiResponse = aiClientService.generateStructured(prompt, RoadmapContinuationResponse.class, user.getId(), AITask.ROADMAP_EXTENSION);
         } catch (Exception e) {
-            log.error("Failed to get continuation from ML service", e);
+            log.error("Failed to get continuation from AI", e);
             throw new RuntimeException("Continuation failed: " + e.getMessage(), e);
         }
-        if (aiResponse == null || !aiResponse.containsKey("tasks")) {
-            throw new RuntimeException("Failed to get continuation from AI");
+
+        if (aiResponse == null || aiResponse.tasks() == null || aiResponse.tasks().isEmpty()) {
+            throw new RuntimeException("AI returned no tasks for continuation");
         }
 
-        List<Map<String, Object>> newTasks = (List<Map<String, Object>>) aiResponse.get("tasks");
-        for (Map<String, Object> taskMap : newTasks) {
+        // Map new tasks (similar to existing code)
+        for (RoadmapGenerateResponse.Task taskDto : aiResponse.tasks()) {
             RoadmapTask task = new RoadmapTask();
             task.setRoadmap(roadmap);
-            task.setDescription((String) taskMap.get("description"));
-            task.setDetails((String) taskMap.get("details"));
-            task.setWeekNumber((Integer) taskMap.getOrDefault("week", startWeek));
-            task.setDayNumber((Integer) taskMap.getOrDefault("day", 1));
-            task.setTaskType((String) taskMap.getOrDefault("type", "daily"));
+            task.setDescription(taskDto.getDescription());
+            task.setDetails(taskDto.getDetails());
+            task.setWeekNumber(taskDto.getWeek());
+            task.setDayNumber(taskDto.getDay());
+            task.setTaskType(taskDto.getType());
             task.setCompleted(false);
-            Object subtasksObj = taskMap.get("subtasks");
-            if (subtasksObj instanceof List) {
+            if (taskDto.getSubtasks() != null && !taskDto.getSubtasks().isEmpty()) {
                 try {
-                    task.setSubtasks(objectMapper.writeValueAsString(subtasksObj));
+                    task.setSubtasks(objectMapper.writeValueAsString(taskDto.getSubtasks()));
                 } catch (JsonProcessingException e) {
                     task.setSubtasks("[]");
                 }
@@ -680,7 +802,47 @@ public class RoadmapService {
         // Update generatedWeeks
         roadmap.setGeneratedWeeks(endWeek);
         roadmapRepository.save(roadmap);
-
         return toResponse(roadmap);
+    }
+
+    private String buildContinuationPrompt(String goal, int currentWeek, int weeksToGenerate, int totalWeeks,
+                                           String previousSummary, String difficulty, String language,
+                                           String learningStyle, int hoursPerWeek, boolean avoidWeekends) {
+        int startWeek = currentWeek + 1;
+        int endWeek = startWeek + weeksToGenerate - 1;
+        return String.format("""
+    You are an expert mentor continuing a roadmap for the goal: "%s".
+
+    The roadmap spans %d weeks. Weeks 1 to %d have already been planned.
+
+    **Topics already covered in previous weeks:**
+    %s
+
+    Now generate detailed, actionable tasks for weeks %d to %d.
+    Each week should have 3‑5 daily tasks (Monday‑Friday, days 1‑5).
+    **IMPORTANT:** Do NOT repeat topics that have already been covered in the previous weeks. Continue logically from where the previous weeks ended, introducing new concepts and building on what was learned.
+
+    **User Preferences:**
+    - Difficulty: %s
+    - Language: %s – output ALL text in this language.
+    - Learning style: %s
+    - Hours per week available: %d
+    - Avoid weekends: %s
+
+    **Output Requirements:**
+    Return a JSON object with a "tasks" array. Each task must have:
+    - week (integer, between %d and %d)
+    - day (integer 1‑7 for daily tasks; null for weekly tasks)
+    - description (short action)
+    - details (longer instructions, resources)
+    - subtasks (array of strings)
+    - type ("daily" or "weekly")
+
+    Use the same language and style as the original goal.
+    Do NOT include tasks for weeks outside the requested range.
+    Return ONLY valid JSON, no extra text.
+    """, goal, totalWeeks, currentWeek, previousSummary, startWeek, endWeek,
+                difficulty, language, learningStyle, hoursPerWeek, avoidWeekends,
+                startWeek, endWeek);
     }
 }
