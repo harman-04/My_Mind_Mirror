@@ -22,9 +22,14 @@ public class UserFullProfileResponse {
     // Roadmap preferences
     private UserRoadmapPreferencesDto roadmapPreferences;
 
-    // NEW: User scheduling preferences
+    // User scheduling preferences
     private String availableHoursJson;
     private String timezone;
 
-
+    // --- NEW: Lifestyle fields for Smart AI Timetable ---
+    private String energyPeak;
+    private String wakeTime;
+    private String sleepTime;
+    private String lunchTime;
+    private String dailyHabitsJson;
 }

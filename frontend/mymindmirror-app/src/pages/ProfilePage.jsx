@@ -7,7 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { toast } from 'sonner';
 import {
     User, Mail, Edit, Save, X, Trash2, Loader, CheckCircle, AlertCircle,
-    KeyRound, Lock, Info, Sparkles, Eye, EyeOff, Shield, Database, Target, Clock
+    KeyRound, Lock, Info, Sparkles, Eye, EyeOff, Shield, Database, Target, Clock, Activity, Coffee
 } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
 
@@ -64,6 +64,13 @@ function ProfilePage() {
         avoidWeekends: false,
     });
 
+    // --- 💡 NEW: LIFESTYLE STATE ---
+    const [energyPeak, setEnergyPeak] = useState('MORNING');
+    const [wakeTime, setWakeTime] = useState('07:00');
+    const [sleepTime, setSleepTime] = useState('23:00');
+    const [lunchTime, setLunchTime] = useState('13:00');
+    const [dailyHabits, setDailyHabits] = useState(''); // Textarea string
+
     const [availableHours, setAvailableHours] = useState({
         monday: [["09:00","12:00"],["13:00","17:00"]],
         tuesday: [["09:00","12:00"],["13:00","17:00"]],
@@ -75,12 +82,12 @@ function ProfilePage() {
     });
     const [timezone, setTimezone] = useState("Asia/Kolkata");
 
-    // Local loading flags to prevent double clicks
+    // Local loading flags
     const [savingProfile, setSavingProfile] = useState(false);
     const [savingPassword, setSavingPassword] = useState(false);
     const [savingApiKey, setSavingApiKey] = useState(false);
     const [savingRoadmapPrefs, setSavingRoadmapPrefs] = useState(false);
-    const [savingHours, setSavingHours] = useState(false);
+    const [savingLifestyle, setSavingLifestyle] = useState(false);
 
     // Load preferences when available
     useEffect(() => {
@@ -95,6 +102,7 @@ function ProfilePage() {
         }
     }, [roadmapPreferences.data]);
 
+    // 💡 UPDATED: Load Lifestyle data from profile
     useEffect(() => {
         if (profile) {
             if (profile.availableHoursJson) {
@@ -103,6 +111,16 @@ function ProfilePage() {
                 } catch(e) { console.error(e); }
             }
             if (profile.timezone) setTimezone(profile.timezone);
+            if (profile.energyPeak) setEnergyPeak(profile.energyPeak);
+            if (profile.wakeTime) setWakeTime(profile.wakeTime.substring(0, 5));
+            if (profile.sleepTime) setSleepTime(profile.sleepTime.substring(0, 5));
+            if (profile.lunchTime) setLunchTime(profile.lunchTime.substring(0, 5));
+            if (profile.dailyHabitsJson) {
+                try {
+                    const habitsArray = JSON.parse(profile.dailyHabitsJson);
+                    setDailyHabits(habitsArray.join('\n'));
+                } catch(e) { console.error(e); }
+            }
         }
     }, [profile]);
 
@@ -116,7 +134,6 @@ function ProfilePage() {
         try {
             await updateRoadmapPreferences(roadmapPrefs);
             toast.success('Roadmap preferences saved successfully!');
-            // Clear any existing feedback message for this action
             setFeedbackMessage({ type: '', text: '' });
         } catch (err) {
             console.error("Error saving roadmap prefs", err);
@@ -128,7 +145,6 @@ function ProfilePage() {
         }
     }, [roadmapPrefs, updateRoadmapPreferences, savingRoadmapPrefs]);
 
-    // Initialize form fields when profile loads
     useEffect(() => {
         if (profile) {
             setEditedUsername(profile.username || '');
@@ -136,7 +152,6 @@ function ProfilePage() {
         }
     }, [profile]);
 
-    // Auto‑clear feedback messages
     useEffect(() => {
         if (feedbackMessage.text) {
             const timer = setTimeout(() => setFeedbackMessage({ type: '', text: '' }), 5000);
@@ -155,7 +170,6 @@ function ProfilePage() {
         }
     }, [passwordChangeSuccess, passwordChangeError]);
 
-    // Handlers
     const handleEditClick = () => {
         setIsEditing(true);
         setFeedbackMessage({ type: '', text: '' });
@@ -280,23 +294,31 @@ function ProfilePage() {
     };
     const cancelDeleteAccount = () => setShowDeleteConfirm(false);
 
-    const handleSaveHours = useCallback(async () => {
-        if (savingHours) return;
-        setSavingHours(true);
+    // 💡 UPDATED: Now saves Lifestyle & Hours together
+    const handleSaveLifestyle = useCallback(async () => {
+        if (savingLifestyle) return;
+        setSavingLifestyle(true);
         try {
+            // Convert textarea lines to JSON Array safely
+            const habitsArray = dailyHabits.split('\n').map(h => h.trim()).filter(h => h.length > 0);
+
             await updatePreferences({
                 availableHoursJson: JSON.stringify(availableHours),
                 timezone: timezone,
+                energyPeak: energyPeak,
+                wakeTime: wakeTime + ":00", // Append seconds for Java LocalTime
+                sleepTime: sleepTime + ":00",
+                lunchTime: lunchTime + ":00",
+                dailyHabitsJson: JSON.stringify(habitsArray)
             });
-            toast.success("Available hours saved");
+            toast.success("Lifestyle & Schedule saved successfully!");
         } catch (err) {
-            toast.error("Failed to save preferences");
+            toast.error("Failed to save lifestyle preferences");
         } finally {
-            setSavingHours(false);
+            setSavingLifestyle(false);
         }
-    }, [availableHours, timezone, updatePreferences, savingHours]);
+    }, [availableHours, timezone, energyPeak, wakeTime, sleepTime, lunchTime, dailyHabits, updatePreferences, savingLifestyle]);
 
-    // Theme styles (unchanged)
     const colors = {
         background: isDarkMode ? 'bg-gray-900' : 'bg-gray-50',
         cardBg: isDarkMode ? 'bg-gray-800/60 backdrop-blur-md' : 'bg-white/80 backdrop-blur-md',
@@ -328,23 +350,6 @@ function ProfilePage() {
                 <div className="w-64 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mt-4">
                     <div className="h-full bg-gradient-to-r from-purple-500 to-teal-500 animate-pulse-fast"></div>
                 </div>
-                <style>{`
-                    @keyframes pulse-slow {
-                        0%, 100% { opacity: 1; }
-                        50% { opacity: 0.5; }
-                    }
-                    @keyframes pulse-fast {
-                        0%, 100% { transform: translateX(-100%); }
-                        50% { transform: translateX(100%); }
-                        100% { transform: translateX(-100%); }
-                    }
-                    .animate-pulse-slow {
-                        animation: pulse-slow 2s ease-in-out infinite;
-                    }
-                    .animate-pulse-fast {
-                        animation: pulse-fast 1.5s ease-in-out infinite;
-                    }
-                `}</style>
             </div>
         );
     }
@@ -355,12 +360,7 @@ function ProfilePage() {
                 <div className="text-center space-y-4">
                     <AlertCircle size={48} className="text-red-500 mx-auto" />
                     <p className="text-red-500">{error?.message || 'Failed to load profile.'}</p>
-                    <button
-                        onClick={() => navigate('/login')}
-                        className="px-4 py-2 rounded-full bg-purple-500 text-white hover:bg-purple-600 transition"
-                    >
-                        Go to Login
-                    </button>
+                    <button onClick={() => navigate('/login')} className="px-4 py-2 rounded-full bg-purple-500 text-white hover:bg-purple-600 transition">Go to Login</button>
                 </div>
             </div>
         );
@@ -536,6 +536,162 @@ function ProfilePage() {
                             </div>
                         </div>
 
+                        {/* Lifestyle & Schedule Card (THE UPGRADED SECTION) */}
+                        <div className={`rounded-2xl ${colors.sectionBg} border ${colors.sectionBorder} p-4 sm:p-6 lg:p-8 shadow-sm backdrop-blur-sm space-y-6`}>
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <div>
+                                    <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2">
+                                        <div className="p-2 rounded-lg bg-teal-500/10">
+                                            <Activity size={18} className="text-teal-400" />
+                                        </div>
+                                        Lifestyle & Schedule
+                                    </h2>
+                                    <p className={`text-sm mt-2 ${colors.textSecondary} max-w-2xl`}>
+                                        Set your available hours and tell the AI about your daily routines so it can generate the perfect, balanced timetable for you.
+                                    </p>
+                                </div>
+                            </div>
+
+                            {/* Lifestyle Form Grid */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1.5 flex items-center gap-2 ${colors.textSecondary}`}><Sparkles size={14} className="text-purple-400"/> Energy Peak</label>
+                                    <select value={energyPeak} onChange={(e) => setEnergyPeak(e.target.value)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 ${colors.inputFocusRing}`}>
+                                        <option value="MORNING">Morning (Focus best early)</option>
+                                        <option value="AFTERNOON">Afternoon (Steady worker)</option>
+                                        <option value="EVENING">Evening (Night Owl)</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1.5 flex items-center gap-2 ${colors.textSecondary}`}><Clock size={14} className="text-teal-400"/> Wake Time</label>
+                                    <input type="time" value={wakeTime} onChange={(e) => setWakeTime(e.target.value)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 ${colors.inputFocusRing}`} />
+                                </div>
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1.5 flex items-center gap-2 ${colors.textSecondary}`}><Clock size={14} className="text-teal-400"/> Sleep Time</label>
+                                    <input type="time" value={sleepTime} onChange={(e) => setSleepTime(e.target.value)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 ${colors.inputFocusRing}`} />
+                                </div>
+                                <div>
+                                    <label className={`block text-sm font-medium mb-1.5 flex items-center gap-2 ${colors.textSecondary}`}><Coffee size={14} className="text-amber-500"/> Lunch Time</label>
+                                    <input type="time" value={lunchTime} onChange={(e) => setLunchTime(e.target.value)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 ${colors.inputFocusRing}`} />
+                                </div>
+                                <div className="md:col-span-2">
+                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Daily Habits / Routines (One per line)</label>
+                                    <textarea
+                                        value={dailyHabits}
+                                        onChange={(e) => setDailyHabits(e.target.value)}
+                                        placeholder="e.g. 15 mins meditation&#10;30 min walk outside&#10;Read 10 pages of a book"
+                                        rows="3"
+                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 ${colors.inputFocusRing} resize-y`}
+                                    />
+                                    <p className={`text-xs mt-1 ${colors.textSecondary}`}>The AI will automatically weave these breaks into your timetable!</p>
+                                </div>
+                            </div>
+
+                            <hr className={`border-${colors.sectionBorder} my-6`} />
+
+                            <h3 className="font-medium text-lg pt-2">Available Work Blocks</h3>
+
+                            <div className="space-y-5">
+                                {Object.keys(availableHours).map((day) => (
+                                    <div
+                                        key={day}
+                                        className={`rounded-2xl border ${colors.sectionBorder} bg-white/40 dark:bg-white/[0.03] p-4 sm:p-5 transition-all duration-200 hover:shadow-md`}
+                                    >
+                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-2 h-8 rounded-full bg-gradient-to-b from-purple-500 to-teal-400" />
+                                                <div>
+                                                    <h3 className="capitalize font-semibold text-base sm:text-lg">{day}</h3>
+                                                    <p className={`text-xs ${colors.textSecondary}`}>
+                                                        {availableHours[day].length} slot{availableHours[day].length !== 1 ? "s" : ""}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const newSlots = [...availableHours[day], ["09:00", "17:00"]];
+                                                    setAvailableHours({ ...availableHours, [day]: newSlots });
+                                                }}
+                                                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gradient-to-r from-purple-500 to-teal-500 text-white transition-all duration-200 hover:scale-[1.02] hover:shadow-lg disabled:opacity-50 disabled:hover:scale-100"
+                                                disabled={savingLifestyle}
+                                            >
+                                                + Add Slot
+                                            </button>
+                                        </div>
+
+                                        <div className="space-y-3">
+                                            {availableHours[day].map((slot, idx) => (
+                                                <div key={idx} className={`group rounded-xl border ${colors.inputBorder} ${colors.inputBg} p-3`}>
+                                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+                                                        <div className="flex-1">
+                                                            <label className={`text-xs mb-1 block ${colors.textSecondary}`}>Start</label>
+                                                            <input
+                                                                type="time"
+                                                                value={slot[0]}
+                                                                onChange={(e) => {
+                                                                    const newSlots = [...availableHours[day]];
+                                                                    newSlots[idx][0] = e.target.value;
+                                                                    setAvailableHours({ ...availableHours, [day]: newSlots });
+                                                                }}
+                                                                className={`w-full px-3 py-2.5 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500 outline-none transition-all`}
+                                                                disabled={savingLifestyle}
+                                                            />
+                                                        </div>
+                                                        <div className="hidden sm:flex items-center justify-center pt-5">
+                                                            <span className="text-gray-400">→</span>
+                                                        </div>
+                                                        <div className="flex-1">
+                                                            <label className={`text-xs mb-1 block ${colors.textSecondary}`}>End</label>
+                                                            <input
+                                                                type="time"
+                                                                value={slot[1]}
+                                                                onChange={(e) => {
+                                                                    const newSlots = [...availableHours[day]];
+                                                                    newSlots[idx][1] = e.target.value;
+                                                                    setAvailableHours({ ...availableHours, [day]: newSlots });
+                                                                }}
+                                                                className={`w-full px-3 py-2.5 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500 outline-none transition-all`}
+                                                                disabled={savingLifestyle}
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-end">
+                                                            <button
+                                                                onClick={() => {
+                                                                    const newSlots = availableHours[day].filter((_, i) => i !== idx);
+                                                                    setAvailableHours({ ...availableHours, [day]: newSlots });
+                                                                }}
+                                                                className="w-full sm:w-11 h-11 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-500/10 transition-all duration-200 disabled:opacity-50"
+                                                                disabled={savingLifestyle}
+                                                            >
+                                                                <Trash2 size={16} />
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                            {availableHours[day].length === 0 && (
+                                                <div className={`rounded-xl border border-dashed ${colors.sectionBorder} p-5 text-center`}>
+                                                    <p className={`text-sm italic ${colors.textSecondary}`}>No slots added — no tasks will be scheduled on this day.</p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end pt-4">
+                                <button
+                                    onClick={handleSaveLifestyle}
+                                    disabled={savingLifestyle || isUpdatingPreferences}
+                                    className="w-full sm:w-auto min-w-[180px] px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-500 to-teal-500 text-white font-semibold flex items-center justify-center gap-2 transition-all duration-200 hover:shadow-xl hover:scale-[1.01] disabled:opacity-50 disabled:hover:scale-100"
+                                >
+                                    {(savingLifestyle || isUpdatingPreferences) ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}
+                                    {(savingLifestyle || isUpdatingPreferences) ? "Saving..." : "Save Lifestyle & Schedule"}
+                                </button>
+                            </div>
+                        </div>
+
                         {/* Gemini API Key */}
                         <div className={`rounded-xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 space-y-5`}>
                             <h2 className="text-xl font-semibold flex items-center gap-2">
@@ -688,131 +844,6 @@ function ProfilePage() {
                             </div>
                         </div>
 
-                        {/* Available Hours Card */}
-                        <div className={`rounded-2xl ${colors.sectionBg} border ${colors.sectionBorder} p-4 sm:p-6 lg:p-8 shadow-sm backdrop-blur-sm space-y-6`}>
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                <div>
-                                    <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2">
-                                        <div className="p-2 rounded-lg bg-teal-500/10">
-                                            <Clock size={18} className="text-teal-400" />
-                                        </div>
-                                        Your Available Hours
-                                    </h2>
-                                    <p className={`text-sm mt-2 ${colors.textSecondary} max-w-2xl`}>
-                                        Set the time slots when you are free to work. The AI scheduler will automatically use these hours.
-                                    </p>
-                                </div>
-                            </div>
-
-                            {isLoading ? (
-                                <div className="animate-pulse space-y-4">
-                                    <div className="h-16 rounded-xl bg-gray-200 dark:bg-gray-700" />
-                                    <div className="h-16 rounded-xl bg-gray-200 dark:bg-gray-700" />
-                                    <div className="h-16 rounded-xl bg-gray-200 dark:bg-gray-700" />
-                                </div>
-                            ) : (
-                                <div className="space-y-5">
-                                    {Object.keys(availableHours).map((day) => (
-                                        <div
-                                            key={day}
-                                            className={`rounded-2xl border ${colors.sectionBorder} bg-white/40 dark:bg-white/[0.03] p-4 sm:p-5 transition-all duration-200 hover:shadow-md`}
-                                        >
-                                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-2 h-8 rounded-full bg-gradient-to-b from-purple-500 to-teal-400" />
-                                                    <div>
-                                                        <h3 className="capitalize font-semibold text-base sm:text-lg">{day}</h3>
-                                                        <p className={`text-xs ${colors.textSecondary}`}>
-                                                            {availableHours[day].length} slot{availableHours[day].length !== 1 ? "s" : ""}
-                                                        </p>
-                                                    </div>
-                                                </div>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                        const newSlots = [...availableHours[day], ["09:00", "17:00"]];
-                                                        setAvailableHours({ ...availableHours, [day]: newSlots });
-                                                    }}
-                                                    className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gradient-to-r from-purple-500 to-teal-500 text-white transition-all duration-200 hover:scale-[1.02] hover:shadow-lg disabled:opacity-50 disabled:hover:scale-100"
-                                                    disabled={savingHours}
-                                                >
-                                                    + Add Slot
-                                                </button>
-                                            </div>
-
-                                            <div className="space-y-3">
-                                                {availableHours[day].map((slot, idx) => (
-                                                    <div key={idx} className={`group rounded-xl border ${colors.inputBorder} ${colors.inputBg} p-3`}>
-                                                        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                                                            <div className="flex-1">
-                                                                <label className={`text-xs mb-1 block ${colors.textSecondary}`}>Start</label>
-                                                                <input
-                                                                    type="time"
-                                                                    value={slot[0]}
-                                                                    onChange={(e) => {
-                                                                        const newSlots = [...availableHours[day]];
-                                                                        newSlots[idx][0] = e.target.value;
-                                                                        setAvailableHours({ ...availableHours, [day]: newSlots });
-                                                                    }}
-                                                                    className={`w-full px-3 py-2.5 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500 outline-none transition-all`}
-                                                                    disabled={savingHours}
-                                                                />
-                                                            </div>
-                                                            <div className="hidden sm:flex items-center justify-center pt-5">
-                                                                <span className="text-gray-400">→</span>
-                                                            </div>
-                                                            <div className="flex-1">
-                                                                <label className={`text-xs mb-1 block ${colors.textSecondary}`}>End</label>
-                                                                <input
-                                                                    type="time"
-                                                                    value={slot[1]}
-                                                                    onChange={(e) => {
-                                                                        const newSlots = [...availableHours[day]];
-                                                                        newSlots[idx][1] = e.target.value;
-                                                                        setAvailableHours({ ...availableHours, [day]: newSlots });
-                                                                    }}
-                                                                    className={`w-full px-3 py-2.5 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500 outline-none transition-all`}
-                                                                    disabled={savingHours}
-                                                                />
-                                                            </div>
-                                                            <div className="flex items-end">
-                                                                <button
-                                                                    onClick={() => {
-                                                                        const newSlots = availableHours[day].filter((_, i) => i !== idx);
-                                                                        setAvailableHours({ ...availableHours, [day]: newSlots });
-                                                                    }}
-                                                                    className="w-full sm:w-11 h-11 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-500/10 transition-all duration-200 disabled:opacity-50"
-                                                                    disabled={savingHours}
-                                                                >
-                                                                    <Trash2 size={16} />
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                                {availableHours[day].length === 0 && (
-                                                    <div className={`rounded-xl border border-dashed ${colors.sectionBorder} p-5 text-center`}>
-                                                        <p className={`text-sm italic ${colors.textSecondary}`}>No slots added — no tasks will be scheduled on this day.</p>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end pt-2">
-                                <button
-                                    onClick={handleSaveHours}
-                                    disabled={savingHours || isUpdatingPreferences}
-                                    className="w-full sm:w-auto min-w-[180px] px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-500 to-teal-500 text-white font-semibold flex items-center justify-center gap-2 transition-all duration-200 hover:shadow-xl hover:scale-[1.01] disabled:opacity-50 disabled:hover:scale-100"
-                                >
-                                    {(savingHours || isUpdatingPreferences) ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}
-                                    {(savingHours || isUpdatingPreferences) ? "Saving..." : "Save Hours"}
-                                </button>
-                            </div>
-                        </div>
-
                         {/* Danger Zone */}
                         <div className={`rounded-xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 space-y-5`}>
                             <h2 className="text-xl font-semibold flex items-center gap-2 text-red-500">
@@ -866,6 +897,14 @@ function ProfilePage() {
                 }
                 .animate-float-delayed {
                     animation: float 4s ease-in-out infinite 2s;
+                }
+                @keyframes pulse-fast {
+                    0%, 100% { transform: translateX(-100%); }
+                    50% { transform: translateX(100%); }
+                    100% { transform: translateX(-100%); }
+                }
+                .animate-pulse-fast {
+                    animation: pulse-fast 1.5s ease-in-out infinite;
                 }
             `}</style>
         </div>

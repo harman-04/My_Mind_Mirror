@@ -22,4 +22,7 @@ public class ScheduledTaskResponse {
     private UUID milestoneTaskId;
     private UUID customTaskId;
     private String priority;
+
+    // --- 💡 NEW ---
+    private String blockType;
 }

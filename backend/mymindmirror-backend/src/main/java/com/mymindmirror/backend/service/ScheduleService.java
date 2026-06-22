@@ -1,6 +1,5 @@
 package com.mymindmirror.backend.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mymindmirror.backend.enums.AITask;
@@ -14,16 +13,13 @@ import com.mymindmirror.backend.service.ai.DynamicAiClientService;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
+import java.time.ZoneId;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -32,8 +28,6 @@ import java.util.stream.Collectors;
 @Slf4j
 public class ScheduleService {
 
-    private final WebClient mlServiceWebClient;
-    private final ApiKeyService apiKeyService;
     private final UserPreferencesRepository userPreferencesRepository;
     private final ScheduledTaskRepository scheduledTaskRepository;
     private final RoadmapTaskRepository roadmapTaskRepository;
@@ -44,29 +38,40 @@ public class ScheduleService {
 
     @Transactional
     public void generateSchedule(User user, String mode) {
-        // Delete all scheduled tasks (clean slate)
-        scheduledTaskRepository.deleteByUser(user);
+        // 1. SURGICAL CLEAN SLATE (Preserve completed history!)
+//        if ("custom".equals(mode)) {
+//            scheduledTaskRepository.deleteIncompleteCustomAndRoutinesByUser(user);
+//        } else {
+//            scheduledTaskRepository.deleteIncompleteByUser(user);
+//        }
+        // 💡 THE FIX: Always wipe ALL incomplete tasks to prevent overlaps,
+        // ensuring the calendar strictly matches the requested 'mode'.
+        scheduledTaskRepository.deleteIncompleteByUser(user);
+        scheduledTaskRepository.flush(); // Ensure DB is cleared before proceeding
 
-        // Get user preferences (available hours)
+        // 2. Get User Lifestyle Preferences
         UserPreferences preferences = userPreferencesRepository.findByUser(user)
                 .orElseGet(() -> createDefaultPreferences(user));
-        String availableHoursJson = preferences.getAvailableHoursJson();
 
-        // Collect tasks based on mode
-        List<ScheduleTaskRequest.TaskItem> tasks = collectTasksByMode(user, mode);
-        log.info("Collected tasks for schedule generation (mode={}): {} total", mode, tasks.size());
+        // 💡 Get a fast memory map of tasks already on the calendar so we NEVER duplicate!
+        Set<UUID> alreadyScheduled = getAlreadyScheduledTaskIds(user);
 
+        // 3. Collect Tasks
+        List<ScheduleTaskRequest.TaskItem> tasks = collectTasksByMode(user, mode, alreadyScheduled);
+        log.info("Collected {} unscheduled tasks for user {}", tasks.size(), user.getUsername());
         if (tasks.isEmpty()) {
-            log.info("No unscheduled tasks for user {} in mode {}", user.getUsername(), mode);
-            return;
+            log.info("No tasks to schedule. AI will only generate routines/breaks.");
         }
 
-        // Limit to first 20 tasks for AI (Gemini can handle)
-        List<ScheduleTaskRequest.TaskItem> aiTasks = tasks.size() > 20 ? tasks.subList(0, 20) : tasks;
-        LocalDateTime currentDateTime = LocalDateTime.now();
+        // Limit to top 15 tasks to prevent overwhelming the AI and the user's next 3 days
+        List<ScheduleTaskRequest.TaskItem> aiTasks = tasks.size() > 15 ? tasks.subList(0, 15) : tasks;
+//        LocalDateTime currentDateTime = LocalDateTime.now();
 
-        // Build prompt and call AI
-        String prompt = buildSchedulePrompt(aiTasks, availableHoursJson, currentDateTime);
+        // Use the user's actual timezone, defaulting to system timezone if null
+        ZoneId userZone = ZoneId.of(preferences.getTimezone() != null ? preferences.getTimezone() : ZoneId.systemDefault().getId());
+        LocalDateTime currentDateTime = LocalDateTime.now(userZone);
+        // 4. Build Smart Prompt
+        String prompt = buildSmartSchedulePrompt(aiTasks, preferences, currentDateTime);
         ScheduleResponse aiResponse = null;
         boolean useFallback = false;
 
@@ -80,165 +85,169 @@ public class ScheduleService {
             useFallback = true;
         }
 
-        List<Map<String, Object>> schedule = new ArrayList<>();
-        Set<String> scheduledTaskIds = new HashSet<>();
+        List<ScheduleItem> finalScheduleItems = new ArrayList<>();
+        Set<String> newlyScheduledTaskIds = new HashSet<>();
 
         if (!useFallback && aiResponse != null) {
-            // Convert AI schedule items to the internal map format
+            finalScheduleItems.addAll(aiResponse.schedule());
             for (ScheduleItem item : aiResponse.schedule()) {
-                Map<String, Object> scheduleItem = new HashMap<>();
-                scheduleItem.put("taskId", item.taskId());
-                scheduleItem.put("date", item.date());
-                scheduleItem.put("startTime", item.startTime());
-                scheduleItem.put("endTime", item.endTime());
-                schedule.add(scheduleItem);
-                scheduledTaskIds.add(item.taskId());
+                if (item.taskId() != null && !item.taskId().isBlank() && !item.taskId().equals("null")) {
+                    newlyScheduledTaskIds.add(item.taskId());
+                }
             }
-            log.info("AI returned {} scheduled tasks", schedule.size());
+            log.info("AI returned {} scheduled blocks (including habits/breaks)", finalScheduleItems.size());
         } else {
             log.warn("AI returned no schedule, using fallback");
         }
 
-        // Identify tasks not scheduled by AI (if AI was used) – otherwise all tasks remain unscheduled
+        // 5. Fallback for un-scheduled work tasks
         List<ScheduleTaskRequest.TaskItem> unscheduledRemaining;
         if (!useFallback) {
             unscheduledRemaining = tasks.stream()
-                    .filter(t -> !scheduledTaskIds.contains(t.getId()))
+                    .filter(t -> !newlyScheduledTaskIds.contains(t.getId()))
                     .collect(Collectors.toList());
         } else {
             unscheduledRemaining = new ArrayList<>(tasks);
         }
 
-        // Use fallback scheduler for any remaining tasks
         if (!unscheduledRemaining.isEmpty()) {
             log.info("Scheduling {} tasks using fallback scheduler", unscheduledRemaining.size());
-            LocalDate startDate = LocalDate.now();
-            LocalTime currentTime = LocalTime.now();
-            Map<String, List<TimeSlot>> availableSlots = parseAvailableHours(availableHoursJson);
-            List<Map<String, Object>> fallbackSchedule = simpleSchedule(unscheduledRemaining, availableSlots, startDate, currentTime);
-            schedule.addAll(fallbackSchedule);
+            Map<String, List<TimeSlot>> availableSlots = parseAvailableHours(preferences.getAvailableHoursJson());
+            List<ScheduleItem> fallbackSchedule = simpleSchedule(unscheduledRemaining, availableSlots, LocalDate.now(), LocalTime.now());
+            finalScheduleItems.addAll(fallbackSchedule);
         }
 
-        // Save all scheduled tasks (existing save logic unchanged)
-        for (Map<String, Object> item : schedule) {
-            String taskIdStr = (String) item.get("taskId");
-            String dateStr = (String) item.get("date");
-            String startTimeStr = (String) item.get("startTime");
-            String endTimeStr = (String) item.get("endTime");
-
-            if (taskIdStr == null || dateStr == null || startTimeStr == null || endTimeStr == null) {
+        // 6. Save exactly to Database
+        for (ScheduleItem item : finalScheduleItems) {
+            if (item.date() == null || item.startTime() == null || item.endTime() == null) {
                 log.warn("Invalid schedule item, skipping: {}", item);
                 continue;
             }
 
-            LocalDate date = LocalDate.parse(dateStr);
-            LocalTime start = LocalTime.parse(startTimeStr);
-            LocalTime end = LocalTime.parse(endTimeStr);
-            UUID taskId = UUID.fromString(taskIdStr);
-
             ScheduledTask scheduled = new ScheduledTask();
             scheduled.setUser(user);
-            scheduled.setScheduledDate(date);
-            scheduled.setStartTime(start);
-            scheduled.setEndTime(end);
+            scheduled.setScheduledDate(LocalDate.parse(item.date()));
+            scheduled.setStartTime(LocalTime.parse(item.startTime()));
+            scheduled.setEndTime(LocalTime.parse(item.endTime()));
             scheduled.setCompleted(false);
             scheduled.setReminderSent(false);
 
-            // Determine task type and set title/priority (same as before)
-            if (roadmapTaskRepository.existsById(taskId)) {
-                scheduled.setRoadmapTaskId(taskId);
-                RoadmapTask rt = roadmapTaskRepository.findById(taskId).get();
-                scheduled.setTitle(rt.getDescription());
-                scheduled.setPriority("MEDIUM");
-            } else if (milestoneTaskRepository.existsById(taskId)) {
-                scheduled.setMilestoneTaskId(taskId);
-                Task mt = milestoneTaskRepository.findById(taskId).get();
-                scheduled.setTitle(mt.getDescription());
-                scheduled.setPriority(mt.getStatus() == Status.OVERDUE ? "HIGH" : "MEDIUM");
-            } else if (customTaskRepository.existsById(taskId)) {
-                scheduled.setCustomTaskId(taskId);
-                CustomTask ct = customTaskRepository.findById(taskId).get();
-                scheduled.setTitle(ct.getTitle());
-                scheduled.setPriority(ct.getPriority());
+            if (item.taskId() != null && !item.taskId().isBlank() && !item.taskId().equals("null")) {
+                UUID taskId = UUID.fromString(item.taskId());
+                scheduled.setBlockType("WORK_TASK");
+
+                if (roadmapTaskRepository.existsById(taskId)) {
+                    scheduled.setRoadmapTaskId(taskId);
+                    RoadmapTask rt = roadmapTaskRepository.findById(taskId).get();
+                    scheduled.setTitle(rt.getDescription());
+                    scheduled.setPriority("MEDIUM");
+                } else if (milestoneTaskRepository.existsById(taskId)) {
+                    scheduled.setMilestoneTaskId(taskId);
+                    Task mt = milestoneTaskRepository.findById(taskId).get();
+                    scheduled.setTitle(mt.getDescription());
+                    scheduled.setPriority(mt.getStatus() == Status.OVERDUE ? "HIGH" : "MEDIUM");
+                } else if (customTaskRepository.existsById(taskId)) {
+                    scheduled.setCustomTaskId(taskId);
+                    CustomTask ct = customTaskRepository.findById(taskId).get();
+                    scheduled.setTitle(ct.getTitle());
+                    scheduled.setPriority(ct.getPriority());
+                } else {
+                    continue;
+                }
             } else {
-                log.warn("Task ID {} not found in any repository", taskId);
-                continue;
+                scheduled.setTitle(item.title() != null ? item.title() : "Personal Time");
+                scheduled.setBlockType(item.blockType() != null ? item.blockType() : "ROUTINE");
+                scheduled.setPriority("LOW");
             }
+
             scheduledTaskRepository.save(scheduled);
-            log.info("Saved scheduled task: {} on {}", scheduled.getTitle(), date);
         }
     }
 
-    private String buildSchedulePrompt(List<ScheduleTaskRequest.TaskItem> tasks,
-                                       String availableHoursJson,
-                                       LocalDateTime currentDateTime) {
-        // Build tasks description
+    private String buildSmartSchedulePrompt(List<ScheduleTaskRequest.TaskItem> tasks,
+                                            UserPreferences prefs,
+                                            LocalDateTime currentDateTime) {
+
         StringBuilder tasksDesc = new StringBuilder();
         for (ScheduleTaskRequest.TaskItem task : tasks) {
             tasksDesc.append(String.format("- id: %s, title: %s, est: %.1fh, due: %s, priority: %s\n",
-                    task.getId(),
-                    task.getTitle(),
+                    task.getId(), task.getTitle(),
                     task.getEstimatedHours() != null ? task.getEstimatedHours() : 1.0,
                     task.getDueDate() != null ? task.getDueDate() : "none",
                     task.getPriority() != null ? task.getPriority() : "MEDIUM"));
         }
 
         return String.format("""
-    You are a smart scheduling assistant. Create a weekly schedule for the following tasks.
+    You are an elite productivity and wellness AI coach. 
+    Design a perfect, balanced daily schedule for the NEXT 3 DAYS for this user.
+    Do NOT schedule anything in the past. Start scheduling from: %s
 
-    **Start scheduling from %s (current datetime). Do NOT schedule any task before this moment.**
-    **Available hours per day (local time, 24h format):**
+    --- USER LIFESTYLE & PREFERENCES ---
+    - Energy Peak: %s 
+    - Wake up: %s
+    - Sleep: %s
+    - Lunch time: %s
+    - Daily Habits/Routines: %s
+    - Strict Available Work Hours: %s
+
+    --- TASKS TO ACCOMPLISH ---
     %s
 
-    **Tasks to schedule:**
-    %s
+    --- IRON-CLAD RULES ---
+    1. TIME ACCURACY: The total scheduled duration for a WORK_TASK must exactly match its 'est' (estimated hours). 
+    2. SPLITTING: If a task's 'est' is > 2.0h, split it into multiple smaller blocks across the day or week.
+    3. BOUNDARIES: 'WORK_TASK' blocks MUST strictly fall within the 'Strict Available Work Hours'. 
+    4. PRIORITIES & DEADLINES: Schedule tasks with earlier 'due' dates first.
+    5. INVENTING BREAKS: Add 10-15 minute 'BREAK' blocks (taskId: null) between consecutive work tasks.
+    6. HABITS: Schedule the items in 'Daily Habits/Routines' as 'ROUTINE' blocks (taskId: null). If empty, invent routines.
+    7. MEALS: Schedule a 'MEAL' block (taskId: null) for Lunch around the provided Lunch time.
+    8. OVERFLOW: If tasks cannot logically fit into the available work hours over the next 3 days, put the un-schedulable task IDs into the "overflow" array.
+    9. NO OVERLAPS (CRITICAL): Tasks MUST NOT overlap in time. Every block must have a distinct, sequential start and end time. If one task ends at 10:00, the next cannot start before 10:00.
 
-    **Rules:**
-    - Respect due dates (schedule earlier tasks first).
-    - Higher priority tasks (HIGH > MEDIUM > LOW) come before lower priority.
-    - Do not exceed available time slots per day.
-    - Each task must be assigned a specific day and time slot (startTime and endTime) that is **after the current moment**.
-    - If a task cannot fit into any free slot, add its id to "overflow" list.
-
-    **Output format (ONLY valid JSON, no extra text):**
+    --- OUTPUT FORMAT (Strict JSON ONLY) ---
     {
       "schedule": [
-        { "taskId": "task-id-1", "date": "YYYY-MM-DD", "startTime": "09:00", "endTime": "10:00" }
+        { "taskId": "abc123", "title": "Build React App", "blockType": "WORK_TASK", "date": "2026-05-12", "startTime": "09:00", "endTime": "10:30" },
+        { "taskId": null, "title": "Stretch & Hydrate", "blockType": "ROUTINE", "date": "2026-05-12", "startTime": "10:30", "endTime": "10:45" },
+        { "taskId": null, "title": "Lunch", "blockType": "MEAL", "date": "2026-05-12", "startTime": "13:00", "endTime": "14:00" },
+        { "taskId": null, "title": "Coffee Break", "blockType": "BREAK", "date": "2026-05-12", "startTime": "15:30", "endTime": "15:45" }
       ],
-      "overflow": ["task-id-2", "task-id-3"]
+      "overflow": ["task-id-2"]
+    }
+    """, currentDateTime.toString(), prefs.getEnergyPeak(), prefs.getWakeTime(),
+                prefs.getSleepTime(), prefs.getLunchTime(), prefs.getDailyHabitsJson(),
+                prefs.getAvailableHoursJson(), tasksDesc.toString());
     }
 
-    **Example:**
-    {
-      "schedule": [
-        { "taskId": "abc123", "date": "2026-05-12", "startTime": "09:00", "endTime": "10:30" }
-      ],
-      "overflow": []
+    // 💡 THE FIX: Ultra-fast O(1) Memory lookup to prevent duplicates
+    private Set<UUID> getAlreadyScheduledTaskIds(User user) {
+        return scheduledTaskRepository.findAll().stream()
+                .filter(st -> st.getUser().getId().equals(user.getId()))
+                .map(st -> {
+                    if (st.getRoadmapTaskId() != null) return st.getRoadmapTaskId();
+                    if (st.getMilestoneTaskId() != null) return st.getMilestoneTaskId();
+                    if (st.getCustomTaskId() != null) return st.getCustomTaskId();
+                    return null;
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
     }
 
-    Now generate the schedule for the given tasks.
-    """, currentDateTime.toString(), availableHoursJson, tasksDesc.toString());
-    }
-    // New helper method
-    private List<ScheduleTaskRequest.TaskItem> collectTasksByMode(User user, String mode) {
+    private List<ScheduleTaskRequest.TaskItem> collectTasksByMode(User user, String mode, Set<UUID> alreadyScheduled) {
         if ("custom".equals(mode)) {
-            // Only custom tasks, and only those not yet scheduled
-            return collectUnscheduledCustomTasks(user);
+            return collectUnscheduledCustomTasks(user, alreadyScheduled);
         } else {
-            // Full mode (all tasks)
-            return collectUnscheduledTasks(user);
+            return collectUnscheduledTasks(user, alreadyScheduled);
         }
     }
 
-    private List<ScheduleTaskRequest.TaskItem> collectUnscheduledCustomTasks(User user) {
+    private List<ScheduleTaskRequest.TaskItem> collectUnscheduledCustomTasks(User user, Set<UUID> alreadyScheduled) {
         List<ScheduleTaskRequest.TaskItem> items = new ArrayList<>();
         List<CustomTask> customTasks = customTaskRepository.findByUserAndCompletedFalse(user);
+
         for (CustomTask ct : customTasks) {
-            // Check if already scheduled (optional: but we already deleted all custom-task scheduled entries, so none left)
-            if (scheduledTaskRepository.findAll().stream()
-                    .anyMatch(st -> ct.getId().equals(st.getCustomTaskId()))) {
-                continue;
-            }
+            if (alreadyScheduled.contains(ct.getId())) continue; // Skip if already safely on the calendar
+
             ScheduleTaskRequest.TaskItem item = new ScheduleTaskRequest.TaskItem();
             item.setId(ct.getId().toString());
             item.setTitle(ct.getTitle());
@@ -249,17 +258,54 @@ public class ScheduleService {
         }
         return items;
     }
-    // Helper method for fallback scheduling
-    // Replace your existing simpleSchedule method in ScheduleService.java with this:
 
-    private List<Map<String, Object>> simpleSchedule(List<ScheduleTaskRequest.TaskItem> tasks,
-                                                     Map<String, List<TimeSlot>> daySlots,
-                                                     LocalDate startDate,
-                                                     LocalTime currentTime) {
-        List<Map<String, Object>> result = new ArrayList<>();
-        int maxDays = 21;  // max 3 weeks ahead
+    private List<ScheduleTaskRequest.TaskItem> collectUnscheduledTasks(User user, Set<UUID> alreadyScheduled) {
+        List<ScheduleTaskRequest.TaskItem> items = new ArrayList<>();
 
-        // Sort tasks: priority HIGH > MEDIUM > LOW, then by dueDate (earlier first)
+        List<RoadmapTask> roadmapTasks = roadmapTaskRepository.findByRoadmap_User(user);
+        for (RoadmapTask rt : roadmapTasks) {
+            if (rt.isCompleted() || alreadyScheduled.contains(rt.getId())) continue;
+
+            ScheduleTaskRequest.TaskItem item = new ScheduleTaskRequest.TaskItem();
+            item.setId(rt.getId().toString());
+            item.setTitle(rt.getDescription());
+            item.setEstimatedHours(estimateDuration(rt.getDetails(), rt.getDescription()));
+            item.setDueDate(null);
+            item.setPriority("MEDIUM");
+            items.add(item);
+        }
+
+        List<Task> milestoneTasks = milestoneTaskRepository.findByMilestone_User(user);
+        for (Task mt : milestoneTasks) {
+            if (mt.getStatus() == Status.COMPLETED || alreadyScheduled.contains(mt.getId())) continue;
+
+            ScheduleTaskRequest.TaskItem item = new ScheduleTaskRequest.TaskItem();
+            item.setId(mt.getId().toString());
+            item.setTitle(mt.getDescription());
+            item.setEstimatedHours(estimateDuration(mt.getDetails(), mt.getDescription()));
+            item.setDueDate(mt.getDueDate() != null ? mt.getDueDate().toString() : null);
+            item.setPriority(mt.getStatus() == Status.OVERDUE ? "HIGH" : "MEDIUM");
+            items.add(item);
+        }
+
+        items.addAll(collectUnscheduledCustomTasks(user, alreadyScheduled));
+        return items;
+    }
+
+    private Double estimateDuration(String details, String description) {
+        if (details != null && details.length() > 100) return 2.0;
+        if (description != null && (description.toLowerCase().contains("project") || description.toLowerCase().contains("review"))) return 2.0;
+        if (details != null && details.length() > 50) return 1.5;
+        return 1.0;
+    }
+
+    private List<ScheduleItem> simpleSchedule(List<ScheduleTaskRequest.TaskItem> tasks,
+                                              Map<String, List<TimeSlot>> daySlots,
+                                              LocalDate startDate,
+                                              LocalTime currentTime) {
+        List<ScheduleItem> result = new ArrayList<>();
+        int maxDays = 21;
+
         tasks.sort((a, b) -> {
             int priorityCompare = Integer.compare(priorityRank(b.getPriority()), priorityRank(a.getPriority()));
             if (priorityCompare != 0) return priorityCompare;
@@ -283,7 +329,6 @@ public class ScheduleService {
                 String dayName = currentDay.getDayOfWeek().toString().toLowerCase();
                 List<TimeSlot> slots = daySlots.get(dayName);
 
-                // If no slots for this day, move to next day
                 if (slots == null || slots.isEmpty()) {
                     currentDayOffset++;
                     currentSlotIndex = 0;
@@ -291,7 +336,6 @@ public class ScheduleService {
                     continue;
                 }
 
-                // If currentSlotIndex is out of bounds, reset to next day
                 if (currentSlotIndex >= slots.size()) {
                     currentDayOffset++;
                     currentSlotIndex = 0;
@@ -300,15 +344,11 @@ public class ScheduleService {
                 }
 
                 boolean isToday = currentDay.equals(startDate);
-
-                // Get current slot (safe because index is within bounds)
                 TimeSlot currentSlot = slots.get(currentSlotIndex);
 
-                // Determine start time for this slot
                 if (currentTimeInSlot == null) {
                     LocalTime proposedStart = currentSlot.getStart();
                     if (isToday && proposedStart.isBefore(currentTime)) {
-                        // This slot is already past – move to the next slot
                         currentSlotIndex++;
                         continue;
                     }
@@ -317,17 +357,13 @@ public class ScheduleService {
 
                 LocalTime proposedEnd = currentTimeInSlot.plusMinutes(estMinutes);
 
-                // Check if task fits in current slot
                 if (proposedEnd.isAfter(currentSlot.getEnd())) {
-                    // Does not fit – move to next slot
                     currentSlotIndex++;
                     currentTimeInSlot = null;
                     continue;
                 }
 
-                // Double-check start time (for safety)
                 if (isToday && currentTimeInSlot.isBefore(currentTime)) {
-                    // Should not happen, but handle gracefully
                     currentTimeInSlot = currentTime;
                     proposedEnd = currentTimeInSlot.plusMinutes(estMinutes);
                     if (proposedEnd.isAfter(currentSlot.getEnd())) {
@@ -337,15 +373,11 @@ public class ScheduleService {
                     }
                 }
 
-                // Task fits – schedule it
-                Map<String, Object> scheduleItem = new HashMap<>();
-                scheduleItem.put("taskId", task.getId());
-                scheduleItem.put("date", currentDay.toString());
-                scheduleItem.put("startTime", currentTimeInSlot.toString());
-                scheduleItem.put("endTime", proposedEnd.toString());
-                result.add(scheduleItem);
+                result.add(new ScheduleItem(
+                        task.getId(), task.getTitle(), "WORK_TASK",
+                        currentDay.toString(), currentTimeInSlot.toString(), proposedEnd.toString()
+                ));
 
-                // Advance the clock within the same slot
                 currentTimeInSlot = proposedEnd;
                 scheduled = true;
             }
@@ -356,7 +388,7 @@ public class ScheduleService {
         }
         return result;
     }
-    
+
     private int priorityRank(String priority) {
         if ("HIGH".equals(priority)) return 3;
         if ("MEDIUM".equals(priority)) return 2;
@@ -370,8 +402,7 @@ public class ScheduleService {
             return getDefaultSlots();
         }
         try {
-            ObjectMapper mapper = new ObjectMapper();
-            Map<String, Object> hoursMap = mapper.readValue(json, new TypeReference<Map<String, Object>>() {});
+            Map<String, Object> hoursMap = objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {});
             for (Map.Entry<String, Object> entry : hoursMap.entrySet()) {
                 String day = entry.getKey().toLowerCase();
                 List<List<String>> slotsRaw = (List<List<String>>) entry.getValue();
@@ -392,7 +423,6 @@ public class ScheduleService {
     }
 
     private Map<String, List<TimeSlot>> getDefaultSlots() {
-        // Default: weekdays 9-12 and 13-17
         Map<String, List<TimeSlot>> defaultMap = new HashMap<>();
         TimeSlot morning = new TimeSlot();
         morning.setStart(LocalTime.of(9, 0));
@@ -407,77 +437,165 @@ public class ScheduleService {
         return defaultMap;
     }
 
-    // Inner class for time slot
-    @Data
-    static class TimeSlot {
-        private LocalTime start;
-        private LocalTime end;
-        // getters/setters
-    }
-    private List<ScheduleTaskRequest.TaskItem> collectUnscheduledTasks(User user) {
-        List<ScheduleTaskRequest.TaskItem> items = new ArrayList<>();
-
-        // Roadmap tasks that are not completed and not already scheduled
-        List<RoadmapTask> roadmapTasks = roadmapTaskRepository.findByRoadmap_User(user);
-        for (RoadmapTask rt : roadmapTasks) {
-            if (rt.isCompleted()) continue;
-            if (scheduledTaskRepository.findAll().stream()
-                    .anyMatch(st -> rt.getId().equals(st.getRoadmapTaskId()))) continue;
-            ScheduleTaskRequest.TaskItem item = new ScheduleTaskRequest.TaskItem();
-            item.setId(rt.getId().toString());
-            item.setTitle(rt.getDescription());
-            item.setEstimatedHours(estimateDuration(rt.getDetails(), rt.getDescription()));
-            item.setDueDate(null); // no due date in roadmap tasks
-            item.setPriority("MEDIUM");
-            items.add(item);
-        }
-
-        // Milestone tasks
-        List<Task> milestoneTasks = milestoneTaskRepository.findByMilestone_User(user);
-        for (Task mt : milestoneTasks) {
-            if (mt.getStatus() == Status.COMPLETED) continue;
-            if (scheduledTaskRepository.findAll().stream()
-                    .anyMatch(st -> mt.getId().equals(st.getMilestoneTaskId()))) continue;
-            ScheduleTaskRequest.TaskItem item = new ScheduleTaskRequest.TaskItem();
-            item.setId(mt.getId().toString());
-            item.setTitle(mt.getDescription());
-            item.setEstimatedHours(estimateDuration(mt.getDetails(), mt.getDescription()));
-            item.setDueDate(mt.getDueDate() != null ? mt.getDueDate().toString() : null);
-            item.setPriority(mt.getStatus() == Status.OVERDUE ? "HIGH" : "MEDIUM");
-            items.add(item);
-        }
-
-        // Custom tasks not completed and not scheduled
-        List<CustomTask> customTasks = customTaskRepository.findByUserAndCompletedFalse(user);
-        for (CustomTask ct : customTasks) {
-            if (scheduledTaskRepository.findAll().stream()
-                    .anyMatch(st -> ct.getId().equals(st.getCustomTaskId()))) continue;
-            ScheduleTaskRequest.TaskItem item = new ScheduleTaskRequest.TaskItem();
-            item.setId(ct.getId().toString());
-            item.setTitle(ct.getTitle());
-            item.setEstimatedHours(ct.getEstimatedHours());
-            item.setDueDate(ct.getDueDate() != null ? ct.getDueDate().toString() : null);
-            item.setPriority(ct.getPriority());
-            items.add(item);
-        }
-
-        return items;
-    }
-
-    private Double estimateDuration(String details, String description) {
-        if (details != null && details.length() > 100) return 2.0;
-        if (description != null && (description.toLowerCase().contains("project") || description.toLowerCase().contains("review"))) return 2.0;
-        if (details != null && details.length() > 50) return 1.5;
-        return 1.0;
-    }
-
     private UserPreferences createDefaultPreferences(User user) {
         UserPreferences prefs = new UserPreferences();
         prefs.setUser(user);
-        // Default: weekday 9am-5pm
         String defaultHours = "{\"monday\":[[\"09:00\",\"12:00\"],[\"13:00\",\"17:00\"]],\"tuesday\":[[\"09:00\",\"12:00\"],[\"13:00\",\"17:00\"]],\"wednesday\":[[\"09:00\",\"12:00\"],[\"13:00\",\"17:00\"]],\"thursday\":[[\"09:00\",\"12:00\"],[\"13:00\",\"17:00\"]],\"friday\":[[\"09:00\",\"12:00\"],[\"13:00\",\"17:00\"]]}";
         prefs.setAvailableHoursJson(defaultHours);
         prefs.setTimezone("Asia/Kolkata");
         return userPreferencesRepository.save(prefs);
+    }
+
+    @Transactional
+    public void reoptimizeToday(User user) {
+        UserPreferences preferences = userPreferencesRepository.findByUser(user)
+                .orElseGet(() -> createDefaultPreferences(user));
+
+        ZoneId userZone = ZoneId.of(preferences.getTimezone() != null ? preferences.getTimezone() : ZoneId.systemDefault().getId());
+        LocalDate today = LocalDate.now(userZone);
+        LocalDateTime currentDateTime = LocalDateTime.now(userZone);
+
+        // 1. SURGICAL STRIKE: Wipe ONLY today's incomplete tasks. Leave tomorrow and completed tasks alone.
+        scheduledTaskRepository.deleteIncompleteTodayByUser(user, today);
+        scheduledTaskRepository.flush();
+
+        // 2. Collect unscheduled tasks
+        Set<UUID> alreadyScheduled = getAlreadyScheduledTaskIds(user);
+        List<ScheduleTaskRequest.TaskItem> tasks = collectTasksByMode(user, "all", alreadyScheduled);
+
+        if (tasks.isEmpty()) {
+            log.info("No tasks to re-optimize for user {}", user.getUsername());
+            return;
+        }
+
+        // Limit to top 8 tasks since we are only filling the rest of today
+        List<ScheduleTaskRequest.TaskItem> aiTasks = tasks.size() > 8 ? tasks.subList(0, 8) : tasks;
+
+        // 3. Build the strict "Today Only" prompt
+        String prompt = buildReoptimizePrompt(aiTasks, preferences, currentDateTime, today);
+        ScheduleResponse aiResponse = null;
+        boolean useFallback = false;
+
+        try {
+            aiResponse = aiClientService.generateStructured(prompt, ScheduleResponse.class, user.getId(), AITask.SCHEDULE_GENERATION);
+            if (aiResponse == null || aiResponse.schedule() == null) useFallback = true;
+        } catch (Exception e) {
+            log.error("AI re-optimization failed, using fallback", e);
+            useFallback = true;
+        }
+
+        List<ScheduleItem> finalScheduleItems = new ArrayList<>();
+        Set<String> newlyScheduledTaskIds = new HashSet<>();
+
+        if (!useFallback && aiResponse != null) {
+            finalScheduleItems.addAll(aiResponse.schedule());
+            for (ScheduleItem item : aiResponse.schedule()) {
+                if (item.taskId() != null && !item.taskId().isBlank() && !item.taskId().equals("null")) {
+                    newlyScheduledTaskIds.add(item.taskId());
+                }
+            }
+        }
+
+        // Fallback for strictly today
+        List<ScheduleTaskRequest.TaskItem> unscheduledRemaining = tasks.stream()
+                .filter(t -> !newlyScheduledTaskIds.contains(t.getId()))
+                .collect(Collectors.toList());
+
+        if (!unscheduledRemaining.isEmpty()) {
+            Map<String, List<TimeSlot>> availableSlots = parseAvailableHours(preferences.getAvailableHoursJson());
+            // Using simpleSchedule but it naturally schedules starting from current time
+            List<ScheduleItem> fallbackSchedule = simpleSchedule(unscheduledRemaining, availableSlots, today, currentDateTime.toLocalTime());
+
+            // Filter fallback to ONLY keep tasks scheduled for today
+            finalScheduleItems.addAll(fallbackSchedule.stream()
+                    .filter(item -> LocalDate.parse(item.date()).equals(today))
+                    .toList());
+        }
+
+        // 4. Save to Database
+        for (ScheduleItem item : finalScheduleItems) {
+            if (item.date() == null || item.startTime() == null || item.endTime() == null) continue;
+
+            // Strict safety check: Only save if the AI actually kept it on TODAY
+            if (!LocalDate.parse(item.date()).equals(today)) continue;
+
+            ScheduledTask scheduled = new ScheduledTask();
+            scheduled.setUser(user);
+            scheduled.setScheduledDate(LocalDate.parse(item.date()));
+            scheduled.setStartTime(LocalTime.parse(item.startTime()));
+            scheduled.setEndTime(LocalTime.parse(item.endTime()));
+            scheduled.setCompleted(false);
+            scheduled.setReminderSent(false);
+
+            if (item.taskId() != null && !item.taskId().isBlank() && !item.taskId().equals("null")) {
+                UUID taskId = UUID.fromString(item.taskId());
+                scheduled.setBlockType("WORK_TASK");
+
+                if (roadmapTaskRepository.existsById(taskId)) {
+                    scheduled.setRoadmapTaskId(taskId);
+                    scheduled.setTitle(roadmapTaskRepository.findById(taskId).get().getDescription());
+                    scheduled.setPriority("MEDIUM");
+                } else if (milestoneTaskRepository.existsById(taskId)) {
+                    scheduled.setMilestoneTaskId(taskId);
+                    Task mt = milestoneTaskRepository.findById(taskId).get();
+                    scheduled.setTitle(mt.getDescription());
+                    scheduled.setPriority(mt.getStatus() == Status.OVERDUE ? "HIGH" : "MEDIUM");
+                } else if (customTaskRepository.existsById(taskId)) {
+                    scheduled.setCustomTaskId(taskId);
+                    scheduled.setTitle(customTaskRepository.findById(taskId).get().getTitle());
+                    scheduled.setPriority(customTaskRepository.findById(taskId).get().getPriority());
+                } else continue;
+            } else {
+                scheduled.setTitle(item.title() != null ? item.title() : "Personal Time");
+                scheduled.setBlockType(item.blockType() != null ? item.blockType() : "ROUTINE");
+                scheduled.setPriority("LOW");
+            }
+            scheduledTaskRepository.save(scheduled);
+        }
+    }
+
+    private String buildReoptimizePrompt(List<ScheduleTaskRequest.TaskItem> tasks, UserPreferences prefs, LocalDateTime currentDateTime, LocalDate today) {
+        StringBuilder tasksDesc = new StringBuilder();
+        for (ScheduleTaskRequest.TaskItem task : tasks) {
+            tasksDesc.append(String.format("- id: %s, title: %s, est: %.1fh, due: %s, priority: %s\n",
+                    task.getId(), task.getTitle(), task.getEstimatedHours() != null ? task.getEstimatedHours() : 1.0,
+                    task.getDueDate() != null ? task.getDueDate() : "none", task.getPriority() != null ? task.getPriority() : "MEDIUM"));
+        }
+
+        return String.format("""
+    You are a real-time recovery and re-optimization AI coach.
+    The user needs an immediate schedule for the REST OF TODAY ONLY.
+    Current Time: %s
+    Target Date: %s
+
+    --- USER LIFESTYLE & PREFERENCES ---
+    - Sleep time: %s (DO NOT schedule anything after this time)
+    - Strict Available Work Hours: %s
+
+    --- TASKS TO ACCOMPLISH ---
+    %s
+
+    --- IRON-CLAD RULES ---
+    1. TODAY ONLY: All generated 'date' fields MUST be exactly "%s". Do not schedule anything for tomorrow.
+    2. TIME ACCURACY: The total scheduled duration for a WORK_TASK must match its 'est'. 
+    3. BOUNDARIES: Start scheduling exactly from the Current Time. Stop completely before the user's Sleep time.
+    4. NO OVERLAPS: Tasks MUST NOT overlap in time. Every block must have a distinct, sequential start and end time.
+    5. OVERFLOW: If all tasks cannot fit into the remaining hours of today, put the un-schedulable task IDs into the "overflow" array. Do not force them into tomorrow.
+
+    --- OUTPUT FORMAT (Strict JSON ONLY) ---
+    {
+      "schedule": [
+        { "taskId": "abc123", "title": "Build React App", "blockType": "WORK_TASK", "date": "2026-05-12", "startTime": "14:00", "endTime": "15:30" },
+        { "taskId": null, "title": "Coffee Break", "blockType": "BREAK", "date": "2026-05-12", "startTime": "15:30", "endTime": "15:45" }
+      ],
+      "overflow": ["task-id-2", "task-id-3"]
+    }
+    """, currentDateTime.toString(), today.toString(), prefs.getSleepTime(), prefs.getAvailableHoursJson(), tasksDesc.toString(), today.toString());
+    }
+
+    @Data
+    private static class TimeSlot {
+        private LocalTime start;
+        private LocalTime end;
     }
 }

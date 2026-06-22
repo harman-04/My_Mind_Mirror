@@ -249,18 +249,38 @@ public class UserController {
 
     // In UserController.java, update the PUT /preferences method
 
+//    @PutMapping("/preferences")
+//    public ResponseEntity<UserPreferencesResponse> updateUserPreferences(@AuthenticationPrincipal UserDetails userDetails,
+//                                                                         @RequestBody Map<String, String> request) {
+//        User user = userService.findByUsername(userDetails.getUsername())
+//                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+//        String availableHoursJson = request.get("availableHoursJson");
+//        String timezone = request.get("timezone");
+//        UserPreferences updated = userService.updateUserPreferences(user, availableHoursJson, timezone);
+//
+//        UserPreferencesResponse response = new UserPreferencesResponse(
+//                updated.getAvailableHoursJson(),
+//                updated.getTimezone()
+//        );
+//        return ResponseEntity.ok(response);
+//    }
+
     @PutMapping("/preferences")
     public ResponseEntity<UserPreferencesResponse> updateUserPreferences(@AuthenticationPrincipal UserDetails userDetails,
-                                                                         @RequestBody Map<String, String> request) {
+                                                                         @RequestBody Map<String, Object> request) {
         User user = userService.findByUsername(userDetails.getUsername())
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        String availableHoursJson = request.get("availableHoursJson");
-        String timezone = request.get("timezone");
-        UserPreferences updated = userService.updateUserPreferences(user, availableHoursJson, timezone);
+
+        UserPreferences updated = userService.updateUserPreferences(user, request);
 
         UserPreferencesResponse response = new UserPreferencesResponse(
                 updated.getAvailableHoursJson(),
-                updated.getTimezone()
+                updated.getTimezone(),
+                updated.getEnergyPeak(),
+                updated.getWakeTime().toString(),
+                updated.getSleepTime().toString(),
+                updated.getLunchTime().toString(),
+                updated.getDailyHabitsJson()
         );
         return ResponseEntity.ok(response);
     }

@@ -2,7 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import axios from 'axios';
-import { toast } from 'sonner'; // if you want toast inside the hook (optional)
+import { toast } from 'sonner';
 
 const API_BASE_URL = 'http://localhost:8080/api';
 
@@ -53,11 +53,12 @@ const updateRoadmapPreferences = async (preferences) => {
     return response.data;
 };
 
-const updateUserPreferences = async ({ availableHoursJson, timezone }) => {
+// 💡 UPDATED: Now accepts the full preferences object dynamically
+const updateUserPreferences = async (preferencesData) => {
     const headers = getAuthHeader();
     if (!headers) throw new Error("Authentication required.");
     const response = await axios.put(`${API_BASE_URL}/users/preferences`,
-        { availableHoursJson, timezone },
+        preferencesData,
         { headers }
     );
     return response.data;
@@ -66,7 +67,6 @@ const updateUserPreferences = async ({ availableHoursJson, timezone }) => {
 export function useUserProfile() {
     const queryClient = useQueryClient();
 
-    // Single query for full profile – NO 'select', keep all fields
     const profileQuery = useQuery({
         queryKey: ['userFullProfile'],
         queryFn: fetchUserFullProfile,
@@ -83,9 +83,7 @@ export function useUserProfile() {
 
     const changePasswordMutation = useMutation({
         mutationFn: changeUserPassword,
-        onSuccess: () => {
-            // optionally log out or show toast
-        },
+        onSuccess: () => {},
     });
 
     const deleteProfileMutation = useMutation({
@@ -112,7 +110,6 @@ export function useUserProfile() {
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['userFullProfile'] }),
     });
 
-    // Derived values for convenience (optional – you can also compute in component)
     const apiKeyStatus = profileQuery.data
         ? {
               usingOwnKey: profileQuery.data.usingOwnKey,
@@ -126,18 +123,14 @@ export function useUserProfile() {
     const roadmapPreferences = profileQuery.data?.roadmapPreferences;
 
     return {
-        // Raw profile – contains id, username, email, usingOwnKey, maskedKey,
-        // roadmapPreferences, availableHoursJson, timezone
         profile: profileQuery.data,
         isLoading: profileQuery.isLoading,
         isError: profileQuery.isError,
         error: profileQuery.error,
 
-        // Convenience fields (also available inside profile, but kept for backward compatibility)
         apiKeyStatus: { data: apiKeyStatus, isLoading: profileQuery.isLoading },
         roadmapPreferences: { data: roadmapPreferences, isLoading: profileQuery.isLoading },
 
-        // Mutations
         updateProfile: updateProfileMutation.mutateAsync,
         deleteProfile: deleteProfileMutation.mutateAsync,
         changePassword: changePasswordMutation.mutateAsync,
@@ -145,7 +138,6 @@ export function useUserProfile() {
         updateRoadmapPreferences: updateRoadmapPreferencesMutation.mutateAsync,
         updatePreferences: updatePreferencesMutation.mutateAsync,
 
-        // Loading states
         isUpdating: updateProfileMutation.isLoading,
         isDeleting: deleteProfileMutation.isLoading,
         isChangingPassword: changePasswordMutation.isLoading,

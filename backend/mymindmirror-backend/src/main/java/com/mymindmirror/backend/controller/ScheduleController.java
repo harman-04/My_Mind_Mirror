@@ -76,7 +76,8 @@ public class ScheduleController {
                         t.getRoadmapTaskId(),
                         t.getMilestoneTaskId(),
                         t.getCustomTaskId(),
-                        t.getPriority()
+                        t.getPriority(),
+                        t.getBlockType()
                 ))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(response);
@@ -158,5 +159,15 @@ public class ScheduleController {
 
         scheduledTaskRepository.save(scheduled);
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/reoptimize")
+    public ResponseEntity<?> reoptimizeToday(@AuthenticationPrincipal UserDetails userDetails) {
+        Optional<User> userOpt = userService.findByUsername(userDetails.getUsername());
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(401).body("User not found");
+        }
+        scheduleService.reoptimizeToday(userOpt.get());
+        return ResponseEntity.ok().body("Today re-optimized");
     }
 }

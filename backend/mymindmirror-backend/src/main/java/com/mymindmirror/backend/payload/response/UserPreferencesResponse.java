@@ -11,4 +11,11 @@ import lombok.NoArgsConstructor;
 public class UserPreferencesResponse {
     private String availableHoursJson;
     private String timezone;
+
+    // NEW LIFESTYLE FIELDS
+    private String energyPeak;
+    private String wakeTime;
+    private String sleepTime;
+    private String lunchTime;
+    private String dailyHabitsJson;
 }
