@@ -1,39 +1,48 @@
 // src/pages/ProfilePage.jsx
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useUserProfile } from '../hooks/useUserProfile';
 import { useTheme } from '../contexts/ThemeContext';
 import { toast } from 'sonner';
 import {
-    User, Mail, Edit, Save, X, Trash2, Loader, CheckCircle, AlertCircle,
-    KeyRound, Lock, Info, Sparkles, Eye, EyeOff, Shield, Database, Target, Clock, Activity, Coffee
+    User, Edit, Save, X, Trash2, Loader, CheckCircle, AlertCircle,
+    KeyRound, Lock, Info, Sparkles, Eye, EyeOff, Shield, Database, Target, Clock, Activity, Coffee, MapPin, CalendarIcon
 } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
+import {
+    useUserFullProfile,
+    useApiKeyStatus,
+    useUpdateUserProfile,
+    useChangeUserPassword,
+    useDeleteUserProfile,
+    useUpdateApiKey,
+    useUpdateRoadmapPreferences,
+    useUpdateUserPreferences
+} from '../hooks/useUserProfile';
 
 function ProfilePage() {
     const navigate = useNavigate();
     const { theme } = useTheme();
     const isDarkMode = theme === 'dark';
 
-    const {
-        profile,
-        isLoading,
-        isError,
-        error,
-        updateProfile,
-        deleteProfile,
-        changePassword,
-        isUpdating,
-        isDeleting,
-        isChangingPassword,
-        apiKeyStatus,
-        updateApiKey,
-        roadmapPreferences,
-        updateRoadmapPreferences,
-        updatePreferences,
-        isUpdatingPreferences,
-    } = useUserProfile();
+    const { data: profile, isLoading, isError, error } = useUserFullProfile();
+    const apiKeyStatus = useApiKeyStatus();
+
+    const updateProfileMutation = useUpdateUserProfile();
+    const deleteProfileMutation = useDeleteUserProfile();
+    const changePasswordMutation = useChangeUserPassword();
+    const updateApiKeyMutation = useUpdateApiKey();
+    const updateRoadmapPrefsMutation = useUpdateRoadmapPreferences();
+    const updatePreferencesMutation = useUpdateUserPreferences();
+
+    const updateProfile = updateProfileMutation.mutateAsync;
+    const deleteProfile = deleteProfileMutation.mutateAsync;
+    const changePassword = changePasswordMutation.mutateAsync;
+    const updateApiKey = updateApiKeyMutation.mutateAsync;
+    const updateRoadmapPreferences = updateRoadmapPrefsMutation.mutateAsync;
+    const updatePreferences = updatePreferencesMutation.mutateAsync;
+
+    const isDeleting = deleteProfileMutation.isPending;
+    const isChangingPassword = changePasswordMutation.isPending;
 
     // Profile edit state
     const [isEditing, setIsEditing] = useState(false);
@@ -44,18 +53,14 @@ function ProfilePage() {
     const [currentPassword, setCurrentPassword] = useState('');
     const [newPassword, setNewPassword] = useState('');
     const [confirmNewPassword, setConfirmNewPassword] = useState('');
-    const [passwordChangeError, setPasswordChangeError] = useState('');
-    const [passwordChangeSuccess, setPasswordChangeSuccess] = useState('');
 
     // API key state
     const [newApiKey, setNewApiKey] = useState('');
     const [showApiKey, setShowApiKey] = useState(false);
-    const [apiKeyMessage, setApiKeyMessage] = useState('');
 
-    // Feedback messages
-    const [feedbackMessage, setFeedbackMessage] = useState({ type: '', text: '' });
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+    // ROADMAP DEFAULTS STATE
     const [roadmapPrefs, setRoadmapPrefs] = useState({
         difficulty: 'BEGINNER',
         languagePreference: 'en',
@@ -64,12 +69,12 @@ function ProfilePage() {
         avoidWeekends: false,
     });
 
-    // --- 💡 NEW: LIFESTYLE STATE ---
+    // LIFESTYLE STATE
     const [energyPeak, setEnergyPeak] = useState('MORNING');
     const [wakeTime, setWakeTime] = useState('07:00');
     const [sleepTime, setSleepTime] = useState('23:00');
     const [lunchTime, setLunchTime] = useState('13:00');
-    const [dailyHabits, setDailyHabits] = useState(''); // Textarea string
+    const [dailyHabits, setDailyHabits] = useState('');
 
     const [availableHours, setAvailableHours] = useState({
         monday: [["09:00","12:00"],["13:00","17:00"]],
@@ -82,33 +87,28 @@ function ProfilePage() {
     });
     const [timezone, setTimezone] = useState("Asia/Kolkata");
 
-    // Local loading flags
     const [savingProfile, setSavingProfile] = useState(false);
     const [savingPassword, setSavingPassword] = useState(false);
     const [savingApiKey, setSavingApiKey] = useState(false);
     const [savingRoadmapPrefs, setSavingRoadmapPrefs] = useState(false);
     const [savingLifestyle, setSavingLifestyle] = useState(false);
 
-    // Load preferences when available
     useEffect(() => {
-        if (roadmapPreferences.data) {
+        if (profile?.roadmapPreferences) {
             setRoadmapPrefs({
-                difficulty: roadmapPreferences.data.difficulty || 'BEGINNER',
-                languagePreference: roadmapPreferences.data.languagePreference || 'en',
-                learningStyle: roadmapPreferences.data.learningStyle || 'READING',
-                hoursPerWeek: roadmapPreferences.data.hoursPerWeek || 10,
-                avoidWeekends: roadmapPreferences.data.avoidWeekends || false,
+                difficulty: profile.roadmapPreferences.difficulty || 'BEGINNER',
+                languagePreference: profile.roadmapPreferences.languagePreference || 'en',
+                learningStyle: profile.roadmapPreferences.learningStyle || 'READING',
+                hoursPerWeek: profile.roadmapPreferences.hoursPerWeek || 10,
+                avoidWeekends: profile.roadmapPreferences.avoidWeekends || false,
             });
         }
-    }, [roadmapPreferences.data]);
+    }, [profile?.roadmapPreferences]);
 
-    // 💡 UPDATED: Load Lifestyle data from profile
     useEffect(() => {
         if (profile) {
             if (profile.availableHoursJson) {
-                try {
-                    setAvailableHours(JSON.parse(profile.availableHoursJson));
-                } catch(e) { console.error(e); }
+                try { setAvailableHours(JSON.parse(profile.availableHoursJson)); } catch(e) { console.error(e); }
             }
             if (profile.timezone) setTimezone(profile.timezone);
             if (profile.energyPeak) setEnergyPeak(profile.energyPeak);
@@ -121,6 +121,8 @@ function ProfilePage() {
                     setDailyHabits(habitsArray.join('\n'));
                 } catch(e) { console.error(e); }
             }
+            setEditedUsername(profile.username || '');
+            setEditedEmail(profile.email || '');
         }
     }, [profile]);
 
@@ -128,52 +130,20 @@ function ProfilePage() {
         setRoadmapPrefs(prev => ({ ...prev, [key]: value }));
     };
 
-    const saveRoadmapPrefs = useCallback(async () => {
+    const handleSaveRoadmapPrefs = useCallback(async () => {
         if (savingRoadmapPrefs) return;
         setSavingRoadmapPrefs(true);
         try {
             await updateRoadmapPreferences(roadmapPrefs);
-            toast.success('Roadmap preferences saved successfully!');
-            setFeedbackMessage({ type: '', text: '' });
+            toast.success('Roadmap defaults saved successfully!');
         } catch (err) {
-            console.error("Error saving roadmap prefs", err);
-            const errorMsg = err.message || 'Failed to save preferences.';
-            toast.error(errorMsg);
-            setFeedbackMessage({ type: 'error', text: errorMsg });
+            toast.error(err.message || 'Failed to save roadmap preferences.');
         } finally {
             setSavingRoadmapPrefs(false);
         }
     }, [roadmapPrefs, updateRoadmapPreferences, savingRoadmapPrefs]);
 
-    useEffect(() => {
-        if (profile) {
-            setEditedUsername(profile.username || '');
-            setEditedEmail(profile.email || '');
-        }
-    }, [profile]);
-
-    useEffect(() => {
-        if (feedbackMessage.text) {
-            const timer = setTimeout(() => setFeedbackMessage({ type: '', text: '' }), 5000);
-            return () => clearTimeout(timer);
-        }
-    }, [feedbackMessage]);
-
-    useEffect(() => {
-        if (passwordChangeSuccess) {
-            const timer = setTimeout(() => setPasswordChangeSuccess(''), 5000);
-            return () => clearTimeout(timer);
-        }
-        if (passwordChangeError) {
-            const timer = setTimeout(() => setPasswordChangeError(''), 5000);
-            return () => clearTimeout(timer);
-        }
-    }, [passwordChangeSuccess, passwordChangeError]);
-
-    const handleEditClick = () => {
-        setIsEditing(true);
-        setFeedbackMessage({ type: '', text: '' });
-    };
+    const handleEditClick = () => setIsEditing(true);
 
     const handleCancelEdit = () => {
         setIsEditing(false);
@@ -181,29 +151,21 @@ function ProfilePage() {
             setEditedUsername(profile.username || '');
             setEditedEmail(profile.email || '');
         }
-        setFeedbackMessage({ type: '', text: '' });
     };
 
     const handleSaveProfile = useCallback(async () => {
         if (savingProfile) return;
-        setFeedbackMessage({ type: '', text: '' });
         try {
             if (editedUsername.length < 3 || editedUsername.length > 50) {
-                const errorMsg = 'Username must be between 3 and 50 characters.';
-                setFeedbackMessage({ type: 'error', text: errorMsg });
-                toast.error(errorMsg);
+                toast.error('Username must be between 3 and 50 characters.');
                 return;
             }
             setSavingProfile(true);
             await updateProfile({ username: editedUsername, email: editedEmail });
             setIsEditing(false);
             toast.success('Profile updated successfully!');
-            setFeedbackMessage({ type: 'success', text: 'Profile updated successfully!' });
         } catch (err) {
-            console.error("Error updating profile:", err);
-            const errorMsg = err.response?.data?.message || err.message || 'Failed to update profile.';
-            setFeedbackMessage({ type: 'error', text: errorMsg });
-            toast.error(errorMsg);
+            toast.error(err.response?.data?.message || err.message || 'Failed to update profile.');
         } finally {
             setSavingProfile(false);
         }
@@ -211,47 +173,33 @@ function ProfilePage() {
 
     const handleChangePassword = useCallback(async () => {
         if (savingPassword) return;
-        setPasswordChangeError('');
-        setPasswordChangeSuccess('');
 
         if (!currentPassword || !newPassword || !confirmNewPassword) {
-            const errorMsg = 'All password fields are required.';
-            setPasswordChangeError(errorMsg);
-            toast.error(errorMsg);
+            toast.error('All password fields are required.');
             return;
         }
         if (newPassword.length < 6) {
-            const errorMsg = 'New password must be at least 6 characters long.';
-            setPasswordChangeError(errorMsg);
-            toast.error(errorMsg);
+            toast.error('New password must be at least 6 characters long.');
             return;
         }
         if (newPassword !== confirmNewPassword) {
-            const errorMsg = 'New password and confirmation do not match.';
-            setPasswordChangeError(errorMsg);
-            toast.error(errorMsg);
+            toast.error('New password and confirmation do not match.');
             return;
         }
         if (currentPassword === newPassword) {
-            const errorMsg = 'New password cannot be the same as the current password.';
-            setPasswordChangeError(errorMsg);
-            toast.error(errorMsg);
+            toast.error('New password cannot be the same as the current password.');
             return;
         }
 
         setSavingPassword(true);
         try {
             await changePassword({ currentPassword, newPassword });
-            setPasswordChangeSuccess('Password changed successfully!');
             toast.success('Password changed successfully!');
             setCurrentPassword('');
             setNewPassword('');
             setConfirmNewPassword('');
         } catch (err) {
-            console.error("Error changing password:", err);
-            const errorMsg = err.message || 'Failed to change password.';
-            setPasswordChangeError(errorMsg);
-            toast.error(errorMsg);
+            toast.error(err.message || 'Failed to change password.');
         } finally {
             setSavingPassword(false);
         }
@@ -259,17 +207,13 @@ function ProfilePage() {
 
     const handleSaveApiKey = useCallback(async () => {
         if (savingApiKey) return;
-        setApiKeyMessage('');
         setSavingApiKey(true);
         try {
             await updateApiKey(newApiKey);
             toast.success('API key saved successfully.');
-            setApiKeyMessage({ type: 'success', text: 'API key saved successfully.' });
             setNewApiKey('');
         } catch (err) {
-            const errorMsg = err.message || 'Failed to save API key.';
-            toast.error(errorMsg);
-            setApiKeyMessage({ type: 'error', text: errorMsg });
+            toast.error(err.message || 'Failed to save API key.');
         } finally {
             setSavingApiKey(false);
         }
@@ -277,36 +221,28 @@ function ProfilePage() {
 
     const handleDeleteAccount = () => setShowDeleteConfirm(true);
     const confirmDeleteAccount = async () => {
-        setFeedbackMessage({ type: '', text: '' });
         try {
             await deleteProfile();
             toast.success('Account deleted successfully. Redirecting...');
-            setFeedbackMessage({ type: 'success', text: 'Account deleted successfully. Redirecting...' });
             setTimeout(() => navigate('/'), 2000);
         } catch (err) {
-            console.error("Error deleting account:", err);
-            const errorMsg = err.message || 'Failed to delete account.';
-            toast.error(errorMsg);
-            setFeedbackMessage({ type: 'error', text: errorMsg });
+            toast.error(err.message || 'Failed to delete account.');
         } finally {
             setShowDeleteConfirm(false);
         }
     };
     const cancelDeleteAccount = () => setShowDeleteConfirm(false);
 
-    // 💡 UPDATED: Now saves Lifestyle & Hours together
     const handleSaveLifestyle = useCallback(async () => {
         if (savingLifestyle) return;
         setSavingLifestyle(true);
         try {
-            // Convert textarea lines to JSON Array safely
             const habitsArray = dailyHabits.split('\n').map(h => h.trim()).filter(h => h.length > 0);
-
             await updatePreferences({
                 availableHoursJson: JSON.stringify(availableHours),
                 timezone: timezone,
                 energyPeak: energyPeak,
-                wakeTime: wakeTime + ":00", // Append seconds for Java LocalTime
+                wakeTime: wakeTime + ":00",
                 sleepTime: sleepTime + ":00",
                 lunchTime: lunchTime + ":00",
                 dailyHabitsJson: JSON.stringify(habitsArray)
@@ -319,552 +255,437 @@ function ProfilePage() {
         }
     }, [availableHours, timezone, energyPeak, wakeTime, sleepTime, lunchTime, dailyHabits, updatePreferences, savingLifestyle]);
 
+    const SectionHeader = ({ icon: Icon, title, colorClass, subtitle }) => (
+        <div className="mb-6 lg:mb-8 border-b border-gray-200/50 dark:border-white/5 pb-5">
+            <div className="flex items-center gap-3 lg:gap-4">
+                <div className={`p-3 lg:p-4 rounded-xl lg:rounded-2xl bg-white/60 dark:bg-black/20 shadow-sm border border-white/40 dark:border-white/5 ${colorClass}`}>
+                    <Icon className="w-6 h-6 lg:w-7 lg:h-7" />
+                </div>
+                <div>
+                    <h2 className="text-xl lg:text-2xl font-poppins font-extrabold text-gray-800 dark:text-gray-100 tracking-tight">{title}</h2>
+                    {subtitle && <p className="text-xs lg:text-sm font-medium text-gray-500 dark:text-gray-400 mt-1">{subtitle}</p>}
+                </div>
+            </div>
+        </div>
+    );
+
+    // Premium Glassmorphism Sync
     const colors = {
-        background: isDarkMode ? 'bg-gray-900' : 'bg-gray-50',
-        cardBg: isDarkMode ? 'bg-gray-800/60 backdrop-blur-md' : 'bg-white/80 backdrop-blur-md',
-        cardBorder: isDarkMode ? 'border-gray-700/50' : 'border-gray-200/50',
-        sectionBg: isDarkMode ? 'bg-gray-800/40 backdrop-blur-sm' : 'bg-white/70 backdrop-blur-sm',
-        sectionBorder: isDarkMode ? 'border-gray-700/40' : 'border-gray-200/40',
+        background: 'bg-transparent',
+        cardBg: isDarkMode ? 'bg-[#1A162F]/60 backdrop-blur-xl' : 'bg-white/70 backdrop-blur-xl',
+        cardBorder: isDarkMode ? 'border-white/10' : 'border-gray-200/50',
+        sectionBg: isDarkMode ? 'bg-[#131127]/60 backdrop-blur-xl' : 'bg-white/50 backdrop-blur-xl',
+        sectionBorder: isDarkMode ? 'border-white/5' : 'border-gray-200/50',
         textPrimary: isDarkMode ? 'text-gray-100' : 'text-gray-900',
-        textSecondary: isDarkMode ? 'text-gray-300' : 'text-gray-600',
-        inputBg: isDarkMode ? 'bg-gray-800/80' : 'bg-white/90',
-        inputBorder: isDarkMode ? 'border-gray-600' : 'border-gray-300',
-        inputFocusRing: 'focus:ring-purple-500',
-        buttonPrimary: isDarkMode ? 'bg-gradient-to-r from-purple-500 to-teal-500 hover:from-purple-600 hover:to-teal-600' : 'bg-gradient-to-r from-purple-500 to-teal-500 hover:from-purple-600 hover:to-teal-600',
-        buttonSecondary: isDarkMode ? 'bg-gradient-to-r from-gray-700 to-gray-600 hover:from-gray-800 hover:to-gray-700' : 'bg-gradient-to-r from-gray-200 to-gray-300 hover:from-gray-300 hover:to-gray-400',
-        buttonDanger: 'bg-gradient-to-r from-red-600 to-red-700 hover:from-red-700 hover:to-red-800',
-        buttonText: 'text-white',
-        iconPrimary: isDarkMode ? 'text-teal-300' : 'text-purple-600',
-        iconDanger: 'text-red-500',
-        feedbackSuccessBg: isDarkMode ? 'bg-green-900/30 border border-green-700/50' : 'bg-green-100/80 border border-green-300',
-        feedbackSuccessText: isDarkMode ? 'text-green-300' : 'text-green-800',
-        feedbackErrorBg: isDarkMode ? 'bg-red-900/30 border border-red-700/50' : 'bg-red-100/80 border border-red-300',
-        feedbackErrorText: isDarkMode ? 'text-red-300' : 'text-red-800',
+        textSecondary: isDarkMode ? 'text-gray-400' : 'text-gray-500',
+        inputBg: isDarkMode ? 'bg-[#131127]/80 text-gray-100' : 'bg-white text-gray-900',
+        inputBorder: isDarkMode ? 'border-white/10' : 'border-gray-300',
+        inputFocusRing: 'focus:ring-2 focus:ring-purple-500/50 focus:border-purple-500/50 dark:focus:ring-teal-400/50 dark:focus:border-teal-400/50',
+        buttonPrimary: 'bg-gradient-to-r from-purple-500 to-teal-500 hover:from-purple-600 hover:to-teal-600 shadow-md hover:shadow-lg hover:-translate-y-0.5 active:scale-95 text-white disabled:opacity-50 disabled:hover:scale-100 disabled:hover:translate-y-0 transition-all duration-300',
+        buttonSecondary: isDarkMode ? 'bg-black/20 hover:bg-black/40 border border-white/10 text-gray-200 active:scale-95 disabled:opacity-50' : 'bg-gray-100 hover:bg-gray-200 active:scale-95 border border-transparent disabled:opacity-50',
+        buttonDanger: 'bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 hover:shadow-[0_0_15px_rgba(244,63,94,0.3)] active:scale-95 text-white disabled:opacity-50 disabled:hover:scale-100 transition-all duration-300',
     };
 
     if (isLoading) {
         return (
-            <div className={`min-h-screen w-full ${colors.background} flex flex-col items-center justify-center p-4 transition-all duration-500`}>
-                <Sparkles size={80} className={`${colors.iconPrimary} animate-pulse-slow mb-6`} />
-                <p className="text-2xl font-poppins font-semibold text-gray-700 dark:text-gray-200">Loading your profile...</p>
-                <div className="w-64 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mt-4">
-                    <div className="h-full bg-gradient-to-r from-purple-500 to-teal-500 animate-pulse-fast"></div>
+            <div className={`min-h-[75vh] w-full flex flex-col items-center justify-center p-4 relative`}>
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="w-72 h-72 bg-purple-500/10 rounded-full blur-[100px] animate-pulse" />
+                    <div className="w-72 h-72 bg-teal-500/10 rounded-full blur-[100px] animate-pulse delay-700 absolute ml-20" />
                 </div>
+                <div className="relative z-10 flex flex-col items-center">
+                    <div className="p-6 rounded-[2rem] bg-white/40 dark:bg-black/20 backdrop-blur-xl border border-white/40 dark:border-white/10 shadow-2xl mb-8 relative overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-tr from-purple-500/10 to-teal-500/10 animate-pulse" />
+                        <User size={56} className="text-purple-500 dark:text-purple-400 relative z-10 animate-bounce" style={{ animationDuration: '2s' }} />
+                    </div>
+                    <h2 className="text-2xl font-poppins font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-600 to-teal-500 dark:from-purple-400 dark:to-teal-400 mb-4 tracking-tight">
+                        Loading Profile Data
+                    </h2>
+                    <div className="w-56 h-1.5 bg-gray-200/80 dark:bg-gray-700/50 rounded-full overflow-hidden relative shadow-inner">
+                        <div className="absolute top-0 left-0 h-full w-1/2 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-teal-400 rounded-full animate-progress-indeterminate" />
+                    </div>
+                </div>
+                <style>{`
+                    @keyframes indeterminate { 0% { transform: translateX(-100%); } 100% { transform: translateX(200%); } }
+                    .animate-progress-indeterminate { animation: indeterminate 1.5s infinite cubic-bezier(0.65, 0, 0.35, 1); }
+                `}</style>
             </div>
         );
     }
 
     if (isError) {
         return (
-            <div className={`min-h-screen w-full ${colors.background} flex items-center justify-center p-4`}>
+            <div className={`min-h-[60vh] w-full flex items-center justify-center p-4`}>
                 <div className="text-center space-y-4">
                     <AlertCircle size={48} className="text-red-500 mx-auto" />
-                    <p className="text-red-500">{error?.message || 'Failed to load profile.'}</p>
-                    <button onClick={() => navigate('/login')} className="px-4 py-2 rounded-full bg-purple-500 text-white hover:bg-purple-600 transition">Go to Login</button>
+                    <p className="text-red-500 font-bold">{error?.message || 'Failed to load profile.'}</p>
+                    <button onClick={() => navigate('/login')} className={`px-6 py-2 rounded-full text-white ${colors.buttonPrimary} transition-all`}>Return to Login</button>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className={`min-h-screen w-full ${colors.background} transition-colors duration-300 relative p-4 sm:p-6`}>
-            {/* Animated Background */}
-            <div className="fixed inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-teal-500/5" />
-                <div className="absolute top-20 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse-slow" />
-                <div className="absolute bottom-20 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl animate-pulse-slow delay-1000" />
+        <div className={`w-full transition-colors duration-300 relative`}>
+
+            <div className="absolute top-30 left-2 opacity-20 animate-float hidden lg:block pointer-events-none">
+                <User size={40} className="text-purple-400" />
+            </div>
+            <div className="absolute bottom-42 right-10 opacity-20 animate-float-delayed hidden lg:block pointer-events-none">
+                <Shield size={40} className="text-teal-400" />
             </div>
 
-            <div className="absolute top-32 left-5 opacity-30 animate-float hidden lg:block">
-                <User size={32} className="text-purple-400" />
-            </div>
-            <div className="absolute bottom-32 right-10 opacity-30 animate-float-delayed hidden lg:block">
-                <Shield size={32} className="text-teal-400" />
-            </div>
+            <div className="max-w-7xl mx-auto relative z-10 space-y-6 sm:space-y-8 pb-10">
 
-            <div className="max-w-3xl mx-auto relative z-10 space-y-6">
-                {/* Header */}
-                <div className="text-center">
-                    <div className="inline-flex p-3 rounded-2xl bg-gradient-to-br from-purple-500/20 to-teal-500/20 mb-4">
-                        <User className="w-8 h-8 text-purple-400" />
+                <div className={`rounded-2xl ${colors.cardBg} border ${colors.cardBorder} p-6 shadow-lg flex flex-col sm:flex-row items-center gap-5 transition-all hover:shadow-xl mt-4`}>
+                    <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-500/20 to-teal-500/20 shadow-inner">
+                        <User className="w-8 h-8 text-purple-500  dark:text-purple-400" />
                     </div>
-                    <h1 className="text-3xl sm:text-4xl font-poppins font-bold bg-gradient-to-r from-purple-400 to-teal-400 bg-clip-text text-transparent">
-                        Your Profile
-                    </h1>
-                    <p className={`text-sm ${colors.textSecondary} mt-2`}>Manage your account settings</p>
+                    <div className="text-center sm:text-left">
+                        <h1 className="text-2xl sm:text-3xl font-poppins font-bold bg-gradient-to-r from-purple-600 to-teal-500 dark:from-purple-400 dark:to-teal-400 bg-clip-text text-transparent">
+                            Account Settings
+                        </h1>
+                        <p className={`text-sm ${colors.textSecondary} mt-1 font-medium`}>
+                            Manage your personal information and application preferences.
+                        </p>
+                    </div>
                 </div>
 
-                {/* Main Card */}
-                <div className={`rounded-2xl ${colors.cardBg} border ${colors.cardBorder} shadow-xl backdrop-blur-sm overflow-hidden`}>
-                    <div className="p-6 sm:p-8 space-y-8">
-                        {/* Global Feedback */}
-                        {feedbackMessage.text && (
-                            <div className={`p-4 rounded-xl flex items-center gap-3 ${feedbackMessage.type === 'success' ? colors.feedbackSuccessBg : colors.feedbackErrorBg}`}>
-                                {feedbackMessage.type === 'success' ? <CheckCircle size={20} /> : <AlertCircle size={20} />}
-                                <p className="text-sm flex-1">{feedbackMessage.text}</p>
-                            </div>
+                {/* Account Details */}
+                <div className={`rounded-2xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 sm:p-8 shadow-lg transition-all hover:shadow-xl`}>
+                    <SectionHeader icon={User} title="Account Details" colorClass="text-purple-500 " />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 ${colors.textSecondary}`}>Username</label>
+                            {isEditing ? (
+                                <input
+                                    type="text"
+                                    value={editedUsername}
+                                    onChange={(e) => setEditedUsername(e.target.value)}
+                                    className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} ${colors.inputFocusRing} outline-none transition-all text-sm font-medium`}
+                                    disabled={savingProfile}
+                                />
+                            ) : (
+                                <div className={`p-3.5 rounded-xl ${colors.inputBg} border ${colors.inputBorder} font-bold text-sm ${colors.textPrimary}`}>
+                                    {profile?.username}
+                                </div>
+                            )}
+                        </div>
+                        <div>
+                            <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 ${colors.textSecondary}`}>Email</label>
+                            {isEditing ? (
+                                <input
+                                    type="email"
+                                    value={editedEmail}
+                                    onChange={(e) => setEditedEmail(e.target.value)}
+                                    className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} ${colors.inputFocusRing} outline-none transition-all text-sm font-medium`}
+                                    disabled={savingProfile}
+                                />
+                            ) : (
+                                <div className={`p-3.5 rounded-xl ${colors.inputBg} border ${colors.inputBorder} font-bold text-sm ${colors.textPrimary}`}>
+                                    {profile?.email}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-200/50 dark:border-gray-700/50">
+                        {isEditing ? (
+                            <>
+                                <button onClick={handleCancelEdit} className={`px-6 py-2.5 rounded-xl font-bold transition-all flex items-center justify-center gap-2 ${colors.buttonSecondary} ${colors.textPrimary}`} disabled={savingProfile}>
+                                    <X size={18} /> Cancel
+                                </button>
+                                <button onClick={handleSaveProfile} className={`px-8 py-2.5 rounded-xl text-white font-bold transition-all flex items-center justify-center gap-2 ${colors.buttonPrimary}`} disabled={savingProfile}>
+                                    {savingProfile ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}
+                                    {savingProfile ? 'Saving...' : 'Save Profile'}
+                                </button>
+                            </>
+                        ) : (
+                            <button onClick={handleEditClick} className={`px-8 py-2.5 rounded-xl text-white font-bold transition-all flex items-center justify-center gap-2 ${colors.buttonPrimary}`}>
+                                <Edit size={18} /> Edit Profile
+                            </button>
                         )}
+                    </div>
+                </div>
 
-                        {/* Account Details */}
-                        <div className={`rounded-xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 space-y-5`}>
-                            <h2 className="text-xl font-semibold flex items-center gap-2">
-                                <User size={20} className="text-purple-400" /> Account Details
-                            </h2>
-                            <div className="space-y-4">
-                                <div>
-                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Username</label>
-                                    {isEditing ? (
-                                        <input
-                                            type="text"
-                                            value={editedUsername}
-                                            onChange={(e) => setEditedUsername(e.target.value)}
-                                            className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                                            disabled={savingProfile}
-                                        />
-                                    ) : (
-                                        <div className={`p-3 rounded-xl ${colors.inputBg} border ${colors.inputBorder}`}>
-                                            <span className="font-medium">{profile?.username}</span>
-                                        </div>
-                                    )}
-                                </div>
-                                <div>
-                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Email</label>
-                                    {isEditing ? (
-                                        <input
-                                            type="email"
-                                            value={editedEmail}
-                                            onChange={(e) => setEditedEmail(e.target.value)}
-                                            className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                                            disabled={savingProfile}
-                                        />
-                                    ) : (
-                                        <div className={`p-3 rounded-xl ${colors.inputBg} border ${colors.inputBorder}`}>
-                                            <span className="font-medium">{profile?.email}</span>
-                                        </div>
-                                    )}
-                                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 items-stretch">
+
+                    {/* Change Password */}
+                    <div className={`col-span-1 flex flex-col h-full rounded-2xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 sm:p-8 shadow-lg transition-all hover:shadow-xl`}>
+                        <SectionHeader icon={KeyRound} title="Change Password" colorClass="text-indigo-500" />
+                        <div className="space-y-4 flex-grow">
+                            <div>
+                                <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 ${colors.textSecondary}`}>Current Password</label>
+                                <input
+                                    type="password"
+                                    value={currentPassword}
+                                    onChange={(e) => setCurrentPassword(e.target.value)}
+                                    className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} ${colors.inputFocusRing} outline-none transition-all text-sm font-medium`}
+                                    placeholder="••••••••"
+                                    disabled={savingPassword}
+                                />
                             </div>
-                            <div className="flex justify-end gap-3 pt-2">
-                                {isEditing ? (
-                                    <>
-                                        <button
-                                            onClick={handleCancelEdit}
-                                            className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonSecondary} ${colors.buttonText}`}
-                                            disabled={savingProfile}
-                                        >
-                                            <X size={16} /> Cancel
-                                        </button>
-                                        <button
-                                            onClick={handleSaveProfile}
-                                            className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
-                                            disabled={savingProfile}
-                                        >
-                                            {savingProfile ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
-                                            {savingProfile ? 'Saving...' : 'Save'}
-                                        </button>
-                                    </>
-                                ) : (
-                                    <button
-                                        onClick={handleEditClick}
-                                        className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
-                                    >
-                                        <Edit size={16} /> Edit Profile
-                                    </button>
-                                )}
+                            <div>
+                                <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 ${colors.textSecondary}`}>New Password</label>
+                                <input
+                                    type="password"
+                                    value={newPassword}
+                                    onChange={(e) => setNewPassword(e.target.value)}
+                                    className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} ${colors.inputFocusRing} outline-none transition-all text-sm font-medium`}
+                                    placeholder="••••••••"
+                                    disabled={savingPassword}
+                                />
+                            </div>
+                            <div>
+                                <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 ${colors.textSecondary}`}>Confirm Password</label>
+                                <input
+                                    type="password"
+                                    value={confirmNewPassword}
+                                    onChange={(e) => setConfirmNewPassword(e.target.value)}
+                                    className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} ${colors.inputFocusRing} outline-none transition-all text-sm font-medium`}
+                                    placeholder="••••••••"
+                                    disabled={savingPassword}
+                                />
                             </div>
                         </div>
-
-                        {/* Change Password */}
-                        <div className={`rounded-xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 space-y-5`}>
-                            <h2 className="text-xl font-semibold flex items-center gap-2">
-                                <KeyRound size={20} className="text-teal-400" /> Change Password
-                            </h2>
-                            {passwordChangeSuccess && (
-                                <div className={`p-3 rounded-lg flex items-center gap-2 ${colors.feedbackSuccessBg}`}>
-                                    <CheckCircle size={16} /> <span className="text-sm">{passwordChangeSuccess}</span>
-                                </div>
-                            )}
-                            {passwordChangeError && (
-                                <div className={`p-3 rounded-lg flex items-center gap-2 ${colors.feedbackErrorBg}`}>
-                                    <AlertCircle size={16} /> <span className="text-sm">{passwordChangeError}</span>
-                                </div>
-                            )}
-                            <div className="space-y-4">
-                                <div>
-                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Current Password</label>
-                                    <input
-                                        type="password"
-                                        value={currentPassword}
-                                        onChange={(e) => setCurrentPassword(e.target.value)}
-                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                                        placeholder="••••••••"
-                                        disabled={savingPassword}
-                                    />
-                                </div>
-                                <div>
-                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>New Password</label>
-                                    <input
-                                        type="password"
-                                        value={newPassword}
-                                        onChange={(e) => setNewPassword(e.target.value)}
-                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                                        placeholder="••••••••"
-                                        disabled={savingPassword}
-                                    />
-                                </div>
-                                <div>
-                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Confirm New Password</label>
-                                    <input
-                                        type="password"
-                                        value={confirmNewPassword}
-                                        onChange={(e) => setConfirmNewPassword(e.target.value)}
-                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                                        placeholder="••••••••"
-                                        disabled={savingPassword}
-                                    />
-                                </div>
-                            </div>
-                            <div className="flex justify-end">
-                                <button
-                                    onClick={handleChangePassword}
-                                    className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
-                                    disabled={savingPassword || isChangingPassword}
-                                >
-                                    {(savingPassword || isChangingPassword) ? <Loader size={16} className="animate-spin" /> : <Lock size={16} />}
-                                    {(savingPassword || isChangingPassword) ? 'Changing...' : 'Change Password'}
-                                </button>
-                            </div>
+                        <div className="mt-6 pt-6 border-t border-gray-200/50 dark:border-white/5">
+                            <button
+                                onClick={handleChangePassword}
+                                className={`w-full py-3 rounded-xl text-white font-bold transition-all flex items-center justify-center gap-2 ${colors.buttonPrimary}`}
+                                disabled={savingPassword || isChangingPassword}
+                            >
+                                {(savingPassword || isChangingPassword) ? <Loader size={18} className="animate-spin" /> : <Lock size={18} />}
+                                {(savingPassword || isChangingPassword) ? 'Changing...' : 'Update Password'}
+                            </button>
                         </div>
+                    </div>
 
-                        {/* Lifestyle & Schedule Card (THE UPGRADED SECTION) */}
-                        <div className={`rounded-2xl ${colors.sectionBg} border ${colors.sectionBorder} p-4 sm:p-6 lg:p-8 shadow-sm backdrop-blur-sm space-y-6`}>
-                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-                                <div>
-                                    <h2 className="text-lg sm:text-xl font-semibold flex items-center gap-2">
-                                        <div className="p-2 rounded-lg bg-teal-500/10">
-                                            <Activity size={18} className="text-teal-400" />
-                                        </div>
-                                        Lifestyle & Schedule
-                                    </h2>
-                                    <p className={`text-sm mt-2 ${colors.textSecondary} max-w-2xl`}>
-                                        Set your available hours and tell the AI about your daily routines so it can generate the perfect, balanced timetable for you.
-                                    </p>
-                                </div>
-                            </div>
+                    {/* Gemini API Key */}
+                    <div className={`col-span-1 flex flex-col h-full rounded-2xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 sm:p-8 shadow-lg transition-all hover:shadow-xl`}>
+                        <SectionHeader icon={Database} title="Gemini API Key" colorClass="text-amber-500" />
 
-                            {/* Lifestyle Form Grid */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
-                                <div>
-                                    <label className={`block text-sm font-medium mb-1.5 flex items-center gap-2 ${colors.textSecondary}`}><Sparkles size={14} className="text-purple-400"/> Energy Peak</label>
-                                    <select value={energyPeak} onChange={(e) => setEnergyPeak(e.target.value)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 ${colors.inputFocusRing}`}>
-                                        <option value="MORNING">Morning (Focus best early)</option>
-                                        <option value="AFTERNOON">Afternoon (Steady worker)</option>
-                                        <option value="EVENING">Evening (Night Owl)</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className={`block text-sm font-medium mb-1.5 flex items-center gap-2 ${colors.textSecondary}`}><Clock size={14} className="text-teal-400"/> Wake Time</label>
-                                    <input type="time" value={wakeTime} onChange={(e) => setWakeTime(e.target.value)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 ${colors.inputFocusRing}`} />
-                                </div>
-                                <div>
-                                    <label className={`block text-sm font-medium mb-1.5 flex items-center gap-2 ${colors.textSecondary}`}><Clock size={14} className="text-teal-400"/> Sleep Time</label>
-                                    <input type="time" value={sleepTime} onChange={(e) => setSleepTime(e.target.value)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 ${colors.inputFocusRing}`} />
-                                </div>
-                                <div>
-                                    <label className={`block text-sm font-medium mb-1.5 flex items-center gap-2 ${colors.textSecondary}`}><Coffee size={14} className="text-amber-500"/> Lunch Time</label>
-                                    <input type="time" value={lunchTime} onChange={(e) => setLunchTime(e.target.value)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 ${colors.inputFocusRing}`} />
-                                </div>
-                                <div className="md:col-span-2">
-                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Daily Habits / Routines (One per line)</label>
-                                    <textarea
-                                        value={dailyHabits}
-                                        onChange={(e) => setDailyHabits(e.target.value)}
-                                        placeholder="e.g. 15 mins meditation&#10;30 min walk outside&#10;Read 10 pages of a book"
-                                        rows="3"
-                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 ${colors.inputFocusRing} resize-y`}
-                                    />
-                                    <p className={`text-xs mt-1 ${colors.textSecondary}`}>The AI will automatically weave these breaks into your timetable!</p>
-                                </div>
-                            </div>
-
-                            <hr className={`border-${colors.sectionBorder} my-6`} />
-
-                            <h3 className="font-medium text-lg pt-2">Available Work Blocks</h3>
-
-                            <div className="space-y-5">
-                                {Object.keys(availableHours).map((day) => (
-                                    <div
-                                        key={day}
-                                        className={`rounded-2xl border ${colors.sectionBorder} bg-white/40 dark:bg-white/[0.03] p-4 sm:p-5 transition-all duration-200 hover:shadow-md`}
-                                    >
-                                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                                            <div className="flex items-center gap-3">
-                                                <div className="w-2 h-8 rounded-full bg-gradient-to-b from-purple-500 to-teal-400" />
-                                                <div>
-                                                    <h3 className="capitalize font-semibold text-base sm:text-lg">{day}</h3>
-                                                    <p className={`text-xs ${colors.textSecondary}`}>
-                                                        {availableHours[day].length} slot{availableHours[day].length !== 1 ? "s" : ""}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    const newSlots = [...availableHours[day], ["09:00", "17:00"]];
-                                                    setAvailableHours({ ...availableHours, [day]: newSlots });
-                                                }}
-                                                className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gradient-to-r from-purple-500 to-teal-500 text-white transition-all duration-200 hover:scale-[1.02] hover:shadow-lg disabled:opacity-50 disabled:hover:scale-100"
-                                                disabled={savingLifestyle}
-                                            >
-                                                + Add Slot
-                                            </button>
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            {availableHours[day].map((slot, idx) => (
-                                                <div key={idx} className={`group rounded-xl border ${colors.inputBorder} ${colors.inputBg} p-3`}>
-                                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-                                                        <div className="flex-1">
-                                                            <label className={`text-xs mb-1 block ${colors.textSecondary}`}>Start</label>
-                                                            <input
-                                                                type="time"
-                                                                value={slot[0]}
-                                                                onChange={(e) => {
-                                                                    const newSlots = [...availableHours[day]];
-                                                                    newSlots[idx][0] = e.target.value;
-                                                                    setAvailableHours({ ...availableHours, [day]: newSlots });
-                                                                }}
-                                                                className={`w-full px-3 py-2.5 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 focus:ring-purple-500/40 focus:border-purple-500 outline-none transition-all`}
-                                                                disabled={savingLifestyle}
-                                                            />
-                                                        </div>
-                                                        <div className="hidden sm:flex items-center justify-center pt-5">
-                                                            <span className="text-gray-400">→</span>
-                                                        </div>
-                                                        <div className="flex-1">
-                                                            <label className={`text-xs mb-1 block ${colors.textSecondary}`}>End</label>
-                                                            <input
-                                                                type="time"
-                                                                value={slot[1]}
-                                                                onChange={(e) => {
-                                                                    const newSlots = [...availableHours[day]];
-                                                                    newSlots[idx][1] = e.target.value;
-                                                                    setAvailableHours({ ...availableHours, [day]: newSlots });
-                                                                }}
-                                                                className={`w-full px-3 py-2.5 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:ring-2 focus:ring-teal-500/40 focus:border-teal-500 outline-none transition-all`}
-                                                                disabled={savingLifestyle}
-                                                            />
-                                                        </div>
-                                                        <div className="flex items-end">
-                                                            <button
-                                                                onClick={() => {
-                                                                    const newSlots = availableHours[day].filter((_, i) => i !== idx);
-                                                                    setAvailableHours({ ...availableHours, [day]: newSlots });
-                                                                }}
-                                                                className="w-full sm:w-11 h-11 rounded-xl flex items-center justify-center text-red-500 hover:bg-red-500/10 transition-all duration-200 disabled:opacity-50"
-                                                                disabled={savingLifestyle}
-                                                            >
-                                                                <Trash2 size={16} />
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                            {availableHours[day].length === 0 && (
-                                                <div className={`rounded-xl border border-dashed ${colors.sectionBorder} p-5 text-center`}>
-                                                    <p className={`text-sm italic ${colors.textSecondary}`}>No slots added — no tasks will be scheduled on this day.</p>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="flex flex-col-reverse sm:flex-row gap-3 sm:justify-end pt-4">
-                                <button
-                                    onClick={handleSaveLifestyle}
-                                    disabled={savingLifestyle || isUpdatingPreferences}
-                                    className="w-full sm:w-auto min-w-[180px] px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-500 to-teal-500 text-white font-semibold flex items-center justify-center gap-2 transition-all duration-200 hover:shadow-xl hover:scale-[1.01] disabled:opacity-50 disabled:hover:scale-100"
-                                >
-                                    {(savingLifestyle || isUpdatingPreferences) ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}
-                                    {(savingLifestyle || isUpdatingPreferences) ? "Saving..." : "Save Lifestyle & Schedule"}
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Gemini API Key */}
-                        <div className={`rounded-xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 space-y-5`}>
-                            <h2 className="text-xl font-semibold flex items-center gap-2">
-                                <Database size={20} className="text-purple-400" /> Gemini API Key
-                            </h2>
+                        <div className="space-y-6 flex-grow">
                             {apiKeyStatus.isLoading ? (
-                                <p className="text-gray-500">Loading...</p>
+                                <div className="h-12 bg-gray-200/50 dark:bg-gray-700/50 rounded-xl animate-pulse" />
                             ) : apiKeyStatus.data ? (
-                                <div className={`p-3 rounded-lg flex items-center gap-2 ${apiKeyStatus.data.usingOwnKey ? colors.feedbackSuccessBg : colors.feedbackErrorBg}`}>
-                                    {apiKeyStatus.data.usingOwnKey ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
-                                    <span className="text-sm">{apiKeyStatus.data.message}</span>
-                                    {apiKeyStatus.data.usingOwnKey && (
-                                        <span className="text-xs font-mono ml-2">({apiKeyStatus.data.maskedKey})</span>
-                                    )}
+                                <div className={`p-4 rounded-xl flex items-center gap-3 border shadow-sm ${apiKeyStatus.data.usingOwnKey ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400' : 'bg-amber-500/10 border-amber-500/30 text-amber-600 dark:text-amber-400'}`}>
+                                    {apiKeyStatus.data.usingOwnKey ? <CheckCircle size={20} className="shrink-0" /> : <AlertCircle size={20} className="shrink-0" />}
+                                    <div className="flex flex-col min-w-0">
+                                        <span className="font-bold text-sm truncate">{apiKeyStatus.data.message}</span>
+                                        {apiKeyStatus.data.usingOwnKey && <span className="text-[10px] font-mono opacity-80 mt-0.5 truncate">({apiKeyStatus.data.maskedKey})</span>}
+                                    </div>
                                 </div>
                             ) : null}
-                            <div className="flex flex-col sm:flex-row gap-4">
-                                <div className="flex-1">
-                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Your API Key</label>
-                                    <div className="flex">
-                                        <input
-                                            type={showApiKey ? 'text' : 'password'}
-                                            value={newApiKey}
-                                            onChange={(e) => setNewApiKey(e.target.value)}
-                                            placeholder="Paste your Gemini API key here"
-                                            className={`flex-1 p-3 rounded-l-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                                            disabled={savingApiKey}
-                                        />
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowApiKey(!showApiKey)}
-                                            className="px-4 rounded-r-xl bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
-                                            disabled={savingApiKey}
-                                        >
-                                            {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className="flex items-end">
+
+                            <div>
+                                <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 ${colors.textSecondary}`}>Private Key</label>
+                                <div className="flex shadow-sm rounded-xl overflow-hidden border border-gray-200/50 dark:border-white/10">
+                                    <input
+                                        type={showApiKey ? 'text' : 'password'}
+                                        value={newApiKey}
+                                        onChange={(e) => setNewApiKey(e.target.value)}
+                                        placeholder="Paste Gemini API key..."
+                                        className={`flex-1 p-3 bg-transparent focus:outline-none focus:bg-white/50 dark:focus:bg-black/20 transition-all font-medium text-sm ${colors.textPrimary}`}
+                                        disabled={savingApiKey}
+                                    />
                                     <button
-                                        onClick={handleSaveApiKey}
-                                        className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
-                                        disabled={savingApiKey || updateApiKey.isLoading}
+                                        type="button"
+                                        onClick={() => setShowApiKey(!showApiKey)}
+                                        className={`px-4 bg-gray-100 dark:bg-black/20 hover:bg-gray-200 dark:hover:bg-black/40 transition-colors text-gray-500`}
+                                        disabled={savingApiKey}
                                     >
-                                        {(savingApiKey || updateApiKey.isLoading) ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
-                                        {(savingApiKey || updateApiKey.isLoading) ? 'Saving...' : 'Save'}
+                                        {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
                                     </button>
                                 </div>
                             </div>
-                            {apiKeyMessage && (
-                                <div className={`p-3 rounded-lg flex items-center gap-2 ${apiKeyMessage.type === 'success' ? colors.feedbackSuccessBg : colors.feedbackErrorBg}`}>
-                                    {apiKeyMessage.type === 'success' ? <CheckCircle size={16} /> : <AlertCircle size={16} />}
-                                    <span className="text-sm">{apiKeyMessage.text}</span>
-                                </div>
-                            )}
-                            <p className={`text-xs ${colors.textSecondary} flex items-start gap-1`}>
-                                <Info size={12} className="shrink-0 mt-0.5" />
-                                Your key is encrypted and stored securely. It will only be used to call the Gemini API on your behalf.
-                                <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-teal-500 hover:underline ml-1">Get one here</a>.
-                            </p>
                         </div>
 
-                        {/* Roadmap Preferences Card */}
-                        <div className={`rounded-xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 space-y-5`}>
-                            <h2 className="text-xl font-semibold flex items-center gap-2">
-                                <Target size={20} className="text-teal-400" /> Roadmap Preferences
-                            </h2>
-                            <p className={`text-sm ${colors.textSecondary}`}>
-                                These preferences will be used when generating AI roadmaps. You can override them per roadmap.
+                        <div className="mt-6 pt-6 border-t border-gray-200/50 dark:border-white/5 space-y-4">
+                            <button
+                                onClick={handleSaveApiKey}
+                                className={`w-full py-3 rounded-xl text-white font-bold transition-all flex items-center justify-center gap-2 ${colors.buttonPrimary}`}
+                                disabled={savingApiKey || updateApiKeyMutation.isPending}
+                            >
+                                {(savingApiKey || updateApiKeyMutation.isPending) ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}
+                                {(savingApiKey || updateApiKeyMutation.isPending) ? 'Saving...' : 'Securely Save Key'}
+                            </button>
+                            <p className={`text-[10px] leading-relaxed flex items-start gap-1.5 ${colors.textSecondary} bg-amber-50 dark:bg-amber-900/10 p-2.5 rounded-lg border border-amber-200/50 dark:border-amber-500/20`}>
+                                <Info size={14} className="shrink-0 text-amber-500 mt-0.5" />
+                                <span>
+                                    Key is heavily encrypted (AES-GCM). Used to bypass shared quotas.
+                                    <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener noreferrer" className="text-teal-600 dark:text-teal-400 hover:text-teal-700 hover:underline ml-1 font-bold transition-colors">
+                                        Get one here.
+                                    </a>
+                                </span>
                             </p>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <div>
-                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Difficulty</label>
-                                    <select
-                                        value={roadmapPrefs.difficulty}
-                                        onChange={(e) => handlePrefChange('difficulty', e.target.value)}
-                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                                        disabled={savingRoadmapPrefs}
-                                    >
-                                        <option value="BEGINNER">Beginner (explain basics)</option>
-                                        <option value="INTERMEDIATE">Intermediate</option>
-                                        <option value="ADVANCED">Advanced (skip fundamentals)</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Preferred Language</label>
-                                    <select
-                                        value={roadmapPrefs.languagePreference}
-                                        onChange={(e) => handlePrefChange('languagePreference', e.target.value)}
-                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                                        disabled={savingRoadmapPrefs}
-                                    >
-                                        <option value="en">English</option>
-                                        <option value="hi">Hindi</option>
-                                        <option value="es">Spanish</option>
-                                        <option value="fr">French</option>
-                                        <option value="de">German</option>
-                                        <option value="zh">Chinese</option>
-                                        <option value="ar">Arabic</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Learning Style</label>
-                                    <select
-                                        value={roadmapPrefs.learningStyle}
-                                        onChange={(e) => handlePrefChange('learningStyle', e.target.value)}
-                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                                        disabled={savingRoadmapPrefs}
-                                    >
-                                        <option value="READING">Reading (articles, docs)</option>
-                                        <option value="VISUAL">Visual (videos, diagrams)</option>
-                                        <option value="HANDS_ON">Hands‑on (exercises, projects)</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className={`block text-sm font-medium mb-1.5 ${colors.textSecondary}`}>Hours per Week</label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        max="70"
-                                        value={roadmapPrefs.hoursPerWeek}
-                                        onChange={(e) => handlePrefChange('hoursPerWeek', parseInt(e.target.value) || 10)}
-                                        className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} focus:outline-none focus:ring-2 ${colors.inputFocusRing} transition`}
-                                        disabled={savingRoadmapPrefs}
-                                    />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="checkbox"
-                                        id="avoidWeekends"
-                                        checked={roadmapPrefs.avoidWeekends}
-                                        onChange={(e) => handlePrefChange('avoidWeekends', e.target.checked)}
-                                        className="w-4 h-4 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
-                                        disabled={savingRoadmapPrefs}
-                                    />
-                                    <label htmlFor="avoidWeekends" className={`text-sm font-medium ${colors.textSecondary}`}>
-                                        Avoid weekends (schedule tasks only on weekdays)
-                                    </label>
-                                </div>
-                            </div>
-                            <div className="flex justify-end">
-                                <button
-                                    onClick={saveRoadmapPrefs}
-                                    className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonPrimary} ${colors.buttonText}`}
-                                    disabled={savingRoadmapPrefs || updateRoadmapPreferences.isPending}
-                                >
-                                    {(savingRoadmapPrefs || updateRoadmapPreferences.isPending) ? <Loader size={16} className="animate-spin" /> : <Save size={16} />}
-                                    {(savingRoadmapPrefs || updateRoadmapPreferences.isPending) ? 'Saving...' : 'Save Preferences'}
-                                </button>
-                            </div>
-                        </div>
-
-                        {/* Danger Zone */}
-                        <div className={`rounded-xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 space-y-5`}>
-                            <h2 className="text-xl font-semibold flex items-center gap-2 text-red-500">
-                                <AlertCircle size={20} /> Danger Zone
-                            </h2>
-                            <p className={`text-sm ${colors.textSecondary}`}>
-                                Permanently delete your MyMindMirror account and all associated data. This action cannot be undone.
-                            </p>
-                            <div className="flex justify-end">
-                                <button
-                                    onClick={handleDeleteAccount}
-                                    className={`px-5 py-2 rounded-full font-medium transition flex items-center gap-2 ${colors.buttonDanger} ${colors.buttonText}`}
-                                    disabled={isDeleting}
-                                >
-                                    {isDeleting ? <Loader size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                                    {isDeleting ? 'Deleting...' : 'Delete Account'}
-                                </button>
-                            </div>
                         </div>
                     </div>
                 </div>
+
+                {/* Roadmap Defaults */}
+                <div className={`rounded-2xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 sm:p-8 shadow-lg transition-all hover:shadow-xl`}>
+                    <SectionHeader
+                        icon={MapPin}
+                        title="Roadmap Defaults"
+                        colorClass="text-purple-500 dark:text-teal-400"
+                        subtitle="Configure the global baseline parameters used when generating new AI Learning Roadmaps."
+                    />
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+                        <div>
+                            <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 ${colors.textSecondary}`}>Difficulty</label>
+                            <select value={roadmapPrefs.difficulty} onChange={(e) => handlePrefChange('difficulty', e.target.value)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} ${colors.inputFocusRing} outline-none cursor-pointer font-bold text-sm`}>
+                                <option value="BEGINNER">Beginner (explain basics)</option>
+                                <option value="INTERMEDIATE">Intermediate</option>
+                                <option value="ADVANCED">Advanced (skip fundamentals)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 ${colors.textSecondary}`}>Learning Style</label>
+                            <select value={roadmapPrefs.learningStyle} onChange={(e) => handlePrefChange('learningStyle', e.target.value)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} ${colors.inputFocusRing} outline-none cursor-pointer font-bold text-sm`}>
+                                <option value="READING">Reading (articles, docs)</option>
+                                <option value="VISUAL">Visual (videos, diagrams)</option>
+                                <option value="HANDS_ON">Hands-on (projects)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 ${colors.textSecondary}`}>Pace (Hrs/Week)</label>
+                            <input type="number" min="1" max="70" value={roadmapPrefs.hoursPerWeek} onChange={(e) => handlePrefChange('hoursPerWeek', parseInt(e.target.value) || 10)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} ${colors.inputFocusRing} outline-none font-bold text-sm`} />
+                        </div>
+                        <div>
+                            <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 ${colors.textSecondary}`}>Weekend Policy</label>
+                            <div className={`p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} flex items-center gap-3`}>
+                                <input type="checkbox" id="avoidWeekends" checked={roadmapPrefs.avoidWeekends} onChange={(e) => handlePrefChange('avoidWeekends', e.target.checked)} className="w-5 h-5 rounded text-purple-500 focus:ring-purple-500 dark:text-teal-400 dark:focus:ring-teal-400 cursor-pointer" />
+                                <label htmlFor="avoidWeekends" className="text-sm font-bold cursor-pointer select-none">Avoid Weekends</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end pt-4 border-t border-gray-200/50 dark:border-white/5">
+                        <button
+                            onClick={handleSaveRoadmapPrefs}
+                            disabled={savingRoadmapPrefs}
+                            className={`px-8 py-3 rounded-xl text-white font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 w-full sm:w-auto ${colors.buttonPrimary}`}
+                        >
+                            {savingRoadmapPrefs ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}
+                            {savingRoadmapPrefs ? "Saving Defaults..." : "Save Roadmap Defaults"}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Lifestyle Engine */}
+                <div className={`rounded-2xl ${colors.sectionBg} border ${colors.sectionBorder} p-6 sm:p-8 shadow-lg transition-all hover:shadow-xl`}>
+                    <SectionHeader
+                        icon={Activity}
+                        title="Lifestyle & Learning Engine"
+                        colorClass="text-teal-500"
+                        subtitle="Help the AI understand your routine so it can build perfect, burnout-free Smart Timetables."
+                    />
+
+                    {/* Row 1: Time Inputs */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-6">
+                        <div>
+                            <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5 ${colors.textSecondary}`}><Sparkles size={14} className="text-purple-500 dark:text-teal-400"/> Energy Peak</label>
+                            <select value={energyPeak} onChange={(e) => setEnergyPeak(e.target.value)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} ${colors.inputFocusRing} outline-none cursor-pointer font-bold text-sm`}>
+                                <option value="MORNING">Morning (Focus best early)</option>
+                                <option value="AFTERNOON">Afternoon (Steady worker)</option>
+                                <option value="EVENING">Evening (Night Owl)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5 ${colors.textSecondary}`}><Clock size={14} className="text-emerald-500"/> Wake Time</label>
+                            <input type="time" value={wakeTime} onChange={(e) => setWakeTime(e.target.value)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} ${colors.inputFocusRing} outline-none cursor-pointer font-bold text-sm`} />
+                        </div>
+                        <div>
+                            <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5 ${colors.textSecondary}`}><Clock size={14} className="text-indigo-500"/> Sleep Time</label>
+                            <input type="time" value={sleepTime} onChange={(e) => setSleepTime(e.target.value)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} ${colors.inputFocusRing} outline-none cursor-pointer font-bold text-sm`} />
+                        </div>
+                        <div>
+                            <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 flex items-center gap-1.5 ${colors.textSecondary}`}><Coffee size={14} className="text-amber-500"/> Lunch Break</label>
+                            <input type="time" value={lunchTime} onChange={(e) => setLunchTime(e.target.value)} className={`w-full p-3 rounded-xl border ${colors.inputBorder} ${colors.inputBg} ${colors.inputFocusRing} outline-none cursor-pointer font-bold text-sm`} />
+                        </div>
+                    </div>
+
+                    {/* Row 2: Habits */}
+                    <div className="mb-8">
+                        <label className={`block text-[10px] lg:text-xs font-bold uppercase tracking-wider mb-2 ${colors.textSecondary}`}>Daily Habits / Routines (One per line)</label>
+                        <textarea
+                            value={dailyHabits}
+                            onChange={(e) => setDailyHabits(e.target.value)}
+                            placeholder="15 mins meditation&#10;30 min walk outside&#10;Read 10 pages of a book"
+                            rows="3"
+                            className={`w-full p-4 rounded-xl border ${colors.inputBorder} ${colors.inputBg} ${colors.inputFocusRing} outline-none resize-y transition-all leading-relaxed font-medium text-sm`}
+                        />
+                    </div>
+
+                    {/* Row 4: Availability Grid */}
+                    <div className="pt-6 border-t border-gray-200/50 dark:border-white/5">
+                        <h3 className="font-poppins font-bold text-lg text-gray-800 dark:text-gray-100 mb-4 flex items-center gap-2">
+                            <CalendarIcon size={20} className="text-purple-500 dark:text-teal-400" /> Availability Slots
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-5">
+                            {Object.keys(availableHours).map((day) => (
+                                <div key={day} className={`rounded-xl border ${colors.sectionBorder} bg-white/40 dark:bg-black/20 p-4 shadow-sm flex flex-col`}>
+                                    <div className="flex items-center justify-between mb-3 pb-3 border-b border-gray-200/50 dark:border-white/5 shrink-0">
+                                        <span className="capitalize font-poppins font-bold text-gray-800 dark:text-gray-200 text-sm">{day}</span>
+                                        <button onClick={() => setAvailableHours({ ...availableHours, [day]: [...availableHours[day], ["09:00", "17:00"]] })} className="text-xs font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-900/30 px-2 py-1 rounded-lg transition-colors bg-white/50 dark:bg-white/5 border border-teal-200/50 dark:border-teal-500/20 shrink-0">+ Add</button>
+                                    </div>
+                                    <div className="space-y-2.5 flex-1">
+                                        {/* 💡 FIX: Safely contained flex inputs and buttons using min-w-0 */}
+                                        {availableHours[day].map((slot, idx) => (
+                                            <div key={idx} className="flex items-center gap-1.5 sm:gap-2">
+                                                <div className="flex-1 min-w-0">
+                                                    <input type="time" value={slot[0]} onChange={(e) => { const newSlots = [...availableHours[day]]; newSlots[idx][0] = e.target.value; setAvailableHours({ ...availableHours, [day]: newSlots }); }} className={`w-full p-1.5 sm:p-2 text-[10px] sm:text-xs font-bold rounded-lg border ${colors.inputBorder} ${colors.inputBg} outline-none focus:ring-1 focus:ring-purple-500 text-center`} />
+                                                </div>
+                                                <span className="text-gray-400 dark:text-gray-600 text-[10px] sm:text-xs font-bold shrink-0">-</span>
+                                                <div className="flex-1 min-w-0">
+                                                    <input type="time" value={slot[1]} onChange={(e) => { const newSlots = [...availableHours[day]]; newSlots[idx][1] = e.target.value; setAvailableHours({ ...availableHours, [day]: newSlots }); }} className={`w-full p-1.5 sm:p-2 text-[10px] sm:text-xs font-bold rounded-lg border ${colors.inputBorder} ${colors.inputBg} outline-none focus:ring-1 focus:ring-teal-500 text-center`} />
+                                                </div>
+                                                <button onClick={() => setAvailableHours({ ...availableHours, [day]: availableHours[day].filter((_, i) => i !== idx) })} className="shrink-0 p-1.5 sm:p-2 text-red-500 bg-red-50 hover:bg-red-100 dark:bg-red-900/20 dark:hover:bg-red-900/40 rounded-lg transition-colors border border-red-100 dark:border-red-900/30">
+                                                    <Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                        {availableHours[day].length === 0 && (
+                                            <div className="text-center text-xs font-medium text-gray-400 dark:text-gray-500 italic py-2 bg-black/5 dark:bg-white/5 rounded-lg border border-dashed border-gray-300 dark:border-gray-700 h-full flex items-center justify-center min-h-[35px]">No slots added</div>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end pt-6 mt-6 border-t border-gray-200/50 dark:border-white/5">
+                        <button
+                            onClick={handleSaveLifestyle}
+                            disabled={savingLifestyle}
+                            className={`px-8 py-3 rounded-xl text-white font-bold text-sm shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 w-full sm:w-auto ${colors.buttonPrimary}`}
+                        >
+                            {savingLifestyle ? <Loader size={18} className="animate-spin" /> : <Save size={18} />}
+                            {savingLifestyle ? "Saving Lifestyle..." : "Save Lifestyle Engine"}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Danger Zone */}
+                <div className={`rounded-2xl bg-red-50/50 dark:bg-red-900/10 border border-red-200 dark:border-red-900/30 p-6 sm:p-8 shadow-lg transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-6`}>
+                    <div>
+                        <div className="flex items-center gap-3 mb-2">
+                            <div className="p-3 rounded-xl bg-white/60 dark:bg-black/20 shadow-sm border border-red-200/50 dark:border-red-500/30 text-red-500">
+                                <AlertCircle size={24} />
+                            </div>
+                            <h2 className="text-xl font-poppins font-bold tracking-tight text-gray-900 dark:text-gray-100">Danger Zone</h2>
+                        </div>
+                        <p className="text-sm font-medium text-gray-600 dark:text-gray-400 md:ml-14">
+                            Permanently delete your account and all associated data.
+                        </p>
+                    </div>
+
+                    <button onClick={handleDeleteAccount} className={`shrink-0 w-full md:w-auto px-6 py-3 rounded-xl font-bold text-sm shadow-md flex items-center justify-center gap-2 ${colors.buttonDanger}`} disabled={isDeleting}>
+                        {isDeleting ? <Loader size={18} className="animate-spin" /> : <Trash2 size={18} />}
+                        {isDeleting ? 'Deleting...' : 'Delete Account Forever'}
+                    </button>
+                </div>
+
             </div>
 
             <ConfirmationModal
@@ -880,35 +701,19 @@ function ProfilePage() {
             />
 
             <style>{`
-                @keyframes pulse-slow {
-                    0%, 100% { opacity: 0.2; transform: scale(1); }
-                    50% { opacity: 0.4; transform: scale(1.05); }
-                }
-                @keyframes float {
-                    0% { transform: translateY(0px); }
-                    50% { transform: translateY(-10px); }
-                    100% { transform: translateY(0px); }
-                }
-                .animate-pulse-slow {
-                    animation: pulse-slow 6s ease-in-out infinite;
-                }
-                .animate-float {
-                    animation: float 4s ease-in-out infinite;
-                }
-                .animate-float-delayed {
-                    animation: float 4s ease-in-out infinite 2s;
-                }
-                @keyframes pulse-fast {
-                    0%, 100% { transform: translateX(-100%); }
-                    50% { transform: translateX(100%); }
-                    100% { transform: translateX(-100%); }
-                }
-                .animate-pulse-fast {
-                    animation: pulse-fast 1.5s ease-in-out infinite;
+                @keyframes float { 0%, 100% { transform: translateY(0px) rotate(0deg); } 50% { transform: translateY(-15px) rotate(5deg); } }
+                .animate-float { animation: float 6s ease-in-out infinite; }
+                .animate-float-delayed { animation: float 6s ease-in-out infinite 3s; }
+
+                /* Ensures time inputs shrink cleanly on mobile */
+                input[type="time"]::-webkit-calendar-picker-indicator {
+                    margin-left: -2px;
+                    padding-left: 2px;
+                    cursor: pointer;
                 }
             `}</style>
         </div>
     );
 }
 
-export default ProfilePage;
+export default React.memo(ProfilePage);

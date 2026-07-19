@@ -524,3 +524,53 @@ DELETE FROM journal_entries WHERE raw_text = 'Test';
 
 Did the combined execution script pass through DBeaver without throwing the syntax error this time?
 
+---
+
+## 📱 Mobile Web Testing (Wireless Port Forwarding)
+
+To test this full-stack application on a physical Android device over Wi-Fi without cables, follow these steps using Android Debug Bridge (ADB):
+
+### 1. Prerequisites (Poco/Redmi/Xiaomi Devices)
+* Ensure both your laptop and phone are on the **same Wi-Fi network**.
+* Enable **Developer Options** on your phone.
+* Toggle **ON** the following settings:
+    * `Wireless debugging`
+    * `Disable adb authorization timeout` (Prevents connection drops)
+    * `USB debugging (Security settings)` (Required by MIUI/HyperOS to allow reverse tunneling)
+
+### 2. Expose Local Servers
+Start both servers configured to listen to all network hosts (`0.0.0.0`):
+* **Frontend (Vite):** Run `npm run dev -- --host 0.0.0.0` (launches on port `5173`)
+* **Backend (Spring Boot):** Ensure `server.address=0.0.0.0` is present in `application.properties` (launches on port `8080`)
+
+### 3. Establish the Wireless Tunnel
+Navigate to your local system's `platform-tools` folder where `adb` is installed, open your terminal, and run:
+
+```bash
+# 1. Flush background processes
+adb kill-server
+adb start-server
+
+Step 3: Pair via Terminal/Command PromptOpen your terminal or Command Prompt inside your computer's platform-tools folder.Run the pairing command using the exact IP and port from Step 2:bash
+
+adb pair IP_ADDRESS:PORT
+Use code with caution.
+
+# 2. Connect to your phone (Find the dynamic IP:PORT on your phone's Wireless Debugging screen)
+adb connect <PHONE_IP>:<WIRELESS_DEBUG_PORT>
+
+# 3. Create reverse port tunnels for Frontend and Backend
+adb -s <PHONE_IP>:<WIRELESS_DEBUG_PORT> reverse tcp:5173 tcp:5173
+adb -s <PHONE_IP>:<WIRELESS_DEBUG_PORT> reverse tcp:8080 tcp:8080
+```
+
+### 4. Run on Device
+Open Google Chrome on your phone and navigate to:
+👉 **`http://localhost:5173`**
+
+### 5. Cleanup
+When finished testing, teardown the active tunnels by running:
+```bash
+adb -s <PHONE_IP>:<WIRELESS_DEBUG_PORT> reverse --remove-all
+adb kill-server
+```

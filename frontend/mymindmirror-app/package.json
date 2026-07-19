@@ -17,6 +17,7 @@
     "@tanstack/react-query-devtools": "^5.83.0",
     "axios": "^1.10.0",
     "chart.js": "^4.5.0",
+    "chartjs-plugin-zoom": "^2.2.0",
     "date-fns": "^4.1.0",
     "file-saver": "^2.0.5",
     "html-to-image": "^1.11.13",

@@ -1,5 +1,5 @@
 // src/components/MoodCalendarHeatmap.jsx
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useState, useEffect } from 'react';
 import CalendarHeatmap from 'react-calendar-heatmap';
 import {
   format,
@@ -7,52 +7,58 @@ import {
   startOfYear,
   endOfYear,
   subDays,
-  eachDayOfInterval,
-  isSameDay,
-  getDay,
-  startOfWeek,
-  endOfWeek,
-  subWeeks,
-  addWeeks,
 } from 'date-fns';
 import { useTheme } from '../contexts/ThemeContext';
 import DownloadChartButton from './DownloadChartButton';
-import { Calendar, Activity } from 'lucide-react';
+import { Calendar, CalendarDays } from 'lucide-react';
 
 const MoodCalendarHeatmap = ({ journalEntries, displayYear = new Date() }) => {
   const { theme } = useTheme();
   const isDarkMode = theme === 'dark';
   const chartContainerRef = useRef(null);
 
-  // Improved mood colour palette – intuitive and accessible
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 1024);
+  // 💡 NEW: State to hold the tapped box data for mobile users
+  const [selectedDateInfo, setSelectedDateInfo] = useState(null);
+
+  useEffect(() => {
+      const handleResize = () => setIsMobile(window.innerWidth < 1024);
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const cardBg = isDarkMode ? 'bg-[#1A162F]/60 backdrop-blur-xl' : 'bg-white/70 backdrop-blur-xl';
+  const cardBorder = isDarkMode ? 'border-white/10' : 'border-white/50';
+
   const moodColors = {
     light: {
-      veryNegative: '#EF4444', // red-500
-      negative: '#F97316',     // orange-500
-      neutral: '#9CA3AF',      // gray-400
-      positive: '#10B981',     // emerald-500
-      veryPositive: '#3B82F6', // blue-500
-      empty: '#E5E7EB',        // gray-200 (more visible than before)
+      veryNegative: '#EF4444',
+      negative: '#F97316',
+      neutral: '#9CA3AF',
+      positive: '#10B981',
+      veryPositive: '#3B82F6',
+      empty: '#E5E7EB',
       text: '#1F2937',
       secondaryText: '#6B7280',
       background: '#FFFFFF',
+      stroke: '#D1D5DB'
     },
     dark: {
-      veryNegative: '#DC2626', // red-600
-      negative: '#EA580C',     // orange-600
-      neutral: '#6B7280',      // gray-500
-      positive: '#059669',     // emerald-600
-      veryPositive: '#2563EB', // blue-600
-      empty: '#374151',        // gray-700 (clearly visible on dark background)
+      veryNegative: '#DC2626',
+      negative: '#EA580C',
+      neutral: '#6B7280',
+      positive: '#059669',
+      veryPositive: '#2563EB',
+      empty: 'rgba(255, 255, 255, 0.05)',
       text: '#F3F4F6',
       secondaryText: '#9CA3AF',
-      background: '#111827',
+      background: '#131127',
+      stroke: 'rgba(255, 255, 255, 0.1)'
     },
   };
 
   const currentColors = isDarkMode ? moodColors.dark : moodColors.light;
 
-  // Aggregate mood scores per date (average if multiple entries per day)
   const dailyMoods = useMemo(() => {
     const map = {};
     if (journalEntries && Array.isArray(journalEntries)) {
@@ -74,6 +80,7 @@ const MoodCalendarHeatmap = ({ journalEntries, displayYear = new Date() }) => {
       return {
         date: dateKey,
         count: count > 0 ? sum / count : null,
+        totalEntries: count
       };
     });
   }, [dailyMoods]);
@@ -88,131 +95,187 @@ const MoodCalendarHeatmap = ({ journalEntries, displayYear = new Date() }) => {
     return 'color-very-negative';
   };
 
-  // Subtract 1 day because the library's startDate is exclusive
+  const getTitleForValue = (value) => {
+    if (!value || !value.date) {
+      return 'No entry';
+    }
+    try {
+      const dateObj = typeof value.date === 'string' ? parseISO(value.date) : value.date;
+      const formattedDate = format(dateObj, 'MMM d, yyyy');
+
+      if (value.count === null || value.count === undefined) {
+        return `${formattedDate} • No entries`;
+      }
+
+      const entryText = value.totalEntries === 1 ? '1 Entry' : `${value.totalEntries} Entries`;
+      const moodPrefix = value.totalEntries === 1 ? 'Mood' : 'Avg Mood';
+
+      return `${formattedDate} • ${entryText} • ${moodPrefix}: ${value.count.toFixed(2)}`;
+    } catch (e) {
+      return 'No entry';
+    }
+  };
+
+  // 💡 NEW: Handles tapping on a mobile device to show data without hovering
+  const handleBoxClick = (value) => {
+    if (!value || !value.date) {
+      setSelectedDateInfo('No entry on selected date');
+      return;
+    }
+    setSelectedDateInfo(getTitleForValue(value));
+  };
+
   const startDate = subDays(startOfYear(displayYear), 1);
   const endDate = endOfYear(displayYear);
 
   const weekdayLabels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-  const monthLabels = [
-    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-  ];
+  const monthLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-  // Empty state
+  // 💡 REBUILT HEADER (Used for both Empty State and Chart State)
+  const renderHeader = () => (
+    <div className={`p-4 lg:p-6 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/30 dark:bg-black/10 flex justify-between items-start gap-4`}>
+        {/* Left Side: Icon + Title + Subtitle */}
+        <div className="flex items-start gap-2 sm:gap-3 flex-1">
+            <Calendar className="w-5 h-5 lg:w-6 lg:h-6 text-emerald-500 mt-0.5 shrink-0" />
+            <div className="flex flex-col">
+                <h3 className="text-lg lg:text-xl font-poppins font-extrabold text-gray-800 dark:text-gray-100 tracking-tight leading-tight">
+                    Annual Mood<br className="sm:hidden" /> Heatmap
+                </h3>
+                <p className="text-[11px] lg:text-xs text-gray-500 dark:text-gray-400 mt-1 lg:mt-1.5 font-medium">
+                    {isMobile ? "Swipe horizontally to view the full year." : "Scroll horizontally to view the full year. Hover to see dates."}
+                </p>
+            </div>
+        </div>
+
+        {/* Right Side: Year + Download Button */}
+        <div className="flex items-center gap-2 sm:gap-4 shrink-0 mt-0.5">
+            <span className="text-sm lg:text-base font-bold text-gray-500 dark:text-gray-400 font-poppins">
+                ({format(displayYear, 'yyyy')})
+            </span>
+            <DownloadChartButton
+                chartRef={chartContainerRef}
+                filename={`mood_heatmap_${format(displayYear, 'yyyy')}`}
+                darkMode={isDarkMode}
+                className={`hover:scale-105 transition-transform shrink-0 ${values.length === 0 ? 'opacity-50 pointer-events-none' : ''}`}
+            />
+        </div>
+    </div>
+  );
+
   if (values.length === 0) {
     return (
-      <div className="rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden transition-all duration-300">
-        <div className="flex justify-between items-center p-4 bg-white/70 dark:bg-gray-800/50 backdrop-blur-sm">
-          <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200">
-            Annual Mood Heatmap
-          </h3>
-          <DownloadChartButton
-            chartRef={chartContainerRef}
-            filename="mood_heatmap"
-            darkMode={isDarkMode}
-            className="hover:scale-105 transition-transform opacity-50 pointer-events-none"
-          />
-        </div>
-        <div
-          ref={chartContainerRef}
-          className="p-8 flex flex-col items-center justify-center text-center"
-          style={{ backgroundColor: currentColors.background }}
-        >
-          <Calendar size={48} className="text-gray-400 mb-4" />
-          <p className="text-gray-600 dark:text-gray-300 font-medium">
-            No journal entries for {format(displayYear, 'yyyy')}
-          </p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-2">
-            Start journaling to see your mood patterns throughout the year.
-          </p>
-        </div>
+      <div className={`w-full rounded-2xl lg:rounded-3xl border ${cardBorder} shadow-lg ring-1 ring-black/5 dark:ring-white/5 overflow-hidden ${cardBg} flex flex-col h-full`}>
+          {renderHeader()}
+          <div className="w-full flex-grow flex flex-col items-center justify-center p-6 lg:p-10 text-center" style={{ backgroundColor: currentColors.background, minHeight: '260px' }}>
+             <div className="relative mb-4 lg:mb-6">
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-400/20 to-teal-400/20 rounded-full blur-2xl" />
+                <CalendarDays className="w-12 h-12 lg:w-16 lg:h-16 relative text-gray-400 dark:text-gray-500" />
+              </div>
+              <p className="text-lg lg:text-xl font-bold text-gray-700 dark:text-gray-300">
+                No journal entries for {format(displayYear, 'yyyy')}
+              </p>
+              <p className="text-sm lg:text-base text-center max-w-md mt-2 text-gray-500 dark:text-gray-400">
+                Start journaling to see your mood patterns throughout the year.
+              </p>
+          </div>
       </div>
     );
   }
 
   return (
-    <div className="rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden transition-all duration-300">
-      <div className="flex justify-between items-center p-4 bg-white/70 dark:bg-gray-800/50 backdrop-blur-sm">
-        <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200">
-          Annual Mood Heatmap ({format(displayYear, 'yyyy')})
-        </h3>
-        <DownloadChartButton
-          chartRef={chartContainerRef}
-          filename="mood_heatmap"
-          darkMode={isDarkMode}
-          className="hover:scale-105 transition-transform"
-        />
-      </div>
+    <div className={`w-full rounded-2xl lg:rounded-3xl border ${cardBorder} shadow-lg ring-1 ring-black/5 dark:ring-white/5 overflow-hidden ${cardBg} h-full flex flex-col transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5`}>
+
+      {renderHeader()}
 
       <div
         ref={chartContainerRef}
-        className="p-4 overflow-x-auto"
+        className="w-full flex-grow overflow-x-auto custom-scrollbar flex flex-col"
         style={{ backgroundColor: currentColors.background }}
       >
         <style>
           {`
             .react-calendar-heatmap text {
               font-family: 'Inter', sans-serif;
-              font-size: 10px;
+              font-size: ${isMobile ? '10px' : '11px'};
               fill: ${currentColors.secondaryText};
             }
             .react-calendar-heatmap .month-label {
               font-weight: 600;
-              font-size: 11px;
+              font-size: ${isMobile ? '11px' : '12px'};
               fill: ${currentColors.text};
               text-anchor: start;
-              transform: translateX(2px);
+              transform: translateX(4px);
             }
             .react-calendar-heatmap .weekday-label {
-              font-size: 10px;
+              font-weight: 500;
+              font-size: ${isMobile ? '10px' : '11px'};
               fill: ${currentColors.secondaryText};
               text-anchor: end;
               dominant-baseline: middle;
-              transform: translateX(-4px);
+              transform: translateX(-6px);
             }
             .react-calendar-heatmap .day {
               shape-rendering: crispEdges;
-              stroke: ${isDarkMode ? '#4B5563' : '#D1D5DB'};
-              stroke-width: 1.2px;
-              rx: 3;
-              ry: 3;
+              stroke: ${currentColors.stroke};
+              stroke-width: 1px;
+              rx: 2;
+              ry: 2;
+              transition: all 0.2s ease-in-out;
             }
-            /* Empty cells get a thicker stroke so they appear as faint grid */
             .react-calendar-heatmap .color-empty {
               fill: ${currentColors.empty};
-              stroke-width: 1.5px;
+              stroke-width: 1px;
             }
             .react-calendar-heatmap .color-very-negative { fill: ${currentColors.veryNegative}; }
             .react-calendar-heatmap .color-negative { fill: ${currentColors.negative}; }
             .react-calendar-heatmap .color-neutral { fill: ${currentColors.neutral}; }
             .react-calendar-heatmap .color-positive { fill: ${currentColors.positive}; }
             .react-calendar-heatmap .color-very-positive { fill: ${currentColors.veryPositive}; }
-            /* Hover effect for all cells */
+
             .react-calendar-heatmap .day:hover {
               stroke-width: 2px;
-              stroke: ${currentColors.text};
-              filter: brightness(0.9);
+              stroke: ${isDarkMode ? '#F3F4F6' : '#1F2937'};
+              filter: brightness(1.2);
+              transform: scale(1.15);
+              transform-origin: center;
+              cursor: pointer;
             }
+
           `}
         </style>
 
-        <div className="flex justify-start overflow-x-auto pb-2">
+        <div className="p-4 sm:p-6 lg:p-8 pb-2 min-w-[700px] lg:min-w-[900px] flex-grow flex items-center justify-center">
           <CalendarHeatmap
             startDate={startDate}
             endDate={endDate}
             values={values}
             classForValue={getClassForValue}
+            titleForValue={getTitleForValue}
+            onClick={handleBoxClick} // 💡 Enables Mobile Tapping!
             showWeekdayLabels={true}
             showMonthLabels={true}
-            gutterSize={4}
+            gutterSize={isMobile ? 2 : 3}
             weekdayLabels={weekdayLabels}
             monthLabels={monthLabels}
           />
         </div>
 
+        {/* 💡 NEW: Selected Date Info Badge (Perfect for Mobile) */}
+        <div className="min-h-[28px] flex justify-center items-center w-full min-w-[700px] lg:min-w-[900px] mb-4">
+            {selectedDateInfo ? (
+                <span className="inline-block px-4 py-1.5 bg-gray-100 dark:bg-white/10 rounded-full text-xs font-bold text-gray-800 dark:text-gray-100 shadow-sm border border-gray-200 dark:border-white/20 animate-fade-in transition-all">
+                    {selectedDateInfo}
+                </span>
+            ) : (
+                <span className="text-xs font-medium text-gray-400 dark:text-gray-500 italic">
+                    Tap a square to view exact details
+                </span>
+            )}
+        </div>
+
         {/* Color Legend */}
-        <div className="flex flex-wrap justify-center items-center mt-6 gap-4 text-sm font-inter text-gray-700 dark:text-gray-300">
-          <span className="font-medium">Mood Scale:</span>
+        <div className="flex flex-wrap justify-center items-center pb-6 lg:pb-8 px-4 gap-3 lg:gap-4 text-xs lg:text-sm font-inter text-gray-700 dark:text-gray-300 min-w-[700px] lg:min-w-[900px]">
+          <span className="font-bold tracking-wide uppercase text-[10px] lg:text-xs text-gray-500 mr-2">Mood Scale:</span>
           {[
             { color: currentColors.veryNegative, label: 'Very Negative' },
             { color: currentColors.negative, label: 'Negative' },
@@ -220,12 +283,12 @@ const MoodCalendarHeatmap = ({ journalEntries, displayYear = new Date() }) => {
             { color: currentColors.positive, label: 'Positive' },
             { color: currentColors.veryPositive, label: 'Very Positive' },
           ].map((item, idx) => (
-            <div key={idx} className="flex items-center gap-1.5">
+            <div key={idx} className="flex items-center gap-1.5 lg:gap-2">
               <div
-                className="w-4 h-4 rounded-sm shadow-sm"
-                style={{ backgroundColor: item.color }}
+                className="w-3.5 h-3.5 lg:w-4 lg:h-4 rounded-sm shadow-sm border"
+                style={{ backgroundColor: item.color, borderColor: currentColors.stroke }}
               />
-              <span>{item.label}</span>
+              <span className="font-medium whitespace-nowrap">{item.label}</span>
             </div>
           ))}
         </div>
@@ -234,4 +297,4 @@ const MoodCalendarHeatmap = ({ journalEntries, displayYear = new Date() }) => {
   );
 };
 
-export default MoodCalendarHeatmap;
+export default React.memo(MoodCalendarHeatmap);

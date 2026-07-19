@@ -45,7 +45,7 @@ public class MilestoneService {
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
     private final DynamicAiClientService aiClientService;
-
+    private final GamificationService gamificationService;
 
 
 
@@ -62,6 +62,7 @@ public class MilestoneService {
         log.info("Creating new milestone for user {}: {}", user.getUsername(), title);
         Milestone milestone = new Milestone(user, title, description, dueDate);
         milestone.setStatus(Status.PENDING); // New milestones start as PENDING
+        gamificationService.recordActivity(user, "MILESTONE_CREATE");
         return milestoneRepository.save(milestone);
     }
 

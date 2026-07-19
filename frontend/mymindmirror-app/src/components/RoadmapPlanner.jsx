@@ -1,5 +1,5 @@
 // src/components/RoadmapPlanner.jsx
-import React, { useState, useEffect, useCallback, useMemo  } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom';
 import { useRoadmaps, useGenerateRoadmap, useDeleteRoadmap, useImportTaskToMilestone,
     useToggleTaskCompletion, useContinueRoadmap, useElaborateTask,
@@ -8,58 +8,63 @@ import { useTheme } from '../contexts/ThemeContext';
 import { toast } from 'sonner';
 import {
   Loader, Sparkles, CheckCircle, Circle, ExternalLink, Target, Trash2,
-  ChevronDown, ChevronUp, BookOpen, ListChecks, Award, Calendar, Clock,
+  ChevronDown, ChevronUp, BookOpen, ListChecks, Award, Calendar, Clock,Plus,
   TrendingUp, AlertTriangle, BarChart2, List, Video, FileText, GraduationCap
 } from 'lucide-react';
-import RoadmapTimeline from './RoadmapTimeline'; // new import
-import { useUserProfile } from '../hooks/useUserProfile';
+import RoadmapTimeline from './RoadmapTimeline';
 import { useQueryClient } from '@tanstack/react-query';
+import { useUserFullProfile } from '../hooks/useUserProfile';
 
 // ------------------------------------------------------------------
-// Helper to format markdown-like text (unchanged)
+// Upgraded Markdown Parser (Extracted Inline for Subtasks)
 // ------------------------------------------------------------------
+
+const escapeHtml = (str) => {
+  return str.replace(/[&<>]/g, (m) => {
+    if (m === '&') return '&amp;';
+    if (m === '<') return '&lt;';
+    if (m === '>') return '&gt;';
+    return m;
+  });
+};
+
+// Extracted so we can run subtasks through it individually
+export const formatInline = (line) => {
+  if (!line) return '';
+  let formatted = escapeHtml(line);
+
+  // Inline code (maps to guide-code in index.css)
+  formatted = formatted.replace(/`([^`]+)`/g, '<code class="guide-code">$1</code>');
+  // Links
+  formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-purple-600 dark:text-teal-400 hover:underline font-medium">$1</a>');
+  // Bold
+  formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+  // Italics
+  formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+  // Java/C# Annotation styling (e.g., @FunctionalInterface)
+  formatted = formatted.replace(/(^|[\s([{])(@[A-Za-z0-9_]+)/g, '$1<span class="text-purple-600 dark:text-teal-400 font-mono font-bold bg-purple-50 dark:bg-teal-900/20 px-1.5 py-0.5 rounded-md shadow-sm border border-purple-200/50 dark:border-teal-500/20">$2</span>');
+
+  return formatted;
+};
+
 const formatText = (text) => {
   if (!text) return '';
 
-  const escapeHtml = (str) => {
-    return str.replace(/[&<>]/g, (m) => {
-      if (m === '&') return '&amp;';
-      if (m === '<') return '&lt;';
-      if (m === '>') return '&gt;';
-      return m;
-    });
-  };
+  // Pre-process the text to break "squished" inline lists into actual new lines
+  let processedText = text.replace(/([:;?!.])\s+(?=\d+\.\s+[A-Z])/g, '$1\n');
 
-  const formatInline = (line) => {
-    if (!line) return '';
-    let formatted = escapeHtml(line);
-    formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
-    formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
-    return formatted;
-  };
-
-  const lines = text.split('\n');
+  const lines = processedText.split('\n');
   const result = [];
   let i = 0;
   const total = lines.length;
 
   const getHeadingLevel = (line) => {
     const match = line.match(/^(#{1,6})\s+(.*)/);
-    if (match) {
-      const level = match[1].length;
-      const content = match[2];
-      return { level, content };
-    }
-    return null;
+    return match ? { level: match[1].length, content: match[2] } : null;
   };
 
-  const getBlockquote = (line) => {
-    if (line.startsWith('> ')) return line.substring(2);
-    return null;
-  };
-
+  const getBlockquote = (line) => line.startsWith('> ') ? line.substring(2) : null;
   const isHorizontalRule = (line) => /^(\*{3,}|-{3,}|_{3,})$/.test(line.trim());
 
   let inCodeBlock = false;
@@ -68,8 +73,7 @@ const formatText = (text) => {
 
   const flushCodeBlock = () => {
     if (codeBlockContent.length > 0) {
-      const codeHtml = `<pre><code class="language-${codeBlockLang}">${escapeHtml(codeBlockContent.join('\n'))}</code></pre>`;
-      result.push(codeHtml);
+      result.push(`<pre><code class="language-${codeBlockLang}">${escapeHtml(codeBlockContent.join('\n'))}</code></pre>`);
       codeBlockContent = [];
       codeBlockLang = '';
     }
@@ -100,13 +104,13 @@ const formatText = (text) => {
 
     const heading = getHeadingLevel(line);
     if (heading) {
-      result.push(`<h${heading.level} class="roadmap-heading">${formatInline(heading.content)}</h${heading.level}>`);
+      result.push(`<h${heading.level}>${formatInline(heading.content)}</h${heading.level}>`);
       i++;
       continue;
     }
 
     if (isHorizontalRule(line)) {
-      result.push('<hr class="roadmap-hr"/>');
+      result.push('<hr/>');
       i++;
       continue;
     }
@@ -119,8 +123,7 @@ const formatText = (text) => {
         quoteText += '\n' + lines[j].substring(2);
         j++;
       }
-      const quotedHtml = formatText(quoteText);
-      result.push(`<blockquote class="roadmap-blockquote">${quotedHtml}</blockquote>`);
+      result.push(`<blockquote>${formatText(quoteText)}</blockquote>`);
       i = j;
       continue;
     }
@@ -143,7 +146,7 @@ const formatText = (text) => {
         }
       }
       const listTag = isOrdered ? 'ol' : 'ul';
-      result.push(`<${listTag} class="roadmap-list">${listItems.join('')}</${listTag}>`);
+      result.push(`<${listTag}>${listItems.join('')}</${listTag}>`);
       continue;
     }
 
@@ -153,7 +156,7 @@ const formatText = (text) => {
       continue;
     }
 
-    result.push(`<p class="roadmap-paragraph">${formatInline(line)}</p>`);
+    result.push(`<p>${formatInline(line)}</p>`);
     i++;
   }
 
@@ -162,7 +165,7 @@ const formatText = (text) => {
 };
 
 // ------------------------------------------------------------------
-// Portal-based Delete Confirmation Modal (unchanged)
+// Portal-based Delete Confirmation Modal
 // ------------------------------------------------------------------
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, roadmapTitle, theme, isLoading }) => {
   const [mounted, setMounted] = useState(false);
@@ -184,29 +187,30 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, roadmapTitle, the
   return ReactDOM.createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
-      <div className={`relative max-w-md w-full rounded-2xl shadow-2xl overflow-hidden transform transition-all duration-300 ${
-        theme === 'dark' ? 'bg-gray-800/95' : 'bg-white/95'
-      } backdrop-blur-md border ${theme === 'dark' ? 'border-gray-700' : 'border-gray-200'}`}>
-        <div className="p-6 text-center">
-          <div className="mx-auto w-12 h-12 mb-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-            <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
+      <div className={`relative max-w-md w-full rounded-2xl lg:rounded-3xl shadow-2xl overflow-hidden transform transition-all duration-300 ${
+        theme === 'dark' ? 'bg-[#1A162F]/95 border-white/10' : 'bg-white/95 border-gray-200'
+      } backdrop-blur-xl border`}>
+        <div className="p-6 lg:p-8 text-center">
+          <div className="mx-auto w-14 h-14 lg:w-16 lg:h-16 mb-4 lg:mb-6 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+            <AlertTriangle className="w-7 h-7 lg:w-8 lg:h-8 text-red-600 dark:text-red-400"/>
           </div>
-          <h3 className="text-xl font-poppins font-semibold mb-2">Delete Roadmap</h3>
-          <p className="text-gray-600 dark:text-gray-300 mb-2">
-            Are you sure you want to delete <strong className="font-semibold">"{roadmapTitle}"</strong>?
+          <h3 className="text-xl lg:text-2xl font-poppins font-bold tracking-tight mb-2 text-gray-800 dark:text-gray-100">Delete Roadmap</h3>
+          <p className="text-sm lg:text-base text-gray-600 dark:text-gray-300 mb-2">
+            Are you sure you want to delete <strong className="font-semibold text-gray-800 dark:text-white">"{roadmapTitle}"</strong>?
           </p>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">This action cannot be undone.</p>
+          <p className="text-xs lg:text-sm text-gray-500 dark:text-gray-400 mb-6 lg:mb-8 font-medium">This action cannot be undone.</p>
           <div className="flex justify-center gap-3">
             <button
                onClick={onConfirm}
                disabled={isLoading}
-               className="px-5 py-2 rounded-full bg-red-600 hover:bg-red-700 text-white font-medium transition shadow-md disabled:opacity-50"
+               className="px-6 py-2.5 lg:py-3 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold transition shadow-md disabled:opacity-50 flex items-center justify-center min-w-[120px]"
              >
-               {isLoading ? <Loader size={16} className="animate-spin mr-1" /> : 'Delete'}
+               {isLoading ? <Loader className="w-5 h-5 animate-spin"/> : 'Delete'}
              </button>
             <button
               onClick={onClose}
-              className="px-5 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
+              disabled={isLoading}
+              className="px-6 py-2.5 lg:py-3 rounded-full bg-gray-200 dark:bg-black/20 text-gray-800 dark:text-gray-200 font-bold border border-transparent dark:border-white/10 hover:bg-gray-300 dark:hover:bg-black/40 transition"
             >
               Cancel
             </button>
@@ -219,7 +223,7 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, roadmapTitle, the
 };
 
 // ------------------------------------------------------------------
-// Portal-based Task Detail Modal (unchanged)
+// Portal-based Task Detail Modal
 // ------------------------------------------------------------------
 const TaskDetailModal = ({ task, isOpen, onClose, onElaborate, isElaborating }) => {
   const { theme } = useTheme();
@@ -241,120 +245,82 @@ const TaskDetailModal = ({ task, isOpen, onClose, onElaborate, isElaborating }) 
 
   const hasDetails = task.details && task.details.trim().length > 0;
   const hasSubtasks = task.subtasks && task.subtasks.length > 0;
-  const bgClass = theme === 'dark' ? 'bg-gray-900/95 backdrop-blur-md' : 'bg-white/95 backdrop-blur-md';
-  const borderClass = theme === 'dark' ? 'border-gray-700' : 'border-gray-200';
+  const bgClass = theme === 'dark' ? 'bg-[#1A162F]/95 backdrop-blur-xl' : 'bg-white/95 backdrop-blur-xl';
+  const borderClass = theme === 'dark' ? 'border-white/10' : 'border-gray-200';
 
   return ReactDOM.createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
-      <div className={`relative max-w-2xl w-full rounded-2xl ${bgClass} border ${borderClass} shadow-2xl overflow-hidden transform transition-all duration-300 scale-100 animate-in fade-in zoom-in`}>
-        <div className="flex justify-between items-center p-5 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-purple-50 to-teal-50 dark:from-purple-900/30 dark:to-teal-900/30">
-          <h3 className="text-xl font-poppins font-semibold bg-gradient-to-r from-purple-600 to-teal-600 dark:from-purple-400 dark:to-teal-400 bg-clip-text text-transparent">
+      <div className={`relative max-w-2xl w-full rounded-2xl lg:rounded-3xl ${bgClass} border ${borderClass} shadow-2xl overflow-hidden transform transition-all duration-300 scale-100 animate-in fade-in zoom-in`}>
+        <div className="flex justify-between items-center p-5 lg:p-6 border-b border-gray-200/50 dark:border-white/5 bg-white/30 dark:bg-black/20">
+          <h3 className="text-lg lg:text-xl font-poppins font-extrabold bg-gradient-to-r from-purple-600 to-teal-600 dark:from-purple-400 dark:to-teal-400 bg-clip-text text-transparent pr-4 leading-tight">
             {task.description}
           </h3>
-          <button onClick={onClose} className="p-1.5 rounded-full hover:bg-white/20 dark:hover:bg-gray-700 transition">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-white/10 transition shrink-0">
+            <svg className="w-5 h-5 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
-        <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto custom-scrollbar">
-          <style>{`
-            .roadmap-details p.roadmap-paragraph {
-              margin-bottom: 0.75rem;
-              line-height: 1.6;
-            }
-            .roadmap-details ul.roadmap-list,
-            .roadmap-details ol.roadmap-list {
-              margin: 0.5rem 0 0.75rem 1.5rem;
-              padding-left: 0;
-            }
-            .roadmap-details li {
-              margin-bottom: 0.25rem;
-              line-height: 1.5;
-            }
-            .roadmap-details strong {
-              font-weight: 700;
-              color: ${theme === 'dark' ? '#C7B3E6' : '#B399D4'};
-            }
-            .roadmap-details em {
-              font-style: italic;
-              color: ${theme === 'dark' ? '#8DE2DD' : '#5CC8C2'};
-            }
-            .custom-scrollbar::-webkit-scrollbar {
-              width: 6px;
-            }
-            .custom-scrollbar::-webkit-scrollbar-track {
-              background: ${theme === 'dark' ? '#374151' : '#E5E7EB'};
-              border-radius: 10px;
-            }
-            .custom-scrollbar::-webkit-scrollbar-thumb {
-              background: ${theme === 'dark' ? '#8B5CF6' : '#C084FC'};
-              border-radius: 10px;
-            }
-          `}</style>
+        <div className="p-6 lg:p-8 space-y-6 max-h-[70vh] overflow-y-auto custom-scrollbar">
 
           {!hasDetails && !hasSubtasks ? (
-            <div className="text-center py-8">
-              <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-                <BookOpen size={32} className="text-purple-500" />
+            <div className="text-center py-10">
+              <div className="w-16 h-16 lg:w-20 lg:h-20 mx-auto mb-4 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
+                <BookOpen className="w-8 h-8 lg:w-10 lg:h-10 text-purple-500 dark:text-teal-400"/>
               </div>
-              <p className="text-gray-500 mb-4">This task doesn't have detailed instructions yet.</p>
+              <p className="text-gray-500 dark:text-gray-400 mb-6 font-medium text-sm lg:text-base">This task doesn't have detailed instructions yet.</p>
               <button
                 onClick={() => onElaborate(task.id, false)}
                 disabled={isElaborating}
-                className="px-5 py-2 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 text-white font-medium hover:shadow-lg transition disabled:opacity-50"
+                className="px-6 py-3 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 text-white font-bold hover:shadow-lg transition disabled:opacity-50 flex items-center justify-center mx-auto gap-2"
               >
+                {isElaborating ? <Loader className="w-5 h-5 animate-spin"/> : <Sparkles className="w-5 h-5"/>}
                 {isElaborating ? 'Generating...' : 'Generate Detailed Guide'}
               </button>
             </div>
           ) : (
             <>
               {hasDetails && (
-                <div className="bg-purple-50/30 dark:bg-purple-900/20 rounded-xl p-4">
-                  <h4 className="font-semibold flex items-center gap-2 mb-3 text-purple-700 dark:text-purple-300">
-                    <BookOpen size={18} /> Details
+                <div className="bg-purple-50/50 dark:bg-black/20 border border-purple-100 dark:border-white/5 rounded-2xl p-5 lg:p-6 shadow-inner">
+                  <h4 className="font-poppins font-bold flex items-center gap-2 mb-4 text-purple-700 dark:text-teal-400">
+                    <BookOpen className="w-5 h-5"/> AI Details & Guide
                   </h4>
-                  <div className="roadmap-details text-sm text-gray-700 dark:text-gray-300">
-                    <div dangerouslySetInnerHTML={{ __html: formatText(task.details) }} />
-                  </div>
+                  <div className="roadmap-details" dangerouslySetInnerHTML={{ __html: formatText(task.details) }} />
                 </div>
               )}
               {hasSubtasks && (
-                <div className="bg-teal-50/30 dark:bg-teal-900/20 rounded-xl p-4">
-                  <h4 className="font-semibold flex items-center gap-2 mb-3 text-teal-700 dark:text-teal-300">
-                    <ListChecks size={18} /> Subtasks
+                <div className="bg-teal-50/50 dark:bg-black/20 border border-teal-100 dark:border-white/5 rounded-2xl p-5 lg:p-6 shadow-inner">
+                  <h4 className="font-poppins font-bold flex items-center gap-2 mb-4 text-teal-700 dark:text-teal-400">
+                    <ListChecks className="w-5 h-5"/> Actionable Subtasks
                   </h4>
-                  <ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-gray-300">
+                  {/* 💡 Subtasks now fully support dynamic Dark Mode teal coloring and markdown rendering */}
+                  <ul className="list-disc list-outside ml-4 space-y-2 text-sm lg:text-base text-gray-700 dark:text-gray-300 marker:text-purple-500 dark:marker:text-teal-400">
                     {task.subtasks.map((sub, idx) => (
-                      <li key={idx}>{sub}</li>
+                      <li key={idx} className="pl-1" dangerouslySetInnerHTML={{ __html: formatInline(sub) }} />
                     ))}
                   </ul>
                 </div>
               )}
-              <div className="flex justify-end gap-3 pt-2">
+              <div className="flex flex-wrap justify-end gap-3 pt-4 border-t border-gray-200/50 dark:border-white/10 mt-6">
                 <button
                   onClick={() => onElaborate(task.id, false)}
                   disabled={isElaborating}
-                  className="px-4 py-1.5 text-sm rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition disabled:opacity-50"
+                  className="px-5 py-2.5 text-sm lg:text-base font-bold rounded-full bg-gray-200 dark:bg-black/20 text-gray-800 dark:text-gray-200 border border-transparent dark:border-white/10 hover:bg-gray-300 dark:hover:bg-black/40 transition disabled:opacity-50"
                 >
                   Regenerate
                 </button>
                 <button
                   onClick={() => onElaborate(task.id, true)}
                   disabled={isElaborating}
-                  className="px-4 py-1.5 text-sm rounded-full bg-gradient-to-r from-purple-500 to-teal-500 text-white hover:shadow-md transition disabled:opacity-50"
+                  className="px-5 py-2.5 text-sm lg:text-base font-bold rounded-full bg-gradient-to-r from-purple-500 to-teal-500 text-white hover:shadow-md transition disabled:opacity-50 flex items-center gap-2"
                 >
+                  {isElaborating && <Loader className="w-4 h-4 animate-spin"/>}
                   {isElaborating ? 'Enhancing...' : 'Enhance (More detail)'}
                 </button>
               </div>
             </>
           )}
-        </div>
-        <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end bg-gray-50 dark:bg-gray-800/50">
-          <button onClick={onClose} className="px-5 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition">
-            Close
-          </button>
         </div>
       </div>
     </div>,
@@ -363,45 +329,41 @@ const TaskDetailModal = ({ task, isOpen, onClose, onElaborate, isElaborating }) 
 };
 
 // ------------------------------------------------------------------
-// Loading Skeleton Component (unchanged)
+// Loading Skeleton Component
 // ------------------------------------------------------------------
 const RoadmapSkeleton = ({ theme }) => {
-  const bgClass = theme === 'dark' ? 'bg-gray-800/60' : 'bg-white/70';
-  const borderClass = theme === 'dark' ? 'border-gray-700' : 'border-gray-200';
+  const isDark = theme === 'dark';
   return (
-    <div className={`p-6 rounded-2xl ${bgClass} border ${borderClass} shadow-md backdrop-blur-sm animate-pulse`}>
-      <div className="flex justify-between items-start mb-4">
-        <div className="space-y-2 flex-1">
-          <div className="h-6 bg-gradient-to-r from-purple-200 to-teal-200 dark:from-purple-800 dark:to-teal-800 rounded w-3/4"></div>
-          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-1/2"></div>
+    <div className={`p-6 lg:p-8 rounded-2xl lg:rounded-3xl ${isDark ? 'bg-[#1A162F]/60 border-white/5' : 'bg-white/70 border-gray-200/50'} border shadow-lg animate-pulse`}>
+      <div className="flex justify-between items-start mb-6">
+        <div className="space-y-3 flex-1">
+          <div className="h-6 lg:h-8 bg-gray-300 dark:bg-gray-700/50 rounded-full w-3/4"></div>
+          <div className="h-4 bg-gray-200 dark:bg-gray-700/50 rounded-full w-1/2"></div>
         </div>
-        <div className="w-16 h-6 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+        <div className="w-16 h-8 bg-gray-200 dark:bg-gray-700/50 rounded-full shrink-0 ml-4"></div>
       </div>
-      <div className="mb-4">
-        <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full w-full"></div>
-        <div className="flex justify-between mt-2">
-          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
-          <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-24"></div>
+      <div className="mb-6">
+        <div className="h-2.5 bg-gray-200 dark:bg-gray-700/50 rounded-full w-full"></div>
+        <div className="flex justify-between mt-3">
+          <div className="h-3 bg-gray-200 dark:bg-gray-700/50 rounded-full w-24"></div>
+          <div className="h-3 bg-gray-200 dark:bg-gray-700/50 rounded-full w-24"></div>
         </div>
       </div>
-      <div className="space-y-3">
-        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-32"></div>
-        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
-        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
-        <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-4/5"></div>
-      </div>
-      <div className="mt-5 flex gap-2">
-        <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded-full w-full"></div>
+      <div className="space-y-4">
+        <div className="h-4 bg-gray-200 dark:bg-gray-700/50 rounded-full w-32"></div>
+        <div className="h-3 bg-gray-200 dark:bg-gray-700/50 rounded-full w-full"></div>
+        <div className="h-3 bg-gray-200 dark:bg-gray-700/50 rounded-full w-5/6"></div>
       </div>
     </div>
   );
 };
 
 // ------------------------------------------------------------------
-// Main RoadmapPlanner Component (with Timeline toggle)
+// Main RoadmapPlanner Component
 // ------------------------------------------------------------------
 function RoadmapPlanner() {
   const { theme } = useTheme();
+  const isDarkMode = theme === 'dark';
   const { data: roadmaps, isLoading, isError, refetch } = useRoadmaps();
   const generateMutation = useGenerateRoadmap();
   const deleteMutation = useDeleteRoadmap();
@@ -410,9 +372,12 @@ function RoadmapPlanner() {
   const continueMutation = useContinueRoadmap();
   const elaborateMutation = useElaborateTask();
   const rescheduleMutation = useRescheduleRoadmap();
-  const { roadmapPreferences } = useUserProfile();
   const continueBatchMutation = useContinueRoadmapBatch();
   const queryClient = useQueryClient();
+
+  const { data: profile } = useUserFullProfile();
+  const roadmapPreferences = profile?.roadmapPreferences;
+
   const [timeframeValue, setTimeframeValue] = useState(4);
   const [timeframeUnit, setTimeframeUnit] = useState('WEEKS');
   const [overridePreferences, setOverridePreferences] = useState(false);
@@ -423,20 +388,23 @@ function RoadmapPlanner() {
   const [avoidWeekends, setAvoidWeekends] = useState(false);
 
   const [goal, setGoal] = useState('');
-//   const [timeframeWeeks, setTimeframeWeeks] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [expandedTaskId, setExpandedTaskId] = useState(null);
   const [expandedWeeks, setExpandedWeeks] = useState({});
   const [selectedTask, setSelectedTask] = useState(null);
   const [completedRoadmapIds, setCompletedRoadmapIds] = useState(new Set());
   const [deleteModal, setDeleteModal] = useState({ isOpen: false, roadmapId: null, roadmapTitle: '' });
-const [continuingRoadmapId, setContinuingRoadmapId] = useState(null);
-  // NEW: per-roadmap view mode (list or timeline)
+  const [continuingRoadmapId, setContinuingRoadmapId] = useState(null);
+
   const [viewModeMap, setViewModeMap] = useState({});
-const [visibleWeeksMap, setVisibleWeeksMap] = useState({});
+  const [visibleWeeksMap, setVisibleWeeksMap] = useState({});
+  const [isDeleting, setIsDeleting] = useState(false);
 
-const [isDeleting, setIsDeleting] = useState(false);
-
+  // Premium Glassmorphism Sync
+  const cardBgClass = isDarkMode ? 'bg-[#1A162F]/60 backdrop-blur-xl' : 'bg-white/70 backdrop-blur-xl';
+  const borderClass = isDarkMode ? 'border-white/10' : 'border-gray-200/50';
+  const inputBg = isDarkMode ? 'bg-[#131127]/80' : 'bg-white/90';
+  const inputFocusRing = 'focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:focus:ring-teal-400 dark:focus:border-teal-400';
 
   const toggleViewMode = (roadmapId) => {
     setViewModeMap(prev => ({
@@ -445,8 +413,6 @@ const [isDeleting, setIsDeleting] = useState(false);
     }));
   };
 
-
-  // After mutation, update selectedTask if it matches the elaborated task
   useEffect(() => {
     if (selectedTask && roadmaps) {
       for (const roadmap of roadmaps) {
@@ -459,7 +425,6 @@ const [isDeleting, setIsDeleting] = useState(false);
     }
   }, [roadmaps, selectedTask?.id]);
 
-  // Check for newly completed roadmaps
   useEffect(() => {
     if (roadmaps) {
       roadmaps.forEach(roadmap => {
@@ -476,28 +441,25 @@ const [isDeleting, setIsDeleting] = useState(false);
     }
   }, [roadmaps, completedRoadmapIds]);
 
-useEffect(() => {
-  if (roadmapPreferences.data && !overridePreferences) {
-    setDifficulty(roadmapPreferences.data.difficulty || 'BEGINNER');
-    setLanguage(roadmapPreferences.data.languagePreference || 'en');
-    setLearningStyle(roadmapPreferences.data.learningStyle || 'READING');
-    setHoursPerWeek(roadmapPreferences.data.hoursPerWeek || 10);
-    setAvoidWeekends(roadmapPreferences.data.avoidWeekends || false);
-  }
-}, [roadmapPreferences.data, overridePreferences]);
+  useEffect(() => {
+    if (roadmapPreferences && !overridePreferences) {
+      setDifficulty(roadmapPreferences.difficulty || 'BEGINNER');
+      setLanguage(roadmapPreferences.languagePreference || 'en');
+      setLearningStyle(roadmapPreferences.learningStyle || 'READING');
+      setHoursPerWeek(roadmapPreferences.hoursPerWeek || 10);
+      setAvoidWeekends(roadmapPreferences.avoidWeekends || false);
+    }
+  }, [roadmapPreferences, overridePreferences]);
 
-
- // Initialise visible weeks when roadmaps load
   useEffect(() => {
     if (roadmaps) {
       const newVisibleMap = { ...visibleWeeksMap };
       roadmaps.forEach(roadmap => {
         if (!newVisibleMap[roadmap.id]) {
-          // Initially show up to generatedWeeks (or 12 if not set)
           const initialVisible = roadmap.generatedWeeks
               ? Math.min(roadmap.generatedWeeks, roadmap.durationWeeks)
               : roadmap.durationWeeks;
-          newVisibleMap[roadmap.id] = initialVisible;   // <-- this line was missing                                 // fallback – show all weeks
+          newVisibleMap[roadmap.id] = initialVisible;
         }
       });
       setVisibleWeeksMap(newVisibleMap);
@@ -531,6 +493,7 @@ useEffect(() => {
        },
      });
    }, [goal, timeframeValue, timeframeUnit, difficulty, language, learningStyle, hoursPerWeek, avoidWeekends, generateMutation]);
+
   const handleDeleteClick = useCallback((id, title) => {
       setDeleteModal({ isOpen: true, roadmapId: id, roadmapTitle: title });
   }, []);
@@ -577,96 +540,90 @@ useEffect(() => {
     setExpandedWeeks(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const bgClass = theme === 'dark' ? 'bg-gray-800/40 backdrop-blur-sm' : 'bg-white/60 backdrop-blur-sm';
-  const borderClass = theme === 'dark' ? 'border-gray-700/50' : 'border-gray-200/50';
-  const cardBgClass = theme === 'dark' ? 'bg-gray-800/70 backdrop-blur-md' : 'bg-white/80 backdrop-blur-md';
-
-  // Loading skeleton
   if (isLoading) {
     return (
-      <div className="space-y-6">
-        <div className="flex justify-between items-center">
-          <div className="h-8 bg-gradient-to-r from-purple-200 to-teal-200 dark:from-purple-800 dark:to-teal-800 rounded w-48 animate-pulse"></div>
-          <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded-full w-28 animate-pulse"></div>
+      <div className="space-y-6 lg:space-y-8 w-full max-w-7xl mx-auto">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+          <div className="h-8 lg:h-10 bg-gray-300 dark:bg-gray-700/50 rounded-full w-64 lg:w-80 animate-pulse"></div>
+          <div className="h-10 lg:h-12 bg-gray-300 dark:bg-gray-700/50 rounded-full w-32 lg:w-40 animate-pulse"></div>
         </div>
-        <RoadmapSkeleton theme={theme} />
-        <RoadmapSkeleton theme={theme} />
-        <RoadmapSkeleton theme={theme} />
+        <RoadmapSkeleton theme={theme}/>
+        <RoadmapSkeleton theme={theme}/>
+        <RoadmapSkeleton theme={theme}/>
       </div>
     );
   }
 
   if (isError) {
     return (
-      <div className="text-center py-16">
-        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
-          <svg className="w-8 h-8 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
+      <div className="text-center py-16 lg:py-24 max-w-2xl mx-auto">
+        <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-100 dark:bg-red-900/30 mb-6">
+          <AlertTriangle className="w-10 h-10 text-red-500"/>
         </div>
-        <p className="text-red-500 font-medium">Failed to load roadmaps. Please try again later.</p>
-        <button onClick={() => refetch()} className="mt-4 px-4 py-2 rounded-full bg-purple-500 text-white hover:bg-purple-600 transition">
-          Retry
+        <p className="text-red-500 font-bold text-lg lg:text-xl">Failed to load roadmaps.</p>
+        <p className="text-gray-500 dark:text-gray-400 mt-2 mb-6">Please check your connection and try again.</p>
+        <button onClick={() => refetch()} className="px-6 py-3 rounded-full font-bold bg-purple-500 hover:bg-purple-600 text-white transition shadow-md">
+          Retry Connection
         </button>
       </div>
     );
   }
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 lg:space-y-10 w-full">
       {/* Header + New Roadmap Button */}
-      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 lg:gap-6 bg-white/30 dark:bg-black/10 p-6 lg:p-8 rounded-2xl lg:rounded-3xl border border-gray-200/50 dark:border-white/5 shadow-sm">
         <div>
-          <h2 className="text-3xl font-poppins font-bold bg-gradient-to-r from-[#B399D4] to-[#5CC8C2] bg-clip-text text-transparent">
+          <h2 className="text-2xl lg:text-3xl font-poppins font-extrabold tracking-tight bg-gradient-to-r from-purple-500 to-teal-500 dark:from-purple-400 dark:to-teal-400 bg-clip-text text-transparent leading-tight">
             Personal Growth Roadmaps
           </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Your AI-powered journey to success</p>
+          <p className="text-sm lg:text-base text-gray-500 dark:text-gray-400 mt-1.5 font-medium">Your AI-powered journey to success</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
-          className="group px-5 py-2.5 rounded-full bg-gradient-to-r from-[#B399D4] to-[#5CC8C2] text-white font-medium shadow-lg hover:shadow-xl transition-all duration-300 flex items-center gap-2"
+          className="group px-6 py-3 lg:px-8 lg:py-3.5 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 text-white font-bold text-sm lg:text-base shadow-md hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2 shrink-0 w-full sm:w-auto"
         >
-          <Sparkles size={18} className="group-hover:rotate-12 transition" />
-          {showForm ? 'Cancel' : '+ New Roadmap'}
+          <Sparkles className="w-5 h-5 group-hover:rotate-12 transition"/>
+          {showForm ? 'Cancel Creation' : '+ New Roadmap'}
         </button>
       </div>
 
       {/* Generation Form */}
       {showForm && (
-        <div className={`p-6 rounded-2xl ${bgClass} border ${borderClass} shadow-xl backdrop-blur-md transition-all duration-300`}>
-          <h3 className="text-xl font-semibold mb-5 flex items-center gap-2">
-            <Sparkles size={22} className="text-purple-500" />
+        <div className={`p-6 lg:p-8 rounded-2xl lg:rounded-3xl ${cardBgClass} border ${borderClass} shadow-xl transition-all duration-300 animate-in fade-in slide-in-from-top-4`}>
+          <h3 className="text-xl lg:text-2xl font-poppins font-extrabold mb-6 lg:mb-8 flex items-center gap-3 text-gray-800 dark:text-gray-100">
+            <Sparkles className="w-6 h-6 text-purple-500 dark:text-teal-400"/>
             Create Your Personalized Roadmap
           </h3>
-          <form onSubmit={handleGenerate} className="space-y-5">
+          <form onSubmit={handleGenerate} className="space-y-5 lg:space-y-6">
             <div>
-              <label className="block text-sm font-medium mb-1.5">What do you want to achieve?</label>
+              <label className="block text-xs lg:text-sm font-bold uppercase tracking-wider mb-2 text-gray-600 dark:text-gray-400">What do you want to achieve?</label>
               <input
                 type="text"
                 value={goal}
                 onChange={(e) => setGoal(e.target.value)}
                 placeholder="e.g., Learn React Native, Run a marathon, Start a blog"
-                className="w-full p-3 rounded-xl border dark:bg-gray-800/80 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+                className={`w-full p-3 lg:p-4 rounded-xl border ${borderClass} ${inputBg} text-gray-800 dark:text-gray-100 focus:outline-none transition-all text-sm lg:text-base ${inputFocusRing}`}
                 required
               />
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-4 lg:gap-6">
               <div>
-                <label className="block text-sm font-medium mb-1.5">Duration</label>
+                <label className="block text-xs lg:text-sm font-bold uppercase tracking-wider mb-2 text-gray-600 dark:text-gray-400">Duration</label>
                 <input
                   type="number"
                   value={timeframeValue}
                   onChange={(e) => setTimeframeValue(Math.max(1, parseInt(e.target.value) || 1))}
-                  className="w-full p-3 rounded-xl border dark:bg-gray-800/80 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+                  className={`w-full p-3 lg:p-4 rounded-xl border ${borderClass} ${inputBg} text-gray-800 dark:text-gray-100 focus:outline-none transition-all text-sm lg:text-base ${inputFocusRing}`}
                   min="1"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium mb-1.5">Unit</label>
+                <label className="block text-xs lg:text-sm font-bold uppercase tracking-wider mb-2 text-gray-600 dark:text-gray-400">Unit</label>
                 <select
                   value={timeframeUnit}
                   onChange={(e) => setTimeframeUnit(e.target.value)}
-                  className="w-full p-3 rounded-xl border dark:bg-gray-800/80 dark:border-gray-700 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
+                  className={`w-full p-3 lg:p-4 rounded-xl border ${borderClass} ${inputBg} text-gray-800 dark:text-gray-100 focus:outline-none transition-all text-sm lg:text-base ${inputFocusRing}`}
                 >
                   <option value="DAYS">Days</option>
                   <option value="WEEKS">Weeks</option>
@@ -676,28 +633,28 @@ useEffect(() => {
               </div>
             </div>
 
-            <div className="border-t border-gray-200 dark:border-gray-700 my-4 pt-4">
-              <div className="flex items-center gap-2 mb-3">
+            <div className="border-t border-gray-200/50 dark:border-white/10 mt-6 pt-6">
+              <div className="flex items-center gap-3 mb-4 lg:mb-5">
                 <input
                   type="checkbox"
                   id="overridePrefs"
                   checked={overridePreferences}
                   onChange={(e) => setOverridePreferences(e.target.checked)}
-                  className="w-4 h-4 rounded border-gray-300 text-purple-500 focus:ring-purple-500"
+                  className="w-5 h-5 rounded border-gray-300 text-purple-500 focus:ring-purple-500 dark:focus:ring-teal-400"
                 />
-                <label htmlFor="overridePrefs" className="text-sm font-medium">
-                  Use custom preferences for this roadmap (override saved defaults)
+                <label htmlFor="overridePrefs" className="text-sm lg:text-base font-bold text-gray-700 dark:text-gray-300">
+                  Use custom preferences for this roadmap <span className="font-normal opacity-70">(override saved defaults)</span>
                 </label>
               </div>
 
               {overridePreferences && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:gap-6 mt-4 p-4 lg:p-6 bg-black/5 dark:bg-black/20 rounded-xl lg:rounded-2xl border border-black/5 dark:border-white/5">
                   <div>
-                    <label className="block text-sm font-medium mb-1.5">Difficulty</label>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-600 dark:text-gray-400">Difficulty</label>
                     <select
                       value={difficulty}
                       onChange={(e) => setDifficulty(e.target.value)}
-                      className="w-full p-2 rounded-lg border dark:bg-gray-800/80 dark:border-gray-700"
+                      className={`w-full p-3 rounded-xl border ${borderClass} ${inputBg} text-gray-800 dark:text-gray-100 focus:outline-none transition-all text-sm ${inputFocusRing}`}
                     >
                       <option value="BEGINNER">Beginner</option>
                       <option value="INTERMEDIATE">Intermediate</option>
@@ -705,11 +662,11 @@ useEffect(() => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1.5">Language</label>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-600 dark:text-gray-400">Language</label>
                     <select
                       value={language}
                       onChange={(e) => setLanguage(e.target.value)}
-                      className="w-full p-2 rounded-lg border dark:bg-gray-800/80 dark:border-gray-700"
+                      className={`w-full p-3 rounded-xl border ${borderClass} ${inputBg} text-gray-800 dark:text-gray-100 focus:outline-none transition-all text-sm ${inputFocusRing}`}
                     >
                       <option value="en">English</option>
                       <option value="hi">Hindi</option>
@@ -719,73 +676,78 @@ useEffect(() => {
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1.5">Learning Style</label>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-600 dark:text-gray-400">Learning Style</label>
                     <select
                       value={learningStyle}
                       onChange={(e) => setLearningStyle(e.target.value)}
-                      className="w-full p-2 rounded-lg border dark:bg-gray-800/80 dark:border-gray-700"
+                      className={`w-full p-3 rounded-xl border ${borderClass} ${inputBg} text-gray-800 dark:text-gray-100 focus:outline-none transition-all text-sm ${inputFocusRing}`}
                     >
                       <option value="READING">Reading</option>
                       <option value="VISUAL">Visual</option>
-                      <option value="HANDS_ON">Hands‑on</option>
+                      <option value="HANDS_ON">Hands-on</option>
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1.5">Hours per Week</label>
+                    <label className="block text-xs font-bold uppercase tracking-wider mb-2 text-gray-600 dark:text-gray-400">Hours per Week</label>
                     <input
                       type="number"
                       min="1"
                       max="70"
                       value={hoursPerWeek}
                       onChange={(e) => setHoursPerWeek(parseInt(e.target.value) || 10)}
-                      className="w-full p-2 rounded-lg border dark:bg-gray-800/80 dark:border-gray-700"
+                      className={`w-full p-3 rounded-xl border ${borderClass} ${inputBg} text-gray-800 dark:text-gray-100 focus:outline-none transition-all text-sm ${inputFocusRing}`}
                     />
                   </div>
-                  <div className="flex items-center gap-2 col-span-full">
+                  <div className="flex items-center gap-3 col-span-full mt-2">
                     <input
                       type="checkbox"
                       id="avoidWeekendsLocal"
                       checked={avoidWeekends}
                       onChange={(e) => setAvoidWeekends(e.target.checked)}
-                      className="w-4 h-4 rounded"
+                      className="w-5 h-5 rounded text-purple-500 focus:ring-purple-500 dark:focus:ring-teal-400"
                     />
-                    <label htmlFor="avoidWeekendsLocal" className="text-sm">Avoid weekends</label>
+                    <label htmlFor="avoidWeekendsLocal" className="text-sm font-bold text-gray-700 dark:text-gray-300">Avoid scheduling tasks on weekends</label>
                   </div>
                 </div>
               )}
             </div>
+
             <button
               type="submit"
               disabled={generateMutation.isPending}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-teal-500 text-white font-semibold hover:shadow-lg transition disabled:opacity-50 flex items-center justify-center gap-2"
+              className="w-full mt-6 py-4 rounded-xl bg-gradient-to-r from-purple-500 to-teal-500 hover:from-purple-600 hover:to-teal-600 text-white font-extrabold text-base lg:text-lg shadow-lg hover:shadow-xl transition-all duration-300 disabled:opacity-50 flex items-center justify-center gap-3"
             >
-              {generateMutation.isPending ? <Loader className="animate-spin w-5 h-5" /> : <Sparkles size={18} />}
-              {generateMutation.isPending ? 'Generating...' : 'Generate Roadmap'}
+              {generateMutation.isPending ? <Loader className="animate-spin w-6 h-6"/> : <Sparkles className="w-6 h-6"/>}
+              {generateMutation.isPending ? 'Generating Roadmap...' : 'Generate Roadmap'}
             </button>
           </form>
           {generateMutation.isError && (
-            <p className="text-red-500 text-sm mt-3">Error: {generateMutation.error.message}</p>
+            <div className="mt-4 p-4 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-500/30 text-red-700 dark:text-red-400 text-sm font-medium flex items-center gap-2">
+              <AlertTriangle className="w-5 h-5"/> Error: {generateMutation.error.message}
+            </div>
           )}
         </div>
       )}
 
-      {/* Roadmaps List */}
+      {/* Empty State */}
       {roadmaps?.length === 0 && !showForm && (
-        <div className="text-center py-16">
-          <div className="w-24 h-24 mx-auto mb-4 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center">
-            <Target size={40} className="text-purple-400" />
+        <div className={`text-center py-16 lg:py-24 rounded-2xl lg:rounded-3xl ${cardBgClass} border ${borderClass} shadow-md flex flex-col items-center justify-center`}>
+          <div className="w-20 h-20 lg:w-24 lg:h-24 mb-6 rounded-full bg-gradient-to-br from-purple-100 to-teal-100 dark:from-purple-900/20 dark:to-teal-900/20 flex items-center justify-center">
+            <Target className="w-10 h-10 lg:w-12 lg:h-12 text-purple-400 dark:text-teal-400 opacity-80"/>
           </div>
-          <p className="text-gray-500 text-lg">No roadmaps yet.</p>
+          <h3 className="text-xl lg:text-2xl font-poppins font-bold text-gray-800 dark:text-gray-100 mb-2">No roadmaps yet.</h3>
+          <p className="text-gray-500 dark:text-gray-400 mb-8 max-w-md">Break down your big goals into actionable steps with an AI-generated roadmap.</p>
           <button
             onClick={() => setShowForm(true)}
-            className="mt-4 px-5 py-2 rounded-full bg-purple-500 text-white hover:bg-purple-600 transition"
+            className="px-6 py-3 lg:px-8 lg:py-4 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 text-white font-bold text-sm lg:text-base shadow-md hover:shadow-lg transition-all"
           >
             Create your first roadmap
           </button>
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-8">
+      {/* Roadmaps List */}
+      <div className="grid grid-cols-1 gap-6 lg:gap-8">
         {roadmaps?.map((roadmap) => {
           const totalTasks = roadmap.tasks?.length || 0;
           const completedTasks = roadmap.tasks?.filter(t => t.completed).length || 0;
@@ -795,48 +757,33 @@ useEffect(() => {
           const isCompleted = completionPercent === 100 && totalTasks > 0;
           const currentViewMode = viewModeMap[roadmap.id] || 'list';
 
-          // --- NEW: chunked continuation variables ---
-//           const totalWeeks = roadmap.durationWeeks || 1;
-//           const generatedWeeks = roadmap.generatedWeeks || 0;
-//           const maxVisibleWeek = visibleWeeksMap[roadmap.id] || generatedWeeks || Math.min(12, totalWeeks);
-//                     const canLoadMore = maxVisibleWeek < totalWeeks;
-//           const isContinuable = generatedWeeks > 0 && generatedWeeks < totalWeeks;
-// --- SMARTER RENDERING VARIABLES ---
-const totalWeeks = roadmap.durationWeeks || 1;
-const generatedWeeks = roadmap.generatedWeeks || 0;
+          const totalWeeks = roadmap.durationWeeks || 1;
+          const generatedWeeks = roadmap.generatedWeeks || 0;
+          const highestTaskWeek = roadmap.tasks?.reduce((max, task) => Math.max(max, task.weekNumber || 1), 0) || 0;
+          const displayLimit = Math.max(highestTaskWeek, generatedWeeks, Math.min(12, totalWeeks));
+          const sortedWeeks = Array.from({ length: displayLimit }, (_, i) => i + 1);
+          const canLoadMore = generatedWeeks > 0 && generatedWeeks < totalWeeks && highestTaskWeek < totalWeeks;
 
-// Find the absolute highest week that actually contains tasks right now
-const highestTaskWeek = roadmap.tasks?.reduce((max, task) => Math.max(max, task.weekNumber || 1), 0) || 0;
+          const tasksByWeek = {};
+          roadmap.tasks?.forEach(task => {
+            const week = task.weekNumber || 1;
+            if (!tasksByWeek[week]) tasksByWeek[week] = [];
+            tasksByWeek[week].push(task);
+          });
 
-// Render up to the highest task week, OR the generated weeks, OR max 12 for new giant roadmaps
-const displayLimit = Math.max(highestTaskWeek, generatedWeeks, Math.min(12, totalWeeks));
+          Object.keys(tasksByWeek).forEach(week => {
+            tasksByWeek[week].sort((a, b) => {
+              if (a.dayNumber === null && b.dayNumber !== null) return 1;
+              if (a.dayNumber !== null && b.dayNumber === null) return -1;
+              if (a.dayNumber === null && b.dayNumber === null) return 0;
+              return (a.dayNumber || 999) - (b.dayNumber || 999);
+            });
+          });
 
-// This safely draws exactly the right amount of weeks without breaking giant roadmaps
-const sortedWeeks = Array.from({ length: displayLimit }, (_, i) => i + 1);
+          for (let i = 1; i <= totalWeeks; i++) {
+            if (!tasksByWeek[i]) tasksByWeek[i] = [];
+          }
 
-// ONLY show the "Load Next Weeks" button if there are explicitly un-generated weeks left
-const canLoadMore = generatedWeeks > 0 && generatedWeeks < totalWeeks && highestTaskWeek < totalWeeks;
-          // Prepare tasks grouped by week for list view
-const tasksByWeek = {};
-roadmap.tasks?.forEach(task => {
-  const week = task.weekNumber || 1;
-  if (!tasksByWeek[week]) tasksByWeek[week] = [];
-  tasksByWeek[week].push(task);
-});
-// Sort tasks within each week (same as before)
-Object.keys(tasksByWeek).forEach(week => {
-  tasksByWeek[week].sort((a, b) => {
-    if (a.dayNumber === null && b.dayNumber !== null) return 1;
-    if (a.dayNumber !== null && b.dayNumber === null) return -1;
-    if (a.dayNumber === null && b.dayNumber === null) return 0;
-    return (a.dayNumber || 999) - (b.dayNumber || 999);
-  });
-});
-// Ensure every week from 1 to totalWeeks has an entry
-for (let i = 1; i <= totalWeeks; i++) {
-  if (!tasksByWeek[i]) tasksByWeek[i] = [];
-}
-// const sortedWeeks = Array.from({ length: totalWeeks }, (_, i) => i + 1);
           const handleExpandAll = () => {
             const newExpanded = {};
             sortedWeeks.forEach(week => {
@@ -856,74 +803,82 @@ for (let i = 1; i <= totalWeeks; i++) {
           return (
             <div
               key={roadmap.id}
-              className={`relative rounded-2xl ${cardBgClass} border ${borderClass} shadow-xl transition-all duration-300 hover:shadow-2xl hover:-translate-y-1 overflow-hidden`}
+              className={`relative rounded-2xl lg:rounded-3xl ${cardBgClass} border ${borderClass} shadow-xl transition-all duration-300 hover:shadow-2xl overflow-hidden group`}
             >
               {/* Gradient top bar */}
-              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 to-teal-500"></div>
+              <div className="absolute top-0 left-0 right-0 h-1.5 lg:h-2 bg-gradient-to-r from-purple-500 to-teal-500"></div>
 
-              {/* Delete button */}
-              <button
-                onClick={() => handleDeleteClick(roadmap.id, roadmap.title)}
-                className="absolute top-4 right-4 p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition z-10"
-                disabled={deleteMutation.isPending}
-                title="Delete roadmap"
-              >
-                <Trash2 size={18} className="text-red-400 hover:text-red-500" />
-              </button>
+              {/* Delete & View Toggle Buttons */}
+              <div className="absolute top-4 right-4 lg:top-5 lg:right-5 flex items-center gap-2 z-10 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                <button
+                    onClick={() => toggleViewMode(roadmap.id)}
+                    className="p-2 lg:p-2.5 rounded-full bg-white/90 dark:bg-gray-800/90 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 shadow-md backdrop-blur-sm transition-all hover:scale-105"
+                    title={currentViewMode === 'list' ? 'Switch to Timeline View' : 'Switch to List View'}
+                >
+                    {currentViewMode === 'list' ? <BarChart2 className="w-4 h-4 lg:w-5 lg:h-5"/> : <List className="w-4 h-4 lg:w-5 lg:h-5"/>}
+                </button>
+                <button
+                    onClick={() => handleDeleteClick(roadmap.id, roadmap.title)}
+                    disabled={deleteMutation.isPending}
+                    className="p-2 lg:p-2.5 rounded-full bg-white/90 dark:bg-gray-800/90 hover:bg-red-50 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-500 dark:hover:text-red-400 shadow-md backdrop-blur-sm transition-all disabled:opacity-50 hover:scale-105"
+                    title="Delete Roadmap"
+                >
+                    <Trash2 className="w-4 h-4 lg:w-5 lg:h-5"/>
+                </button>
+              </div>
 
-              <div className="p-6">
-                {/* Header with view toggle */}
-                <div className="flex justify-between items-start mb-4 pr-8">
-                  <div>
-                    <h3 className="text-2xl font-poppins font-bold bg-gradient-to-r from-purple-600 to-teal-600 dark:from-purple-400 dark:to-teal-400 bg-clip-text text-transparent">
-                      {roadmap.title}
-                    </h3>
-                    <div className="flex items-center gap-3 text-sm text-gray-500 dark:text-gray-400 mt-1">
-                      <span className="flex items-center gap-1"><Calendar size={14} /> {new Date(roadmap.createdAt).toLocaleDateString()}</span>
-                      <span className="flex items-center gap-1"><Clock size={14} /> {roadmap.durationWeeks} weeks</span>
-                    </div>
+              <div className="p-5 sm:p-6 lg:p-8 pt-10 sm:pt-8 lg:pt-10">
+
+                {/* Header Section */}
+                <div className="mb-6 lg:mb-8 pr-0 sm:pr-24">
+                  <h3 className="text-xl sm:text-2xl lg:text-3xl font-poppins font-extrabold bg-gradient-to-r from-purple-600 to-teal-600 dark:from-purple-400 dark:to-teal-400 bg-clip-text text-transparent leading-tight mb-2">
+                    {roadmap.title}
+                  </h3>
+
+                  <div className="flex flex-wrap items-center gap-2 lg:gap-3 text-xs lg:text-sm text-gray-500 dark:text-gray-400 font-medium mb-4">
+                    <span className="flex items-center gap-1.5"><Calendar className="w-3.5 h-3.5"/> {new Date(roadmap.createdAt).toLocaleDateString()}</span>
+                    <span className="hidden sm:inline opacity-30">•</span>
+                    <span className="flex items-center gap-1.5"><Clock className="w-3.5 h-3.5"/> {roadmap.durationWeeks} weeks</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      isCompleted
-                        ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300'
-                        : roadmap.status === 'ACTIVE'
-                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300'
-                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
-                    }`}>
-                      {isCompleted ? '🏆 Completed' : roadmap.status}
-                    </span>
-                    {/* View mode toggle button */}
-                    <button
-                      onClick={() => toggleViewMode(roadmap.id)}
-                      className="p-1.5 rounded-lg bg-gray-200/70 dark:bg-gray-700/70 hover:bg-gray-300 dark:hover:bg-gray-600 transition"
-                      title={currentViewMode === 'list' ? 'Switch to timeline view' : 'Switch to list view'}
-                    >
-                      {currentViewMode === 'list' ? <BarChart2 size={16} /> : <List size={16} />}
-                    </button>
-                  </div>
+
+                  <span className={`inline-flex px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${
+                    isCompleted
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-500/30'
+                      : roadmap.status === 'ACTIVE'
+                      ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border border-blue-200 dark:border-blue-500/30'
+                      : 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300 border border-gray-200 dark:border-gray-700'
+                  }`}>
+                    {isCompleted ? '🏆 Completed' : roadmap.status}
+                  </span>
                 </div>
 
                 {/* Progress Dashboard */}
-                <div className="mb-5 p-4 rounded-xl bg-gradient-to-r from-purple-50/50 to-teal-50/50 dark:from-purple-900/20 dark:to-teal-900/20">
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="font-medium flex items-center gap-1"><TrendingUp size={14} /> Overall Progress</span>
-                    <span className="font-bold">{Math.round(completionPercent)}%</span>
+                <div className="mb-8 lg:mb-10 p-5 lg:p-6 rounded-2xl bg-gray-50 dark:bg-[#131127]/50 border border-gray-200/50 dark:border-white/5 shadow-inner">
+                  <div className="flex justify-between items-end mb-3">
+                    <span className="text-sm lg:text-base font-bold flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                        <TrendingUp className="w-4 h-4 lg:w-5 lg:h-5 text-teal-500"/> Overall Progress
+                    </span>
+                    <span className="text-xl lg:text-2xl font-poppins font-extrabold text-gray-800 dark:text-gray-100">
+                        {Math.round(completionPercent)}%
+                    </span>
                   </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden">
+
+                  <div className="w-full bg-gray-200 dark:bg-[#1A162F] rounded-full h-3 lg:h-4 overflow-hidden border border-transparent dark:border-white/5 shadow-inner mb-4">
                     <div
-                      className="bg-gradient-to-r from-purple-500 to-teal-500 h-2.5 rounded-full transition-all duration-700 ease-out"
+                      className="bg-gradient-to-r from-purple-500 to-teal-500 h-full rounded-full transition-all duration-1000 ease-out shadow-[0_0_10px_rgba(20,184,166,0.5)]"
                       style={{ width: `${completionPercent}%` }}
                     ></div>
                   </div>
-                  <div className="flex justify-between text-xs text-gray-600 dark:text-gray-400 mt-3">
-                    <span className="flex items-center gap-1"><CheckCircle size={12} /> Completed: {completedTasks}/{totalTasks} tasks</span>
-                    <span className="flex items-center gap-1"><Clock size={12} /> Est. remaining: ~{remainingWeeks} weeks</span>
+
+                  <div className="flex flex-wrap justify-between gap-4 text-xs lg:text-sm font-medium text-gray-500 dark:text-gray-400">
+                    <span className="flex items-center gap-1.5"><CheckCircle className="w-4 h-4 text-emerald-500"/> Completed: {completedTasks}/{totalTasks} tasks</span>
+                    <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-amber-500"/> Est. remaining: ~{remainingWeeks} weeks</span>
                   </div>
+
                   {generatedWeeks > 0 && generatedWeeks < totalWeeks && (
-                    <div className="mt-2 text-xs text-purple-600 dark:text-purple-300 flex justify-between items-center border-t border-gray-200 dark:border-gray-700 pt-2">
-                      <span>📋 Weeks generated: {generatedWeeks}/{totalWeeks}</span>
-                      <span className="text-gray-400">Click below to generate next weeks</span>
+                    <div className="mt-4 text-xs lg:text-sm font-bold text-purple-600 dark:text-purple-400 flex flex-wrap justify-between items-center border-t border-gray-200/50 dark:border-white/10 pt-4">
+                      <span className="flex items-center gap-1.5"><ListChecks className="w-4 h-4"/> Weeks generated: {generatedWeeks}/{totalWeeks}</span>
+                      <span className="text-gray-400 dark:text-gray-500 font-medium">Click below to generate next weeks</span>
                     </div>
                   )}
                 </div>
@@ -931,106 +886,127 @@ for (let i = 1; i <= totalWeeks; i++) {
                 {/* Conditional Rendering: List View or Timeline View */}
                 {currentViewMode === 'list' ? (
                   sortedWeeks.length > 0 && (
-                    <div className="mb-5">
-                      <div className="flex justify-between items-center mb-3">
-                        <h4 className="font-semibold flex items-center gap-2 text-purple-700 dark:text-purple-300">
-                          <Target size={18} /> Actionable Tasks
+                    <div className="mb-8 lg:mb-10">
+
+                      <div className="flex flex-wrap justify-between items-end gap-4 mb-5 lg:mb-6">
+                        <h4 className="text-lg lg:text-xl font-poppins font-extrabold flex items-center gap-2 text-purple-700 dark:text-teal-400">
+                          <Target className="w-5 h-5 lg:w-6 lg:h-6"/> Actionable Tasks
                         </h4>
                         <div className="flex gap-2">
                           <button
                             onClick={handleExpandAll}
-                            className="text-xs px-2 py-1 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300"
+                            className="text-xs lg:text-sm font-bold px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/40 transition"
                           >
                             Expand All
                           </button>
                           <button
                             onClick={handleCollapseAll}
-                            className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                            className="text-xs lg:text-sm font-bold px-3 py-1.5 lg:px-4 lg:py-2 rounded-lg bg-gray-100 dark:bg-white/5 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-white/10 transition"
                           >
                             Collapse All
                           </button>
                         </div>
                       </div>
-                      <div className="space-y-4">
+
+                      <div className="space-y-4 lg:space-y-6">
                         {sortedWeeks.map((week) => {
                           const tasks = tasksByWeek[week];
                           const isExpanded = expandedWeeks[`${roadmap.id}-${week}`];
                           const weekCompleted = tasks.length > 0 && tasks.every(t => t.completed);
                           return (
-                            <div key={week} className="border-l-2 border-purple-300 dark:border-purple-700 pl-4">
+                            // 💡 FIX: Dark Mode Border matches Teal Theme
+                            <div key={week} className="border-l-4 border-purple-300 dark:border-teal-600/50 pl-4 lg:pl-6 ml-1 lg:ml-2 transition-all">
                               <button
                                 onClick={() => toggleWeekExpand(roadmap.id, week)}
-                                className="flex items-center gap-2 text-sm font-semibold text-purple-600 dark:text-purple-400 mb-2 hover:opacity-80 transition"
+                                className="flex items-center gap-2 text-base lg:text-lg font-bold text-gray-800 dark:text-gray-100 mb-3 hover:text-purple-600 dark:hover:text-teal-400 transition group"
                               >
-                                {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                <span className="p-1 rounded-md bg-gray-100 dark:bg-white/5 group-hover:bg-purple-100 dark:group-hover:bg-teal-900/30 transition">
+                                    {isExpanded ? <ChevronUp className="w-4 h-4 lg:w-5 lg:h-5"/> : <ChevronDown className="w-4 h-4 lg:w-5 lg:h-5"/>}
+                                </span>
                                 Week {week}
-                                {weekCompleted && <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">✓ Done</span>}
+                                {weekCompleted && <span className="ml-2 text-[10px] lg:text-xs font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded-full flex items-center gap-1"><CheckCircle className="w-3 h-3"/> Done</span>}
                               </button>
+
                               {isExpanded && (
-                                <div className="space-y-3">
+                                <div className="space-y-3 lg:space-y-4 mt-2">
                                   {tasks.length === 0 && (
-                                    <div className="text-gray-500 italic text-sm py-2 text-center">
+                                    <div className="text-gray-500 dark:text-gray-400 italic text-sm lg:text-base py-4 px-4 bg-gray-50 dark:bg-white/5 rounded-xl border border-gray-100 dark:border-white/5">
                                       No tasks yet. Click the "Load Next Weeks" button below to generate your tasks.
                                     </div>
                                   )}
                                   {tasks.map((task) => (
-                                    <div key={task.id} className="group bg-gray-50/50 dark:bg-gray-800/30 rounded-xl p-3 hover:bg-gray-100/70 dark:hover:bg-gray-800/50 transition">
-                                      <div className="flex items-start gap-3">
+                                    <div key={task.id} className="group bg-white dark:bg-[#131127]/50 rounded-xl lg:rounded-2xl p-4 lg:p-5 border border-gray-200/50 dark:border-white/5 hover:border-purple-300 dark:hover:border-teal-500/50 transition-all shadow-sm">
+                                      <div className="flex items-start gap-3 lg:gap-4">
                                         <button
                                           onClick={() => toggleTaskMutation.mutate(task.id)}
-                                          className="focus:outline-none mt-0.5"
+                                          className="focus:outline-none mt-0.5 lg:mt-1 hover:scale-110 active:scale-90 transition-transform shrink-0"
                                           disabled={toggleTaskMutation.isPending}
                                         >
                                           {task.completed ? (
-                                            <CheckCircle size={18} className="text-green-500" />
+                                            <CheckCircle className="w-5 h-5 lg:w-6 lg:h-6 text-emerald-500"/>
                                           ) : (
-                                            <Circle size={18} className="text-gray-400 group-hover:text-gray-500" />
+                                            <Circle className="w-5 h-5 lg:w-6 lg:h-6 text-gray-300 dark:text-gray-600 group-hover:text-purple-400 transition-colors"/>
                                           )}
                                         </button>
-                                        <div className="flex-1">
-                                          <div className="flex flex-wrap justify-between items-start gap-2">
+
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex flex-col sm:flex-row justify-between items-start gap-3">
+
                                             <button
                                               onClick={() => setSelectedTask(task)}
-                                              className="text-left font-medium hover:text-purple-600 dark:hover:text-purple-400 transition"
+                                              className="text-left font-semibold text-sm lg:text-base hover:text-purple-600 dark:hover:text-teal-400 transition-colors"
                                             >
-                                              <span className={task.completed ? 'line-through text-gray-400' : ''}>
+                                              <span className={task.completed ? 'line-through text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}>
                                                 {task.description}
-                                                {task.dayNumber && <span className="text-xs text-gray-400 ml-2">(Day {task.dayNumber})</span>}
+                                                {task.dayNumber && <span className="text-xs font-medium text-purple-500 dark:text-teal-500 ml-2 bg-purple-50 dark:bg-teal-900/20 px-2 py-0.5 rounded-full inline-block mt-1 sm:mt-0">Day {task.dayNumber}</span>}
                                               </span>
                                             </button>
-                                            <div className="flex items-center gap-1">
+
+                                            <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
                                               {task.importedToMilestone && (
-                                                <span className="text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 px-2 py-0.5 rounded-full">
-                                                  ✓ in Milestones
+                                                <span className="text-[10px] lg:text-xs font-bold uppercase tracking-wider bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300 px-2 py-1 rounded-full border border-emerald-200 dark:border-emerald-500/30 flex items-center gap-1">
+                                                  <CheckCircle className="w-3 h-3"/> in Milestones
                                                 </span>
                                               )}
-                                              {(task.details || (task.subtasks && task.subtasks.length > 0)) && (
+
+                                              <div className="flex items-center gap-1.5 ml-auto sm:ml-0 bg-gray-50 dark:bg-black/20 p-1 rounded-lg border border-gray-200/50 dark:border-white/5">
+                                                {(task.details || (task.subtasks && task.subtasks.length > 0)) && (
+                                                    <button
+                                                    onClick={() => toggleTaskExpand(task.id)}
+                                                    // 💡 FIX: Dark Mode active state maps to Teal
+                                                    className={`p-1.5 rounded-md transition-colors ${expandedTaskId === task.id ? 'bg-purple-500 dark:bg-teal-500 text-white' : 'hover:bg-gray-200 dark:hover:bg-white/10 text-gray-500 dark:text-gray-400'}`}
+                                                    title={expandedTaskId === task.id ? 'Hide Details' : 'View Details'}
+                                                    >
+                                                    {expandedTaskId === task.id ? <ChevronUp className="w-4 h-4"/> : <ChevronDown className="w-4 h-4"/>}
+                                                    </button>
+                                                )}
                                                 <button
-                                                  onClick={() => toggleTaskExpand(task.id)}
-                                                  className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700"
+                                                    onClick={() => importTaskToMilestone(roadmap.id, task.id, task.description)}
+                                                    className="text-xs font-bold bg-blue-500/10 hover:bg-blue-500/20 text-blue-600 dark:text-blue-400 px-3 py-1.5 rounded-md transition flex items-center gap-1"
+                                                    title="Add to Milestones"
                                                 >
-                                                  {expandedTaskId === task.id ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                                    <Plus className="w-3 h-3"/> Add
                                                 </button>
-                                              )}
-                                              <button
-                                                onClick={() => importTaskToMilestone(roadmap.id, task.id, task.description)}
-                                                className="text-xs bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded-lg transition"
-                                                title="Add to Milestones"
-                                              >
-                                                Add
-                                              </button>
+                                              </div>
                                             </div>
+
                                           </div>
+
+                                          {/* Inline Task Details expansion */}
                                           {expandedTaskId === task.id && (
-                                            <div className="mt-2 text-xs text-gray-600 dark:text-gray-400">
-                                              <div className="roadmap-details mt-2" dangerouslySetInnerHTML={{ __html: formatText(task.details) }} />
+                                            <div className="mt-4 pt-4 border-t border-gray-100 dark:border-white/5 text-sm lg:text-base text-gray-700 dark:text-gray-300">
+                                              <div className="roadmap-details" dangerouslySetInnerHTML={{ __html: formatText(task.details) }} />
                                               {task.subtasks && task.subtasks.length > 0 && (
-                                                <ul className="list-disc list-inside ml-2 mt-1">
-                                                  {task.subtasks.map((sub, idx) => <li key={idx}>{sub}</li>)}
+                                                /* 💡 FIX: Markers are Teal in dark mode, Subtasks use formatInline for bolding/@ tags */
+                                                <ul className="list-disc list-outside ml-4 mt-3 space-y-1.5 marker:text-purple-500 dark:marker:text-teal-400">
+                                                  {task.subtasks.map((sub, idx) => (
+                                                      <li key={idx} className="pl-1" dangerouslySetInnerHTML={{ __html: formatInline(sub) }} />
+                                                  ))}
                                                 </ul>
                                               )}
                                             </div>
                                           )}
+
                                         </div>
                                       </div>
                                     </div>
@@ -1041,82 +1017,68 @@ for (let i = 1; i <= totalWeeks; i++) {
                           );
                         })}
                       </div>
-                      {canLoadMore && (
-                                              <div className="mt-4 text-center">
-                                                <button
-                                                  onClick={() => {
-                                                    setContinuingRoadmapId(roadmap.id);
-                                                    continueBatchMutation.mutate(
-                                                      { roadmapId: roadmap.id, weeksToGenerate: 6 },
-                                                      {
-                                                        onSuccess: (updatedRoadmap) => {
-                                                          // Update roadmap data in cache
-                                                          queryClient.setQueryData(['roadmaps'], old =>
-                                                            old.map(r => r.id === updatedRoadmap.id ? updatedRoadmap : r)
-                                                          );
-                                                          // Increase visible weeks to the new generated weeks (or up to total weeks)
-                                                         const newVisible = Math.min(updatedRoadmap.generatedWeeks, totalWeeks);
-                                                         setVisibleWeeksMap(prev => ({ ...prev, [roadmap.id]: newVisible }));
-                                                          toast.success(`Loaded weeks up to ${newVisible}`);
-                                                        },
 
-                                                   onError: (error) => {
-                                                               toast.error(`Continuation failed: ${error.response?.data?.message || error.message}`);
-                                                               // Do NOT update visibleWeeksMap -> button remains active for retry
-                                                           },
-                                                        onSettled: () => setContinuingRoadmapId(null)
-                                                      }
-                                                    );
-                                                  }}
-                                                  disabled={continueBatchMutation.isPending && continuingRoadmapId === roadmap.id}
-                                                  className="px-5 py-2 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-semibold shadow-md hover:shadow-lg transition disabled:opacity-50"
-                                                >
-                                                  {continueBatchMutation.isPending && continuingRoadmapId === roadmap.id ? (
-                                                    <Loader className="animate-spin w-4 h-4 inline mr-2" />
-                                                  ) : (
-                                                    <Calendar size={16} className="inline mr-2" />
-                                                  )}
-                                                  Load Next 6 Weeks ({displayLimit}/{totalWeeks})
-                                                </button>
-                                              </div>
-                                            )}
+                      {canLoadMore && (
+                            <div className="mt-8 text-center animate-in fade-in">
+                            <button
+                                onClick={() => {
+                                setContinuingRoadmapId(roadmap.id);
+                                continueBatchMutation.mutate(
+                                    { roadmapId: roadmap.id, weeksToGenerate: 6 },
+                                    {
+                                    onSuccess: (updatedRoadmap) => {
+                                        queryClient.setQueryData(['roadmaps'], old =>
+                                        old.map(r => r.id === updatedRoadmap.id ? updatedRoadmap : r)
+                                        );
+                                        const newVisible = Math.min(updatedRoadmap.generatedWeeks, totalWeeks);
+                                        setVisibleWeeksMap(prev => ({ ...prev, [roadmap.id]: newVisible }));
+                                        toast.success(`Loaded weeks up to ${newVisible}`);
+                                    },
+                                onError: (error) => {
+                                            toast.error(`Continuation failed: ${error.response?.data?.message || error.message}`);
+                                        },
+                                    onSettled: () => setContinuingRoadmapId(null)
+                                    }
+                                );
+                                }}
+                                disabled={continueBatchMutation.isPending && continuingRoadmapId === roadmap.id}
+                                className="px-6 py-3 rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-bold text-sm lg:text-base shadow-md hover:shadow-lg transition-all disabled:opacity-50 flex items-center justify-center gap-2 mx-auto"
+                            >
+                                {continueBatchMutation.isPending && continuingRoadmapId === roadmap.id ? (
+                                <Loader className="animate-spin w-5 h-5"/>
+                                ) : (
+                                <Calendar className="w-5 h-5"/>
+                                )}
+                                Load Next 6 Weeks ({displayLimit}/{totalWeeks})
+                            </button>
+                            </div>
+                        )}
                     </div>
                   )
                 ) : (
-                  <div className="mb-5">
-                    <h4 className="font-semibold mb-3 flex items-center gap-2 text-teal-700 dark:text-teal-300">
-                      <BarChart2 size={18} /> Timeline View
+                  <div className="mb-8 lg:mb-10 animate-in fade-in">
+                    <h4 className="text-lg lg:text-xl font-poppins font-extrabold flex items-center gap-2 text-teal-700 dark:text-teal-400 mb-6">
+                      <BarChart2 className="w-5 h-5 lg:w-6 lg:h-6"/> Timeline View
                     </h4>
-                    <RoadmapTimeline
-                      tasks={roadmap.tasks || []}
-                      durationWeeks={roadmap.durationWeeks || 1}
-                    />
+                   <RoadmapTimeline  tasks={roadmap.tasks || []}
+                                                                              durationWeeks={roadmap.durationWeeks || 1}/>
                   </div>
                 )}
 
                 {/* Resources */}
-                {/* Recommended Resources */}
                 {roadmap.resources && roadmap.resources.length > 0 && (
-                  <div className="mb-5">
-                    <h4 className="font-semibold mb-2 text-teal-700 dark:text-teal-300 flex items-center gap-2">
-                      <ExternalLink size={16} /> Recommended Resources
+                  <div className="mb-6 lg:mb-8 bg-gray-50 dark:bg-black/10 p-5 lg:p-6 rounded-2xl border border-gray-200/50 dark:border-white/5">
+                    <h4 className="text-sm lg:text-base font-bold uppercase tracking-wider mb-4 text-purple-700 dark:text-teal-400 flex items-center gap-2">
+                      <ExternalLink className="w-4 h-4 lg:w-5 lg:h-5"/> Recommended Resources
                     </h4>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 lg:gap-3">
                       {roadmap.resources.map((res) => {
-                        // Choose icon based on type
                         let IconComponent;
                         switch (res.type?.toLowerCase()) {
-                          case 'video':
-                            IconComponent = Video;
-                            break;
-                          case 'article':
-                            IconComponent = FileText;
-                            break;
-                          case 'course':
-                            IconComponent = GraduationCap;
-                            break;
-                          default:
-                            IconComponent = ExternalLink; // fallback
+                          case 'video': IconComponent = Video; break;
+                          case 'article': IconComponent = FileText; break;
+                          case 'course': IconComponent = GraduationCap; break;
+                          default: IconComponent = ExternalLink;
                         }
                         return (
                           <a
@@ -1124,10 +1086,10 @@ for (let i = 1; i <= totalWeeks; i++) {
                             href={res.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-200 text-xs hover:bg-purple-200 dark:hover:bg-purple-800/60 transition group"
+                            className="inline-flex items-center gap-1.5 lg:gap-2 px-4 py-2 rounded-xl bg-white dark:bg-[#1A162F] border border-gray-200 dark:border-white/10 text-gray-700 dark:text-gray-200 text-xs lg:text-sm font-medium hover:border-purple-400 dark:hover:border-teal-400 hover:text-purple-600 dark:hover:text-teal-400 transition-all shadow-sm group"
                             title={res.type || 'resource'}
                           >
-                            <IconComponent size={12} className="text-purple-500 dark:text-purple-300" />
+                            <IconComponent className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-purple-400 dark:text-teal-500 group-hover:scale-110 transition-transform"/>
                             <span>{res.name}</span>
                           </a>
                         );
@@ -1138,73 +1100,75 @@ for (let i = 1; i <= totalWeeks; i++) {
 
                 {/* Milestones */}
                 {roadmap.milestones && roadmap.milestones.length > 0 && (
-                  <div className="mb-5">
-                    <h4 className="font-semibold mb-2 text-amber-700 dark:text-amber-300">Key Milestones</h4>
-                    <div className="flex flex-wrap gap-2">
+                  <div className="mb-6 lg:mb-8 bg-gray-50 dark:bg-black/10 p-5 lg:p-6 rounded-2xl border border-gray-200/50 dark:border-white/5">
+                    <h4 className="text-sm lg:text-base font-bold uppercase tracking-wider mb-4 text-amber-600 dark:text-amber-400 flex items-center gap-2">
+                      <Award className="w-4 h-4 lg:w-5 lg:h-5"/> Key Milestones
+                    </h4>
+                    <div className="flex flex-wrap gap-2 lg:gap-3">
                       {roadmap.milestones.map((milestone) => (
-                        <span key={milestone.id} className="px-3 py-1.5 rounded-full bg-amber-100 dark:bg-amber-900/40 text-amber-800 dark:text-amber-200 text-xs flex items-center gap-1">
-                          <Award size={12} /> {milestone.name} {milestone.weekNumber && `(Week ${milestone.weekNumber})`}
+                        <span key={milestone.id} className="px-4 py-2 rounded-xl bg-white dark:bg-[#1A162F] border border-amber-200/50 dark:border-amber-500/20 text-gray-700 dark:text-gray-200 text-xs lg:text-sm font-medium flex items-center gap-2 shadow-sm">
+                          <Target className="w-3.5 h-3.5 lg:w-4 lg:h-4 text-amber-500"/>
+                          {milestone.name}
+                          {milestone.weekNumber && <span className="opacity-60 text-[10px] lg:text-xs bg-black/5 dark:bg-white/5 px-2 py-0.5 rounded-full ml-1">Week {milestone.weekNumber}</span>}
                         </span>
                       ))}
                     </div>
                   </div>
                 )}
 
-                  {/* Action Buttons (keep old continue and reschedule) */}
-                                <div className="flex flex-col sm:flex-row gap-3 mt-6">
-                                  {/* Old continue button (based on completed tasks) */}
-                                  <button
-                                    onClick={() => continueMutation.mutate(roadmap.id)}
-                                    disabled={continueMutation.isPending || completedTasks === 0}
-                                    className={`flex-1 py-2.5 rounded-xl font-semibold transition flex items-center justify-center gap-2 ${
-                                      completedTasks === 0
-                                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 cursor-not-allowed'
-                                        : 'bg-gradient-to-r from-green-500 to-teal-500 text-white hover:shadow-lg'
-                                    }`}
-                                  >
-                                    {continueMutation.isPending ? <Loader className="animate-spin w-4 h-4" /> : <Sparkles size={16} />}
-                                    {continueMutation.isPending ? 'Generating...' : 'Next Steps (based on progress)'}
-                                  </button>
+                {/* Bottom Action Buttons */}
+                <div className="flex flex-col sm:flex-row gap-3 lg:gap-4 mt-8 pt-6 border-t border-gray-200/50 dark:border-white/10">
+                    <button
+                    onClick={() => continueMutation.mutate(roadmap.id)}
+                    disabled={continueMutation.isPending || completedTasks === 0}
+                    className={`flex-1 py-3 lg:py-4 rounded-xl font-bold text-sm lg:text-base transition-all duration-300 flex items-center justify-center gap-2 ${
+                        completedTasks === 0
+                        ? 'bg-gray-100 dark:bg-white/5 text-gray-400 cursor-not-allowed border border-transparent dark:border-white/5'
+                        : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-md hover:shadow-lg'
+                    }`}
+                    >
+                    {continueMutation.isPending ? <Loader className="animate-spin w-5 h-5"/> : <Sparkles className="w-5 h-5"/>}
+                    {continueMutation.isPending ? 'Generating Next Steps...' : 'Generate Next Steps'}
+                    </button>
 
-                                  {/* Smart Reschedule button */}
-                                  <button
-                                    onClick={() => rescheduleMutation.mutate(roadmap.id)}
-                                    disabled={rescheduleMutation.isPending || remainingTasksCount === 0}
-                                    className={`flex-1 py-2.5 rounded-xl font-semibold transition flex items-center justify-center gap-2 ${
-                                      remainingTasksCount === 0
-                                        ? 'bg-gray-200 dark:bg-gray-700 text-gray-500 cursor-not-allowed'
-                                        : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white hover:shadow-lg'
-                                    }`}
-                                  >
-                                    {rescheduleMutation.isPending ? <Loader className="animate-spin w-4 h-4" /> : <Calendar size={16} />}
-                                    {rescheduleMutation.isPending ? 'Rescheduling...' : 'Smart Reschedule'}
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-      {/* Task Detail Modal */}
-      <TaskDetailModal
-        task={selectedTask}
-        isOpen={!!selectedTask}
-        onClose={() => setSelectedTask(null)}
-        onElaborate={handleElaborate}
-        isElaborating={elaborateMutation.isPending}
-      />
+                    <button
+                    onClick={() => rescheduleMutation.mutate(roadmap.id)}
+                    disabled={rescheduleMutation.isPending || remainingTasksCount === 0}
+                    className={`flex-1 py-3 lg:py-4 rounded-xl font-bold text-sm lg:text-base transition-all duration-300 flex items-center justify-center gap-2 ${
+                        remainingTasksCount === 0
+                        ? 'bg-gray-100 dark:bg-white/5 text-gray-400 cursor-not-allowed border border-transparent dark:border-white/5'
+                        : 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-md hover:shadow-lg'
+                    }`}
+                    >
+                    {rescheduleMutation.isPending ? <Loader className="animate-spin w-5 h-5"/> : <Calendar className="w-5 h-5"/>}
+                    {rescheduleMutation.isPending ? 'Rescheduling...' : 'Smart Reschedule'}
+                    </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
-      {/* Delete Confirmation Modal */}
-      <DeleteConfirmationModal
-        isOpen={deleteModal.isOpen}
-        onClose={() => setDeleteModal({ isOpen: false, roadmapId: null, roadmapTitle: '' })}
-        onConfirm={confirmDelete}
-        roadmapTitle={deleteModal.roadmapTitle}
-        theme={theme}
-        isLoading={isDeleting}   // new prop
-      />
-    </div>
-  );
-}
+            <TaskDetailModal
+              isOpen={!!selectedTask}
+              onClose={() => setSelectedTask(null)}
+              task={selectedTask}
+              onElaborate={handleElaborate}
+              isElaborating={elaborateMutation.isPending}
+            />
 
-export default RoadmapPlanner;
+            <DeleteConfirmationModal
+              isOpen={deleteModal.isOpen}
+              onClose={() => setDeleteModal({ isOpen: false, roadmapId: null, roadmapTitle: '' })}
+              onConfirm={confirmDelete}
+              roadmapTitle={deleteModal.roadmapTitle}
+              theme={theme}
+              isLoading={isDeleting}
+            />
+
+          </div>
+        );
+      }
+
+      export default RoadmapPlanner;

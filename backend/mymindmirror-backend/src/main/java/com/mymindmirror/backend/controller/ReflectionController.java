@@ -1,6 +1,7 @@
 package com.mymindmirror.backend.controller;
 
 import com.mymindmirror.backend.model.User;
+import com.mymindmirror.backend.service.GamificationService;
 import com.mymindmirror.backend.service.JournalService;
 import com.mymindmirror.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ public class ReflectionController {
 
     private final JournalService journalService;
     private final UserService userService;
+    private final GamificationService gamificationService;
 
 
     /**
@@ -47,6 +49,10 @@ public class ReflectionController {
         try {
             // Note: Calling the new method we just wrote!
             String reflection = journalService.generateDailyReflection(user);
+
+            // 💡 NEW: Reward for introspection and emotional wellness!
+            gamificationService.recordActivity(user, "AI_REFLECTION");
+
             return ResponseEntity.ok(Collections.singletonMap("reflection", reflection));
         } catch (Exception e) {
             log.error("Error generating reflection for user {}: {}", user.getUsername(), e.getMessage(), e);

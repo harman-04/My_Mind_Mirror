@@ -1,41 +1,57 @@
 // src/components/TodayDashboard.jsx
-
 import React from 'react';
 import TodaysReflection from './TodaysReflection';
 import DailyEmotionSnapshot from './DailyEmotionSnapshot';
 import JournalHistory from './JournalHistory';
 import { SkeletonCard } from './Skeleton';
 import { useTheme } from '../contexts/ThemeContext';
-import { Calendar, PenLine } from 'lucide-react';
+import { Calendar, Sparkles } from 'lucide-react';
 
 function TodayDashboard({ todayEntries, isLoading }) {
   const { theme } = useTheme();
   const isDarkMode = theme === 'dark';
 
-  // Glass-morphic card styles
-  const cardBg = isDarkMode ? 'bg-gray-800/60 backdrop-blur-md' : 'bg-white/70 backdrop-blur-md';
-  const cardBorder = isDarkMode ? 'border-gray-700/50' : 'border-gray-200/50';
-  const textPrimary = isDarkMode ? 'text-gray-100' : 'text-gray-900';
-  const textSecondary = isDarkMode ? 'text-gray-300' : 'text-gray-600';
+  // 💡 Premium Glassmorphism matching the new App Theme
+  const cardBg = isDarkMode ? 'bg-[#1A162F]/60 backdrop-blur-xl' : 'bg-white/70 backdrop-blur-xl';
+  const cardBorder = isDarkMode ? 'border-white/10' : 'border-white/50';
+  const baseCardClasses = `rounded-2xl lg:rounded-3xl ${cardBg} border ${cardBorder} shadow-lg ring-1 ring-black/5 dark:ring-white/5 transition-all duration-300 hover:shadow-xl`;
+
+  // 🚀 Shared Header Component (Fully Responsive & Native Badge Support)
+  const DashboardHeader = ({ icon: Icon, title, colorClass, badgeText }) => (
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-5 lg:mb-6 border-b border-gray-200/50 dark:border-gray-700/50 pb-4 lg:pb-5">
+          <div className="flex items-center gap-3 lg:gap-4">
+              <div className={`p-2 lg:p-3 rounded-xl lg:rounded-2xl bg-gradient-to-br from-purple-100 to-purple-50 dark:from-teal-900/40 dark:to-teal-800/20 text-purple-600 dark:text-teal-400 shrink-0 shadow-sm border border-purple-200/50 dark:border-teal-700/30 ${colorClass}`}>
+                  <Icon className="w-5 h-5 lg:w-6 lg:h-6" />
+              </div>
+              <h3 className="text-lg lg:text-xl font-poppins font-extrabold text-gray-800 dark:text-gray-100 tracking-tight">
+                  {title}
+              </h3>
+          </div>
+          {badgeText && (
+              <div className="flex items-center gap-1.5 px-3 lg:px-4 py-1.5 lg:py-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-full shadow-sm text-emerald-700 dark:text-emerald-300">
+                  <span className="text-[10px] lg:text-xs font-bold uppercase tracking-wider whitespace-nowrap">
+                      {badgeText}
+                  </span>
+              </div>
+          )}
+      </div>
+  );
 
   if (isLoading) {
     return (
-      <div className="space-y-6 sm:space-y-8 w-full">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 w-full">
-          <div className={`p-6 rounded-2xl ${cardBg} border ${cardBorder} shadow-lg animate-pulse`}>
-            <div className="h-6 bg-gray-300 dark:bg-gray-700 rounded w-1/2 mb-4" />
-            <div className="h-20 bg-gray-300 dark:bg-gray-700 rounded w-full" />
+      <div className="space-y-4 sm:space-y-6 lg:space-y-8 w-full">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 w-full">
+          <div className={`p-4 sm:p-6 lg:p-8 ${baseCardClasses} animate-pulse`}>
+            <div className="h-6 lg:h-8 bg-gray-300 dark:bg-gray-700/50 rounded-full w-1/2 mb-4 lg:mb-6" />
+            <div className="h-24 lg:h-32 bg-gray-300 dark:bg-gray-700/50 rounded-xl lg:rounded-2xl w-full" />
           </div>
-          <div className={`p-6 rounded-2xl ${cardBg} border ${cardBorder} shadow-lg animate-pulse`}>
-            <div className="h-6 bg-gray-300 dark:bg-gray-700 rounded w-1/2 mb-4" />
-            <div className="h-32 bg-gray-300 dark:bg-gray-700 rounded w-full" />
+          <div className={`p-4 sm:p-6 lg:p-8 ${baseCardClasses} animate-pulse`}>
+            <div className="h-6 lg:h-8 bg-gray-300 dark:bg-gray-700/50 rounded-full w-1/2 mb-4 lg:mb-6" />
+            <div className="h-48 lg:h-56 bg-gray-300 dark:bg-gray-700/50 rounded-xl lg:rounded-2xl w-full" />
           </div>
         </div>
-        <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6 transition-all duration-500 w-full`}>
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <PenLine size={20} className={textSecondary} />
-            <h3 className="text-xl font-poppins font-semibold text-center">All Today's Entries</h3>
-          </div>
+        <div className={`p-4 sm:p-6 lg:p-8 ${baseCardClasses}`}>
+          <div className="h-6 lg:h-8 bg-gray-300 dark:bg-gray-700/50 rounded-full w-1/4 mb-6 lg:mb-8" />
           <SkeletonCard count={2} />
         </div>
       </div>
@@ -43,32 +59,57 @@ function TodayDashboard({ todayEntries, isLoading }) {
   }
 
   return (
-    <div className="space-y-6 sm:space-y-8 w-full">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8 w-full">
-        <TodaysReflection todayEntries={todayEntries} />
-        <DailyEmotionSnapshot todayEntries={todayEntries} />
+    <div className="space-y-4 sm:space-y-6 lg:space-y-8 w-full animate-fade-in">
+
+      {/* Top Row: Reflection & Snapshot - Flex-grow enforces equal height stretching */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6 lg:gap-8 w-full items-stretch">
+        <div className="col-span-1 w-full flex flex-col [&>div]:h-full">
+           <TodaysReflection todayEntries={todayEntries} />
+        </div>
+        <div className="col-span-1 w-full flex flex-col [&>div]:h-full">
+           <DailyEmotionSnapshot todayEntries={todayEntries} />
+        </div>
       </div>
 
+      {/* Bottom Section: Today's History */}
       {todayEntries.length > 0 ? (
-        <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6 transition-all duration-500 hover:shadow-xl w-full`}>
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <Calendar size={20} className={textSecondary} />
-            <h3 className="text-xl font-poppins font-semibold text-center">All Today's Entries</h3>
+        <div className={`p-3 sm:p-6 lg:p-8 w-full flex flex-col ${baseCardClasses}`}>
+          <DashboardHeader
+            icon={Calendar}
+            title="Today's Journal History"
+            colorClass="text-emerald-500"
+            badgeText={`${todayEntries.length} ${todayEntries.length === 1 ? 'Entry' : 'Entries'} Today`}
+          />
+          <div className="w-full">
+             <JournalHistory entries={todayEntries} isLoading={isLoading} />
           </div>
-          <JournalHistory entries={todayEntries} isLoading={isLoading} />
         </div>
       ) : (
-        <div className={`p-8 rounded-2xl ${cardBg} border ${cardBorder} shadow-lg transition-all duration-500 w-full
-                        flex flex-col items-center justify-center text-center min-h-[200px]`}>
-          <PenLine size={40} className={`${textSecondary} mb-3 opacity-50`} />
-          <p className={`font-inter text-lg ${textSecondary}`}>
-            No entries recorded for today yet.
+        <div className={`p-6 sm:p-8 lg:p-12 w-full flex flex-col items-center justify-center text-center min-h-[250px] sm:min-h-[280px] lg:min-h-[320px] ${baseCardClasses}`}>
+          <div className="relative inline-flex p-4 lg:p-5 rounded-full bg-purple-500/10 mb-4 lg:mb-6">
+              <div className="absolute inset-0 bg-purple-400/20 rounded-full blur-xl" />
+              <Sparkles className="relative w-8 h-8 lg:w-12 lg:h-12 text-purple-500" />
+          </div>
+          <h3 className="text-lg sm:text-xl lg:text-2xl font-poppins font-extrabold text-gray-800 dark:text-gray-100 mb-2 tracking-tight">
+            Your Canvas is Blank
+          </h3>
+          <p className="font-inter text-sm lg:text-base text-gray-600 dark:text-gray-400 max-w-sm mx-auto leading-relaxed">
+            No entries recorded for today yet. Use the prompt above or just start typing to capture your thoughts!
           </p>
-          <p className={`text-sm ${textSecondary} mt-1`}>Start journaling to see your reflections!</p>
         </div>
       )}
+
+      <style>{`
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in {
+            animation: fadeIn 0.4s ease-out forwards;
+        }
+      `}</style>
     </div>
   );
 }
 
-export default TodayDashboard;
+export default React.memo(TodayDashboard);

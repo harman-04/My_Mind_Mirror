@@ -275,31 +275,31 @@ public class JournalController {
      * @return A ClusterResult object containing cluster themes and entry-to-cluster mappings.
      */
     // Inside clusterJournalEntries method
-    @PostMapping("/cluster-entries")
-    public ResponseEntity<ClusterResult> clusterJournalEntries(
-            @RequestBody ClusterRequest clusterRequest) {
-        log.info("Received request to cluster journal entries for current user.");
-        // This log already exists and is good:
-        log.info("ClusterRequest received: numClusters={}, userId={}, journalTextsSize={}",
-                clusterRequest.getNClusters(), clusterRequest.getUserId(), clusterRequest.getJournalTexts() != null ? clusterRequest.getJournalTexts().size() : 0);
-
-        log.info("NClusters from ClusterRequest before passing to service: {}", clusterRequest.getNClusters());
-
-        User currentUser = getCurrentUser();
-        try {
-            ClusterResult result = journalService.triggerJournalClustering(
-                    currentUser,
-                    clusterRequest.getJournalTexts(),
-                    clusterRequest.getNClusters()
-            );
-            return ResponseEntity.ok(result);
-        } catch (Exception e) {
-            log.error("Error triggering journal clustering: {}", e.getMessage(), e);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
-                    new ClusterResult(0, Collections.emptyMap(), Collections.emptyList())
-            );
-        }
-    }
+//    @PostMapping("/cluster-entries")
+//    public ResponseEntity<ClusterResult> clusterJournalEntries(
+//            @RequestBody ClusterRequest clusterRequest) {
+//        log.info("Received request to cluster journal entries for current user.");
+//        // This log already exists and is good:
+//        log.info("ClusterRequest received: numClusters={}, userId={}, journalTextsSize={}",
+//                clusterRequest.getNClusters(), clusterRequest.getUserId(), clusterRequest.getJournalTexts() != null ? clusterRequest.getJournalTexts().size() : 0);
+//
+//        log.info("NClusters from ClusterRequest before passing to service: {}", clusterRequest.getNClusters());
+//
+//        User currentUser = getCurrentUser();
+//        try {
+//            ClusterResult result = journalService.triggerJournalClustering(
+//                    currentUser,
+//                    clusterRequest.getJournalTexts(),
+//                    clusterRequest.getNClusters()
+//            );
+//            return ResponseEntity.ok(result);
+//        } catch (Exception e) {
+//            log.error("Error triggering journal clustering: {}", e.getMessage(), e);
+//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+//                    new ClusterResult(0, Collections.emptyMap(), Collections.emptyList())
+//            );
+//        }
+//    }
 
     /**
      * Searches journal entries for the authenticated user by a keyword in the raw text.
@@ -398,32 +398,7 @@ public class JournalController {
         return ResponseEntity.ok(freq);
     }
 
-//    @GetMapping("/history/paginated")
-//    public ResponseEntity<Page<JournalEntryResponse>> getJournalHistoryPaginated(
-//            @RequestParam(required = false) String startDate,
-//            @RequestParam(required = false) String endDate,
-//            @PageableDefault(size = 20) Pageable pageable) {
-//        log.info("Received request for paginated journal history.");
-//        User currentUser = getCurrentUser();
-//
-//        LocalDate start, end;
-//        if (startDate == null && endDate == null) {
-//            start = LocalDate.of(1900, 1, 1);
-//            end = LocalDate.of(2100, 12, 31);
-//        } else {
-//            try {
-//                start = (startDate != null) ? LocalDate.parse(startDate) : LocalDate.now().minusDays(30);
-//                end = (endDate != null) ? LocalDate.parse(endDate) : LocalDate.now();
-//            } catch (DateTimeParseException e) {
-//                log.error("Invalid date format: {}", e.getMessage());
-//                return ResponseEntity.badRequest().build();
-//            }
-//        }
-//
-//        Page<JournalEntry> entriesPage = journalService.getJournalEntriesPage(currentUser, start, end, pageable);
-//        Page<JournalEntryResponse> responsePage = entriesPage.map(JournalEntryResponse::new);
-//        return ResponseEntity.ok(responsePage);
-//    }
+
 
     @GetMapping("/history/paginated")
     public ResponseEntity<PageResponse<JournalEntryResponse>> getJournalHistoryPaginated(

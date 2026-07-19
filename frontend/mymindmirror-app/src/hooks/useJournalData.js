@@ -127,6 +127,7 @@ export const useAddJournalEntry = () => {
 
       clearTodayReflectionCache();
       queryClient.invalidateQueries({ queryKey: ['todaysReflection'] });
+      queryClient.invalidateQueries({ queryKey: ['gamificationStats'] });
 
       // 3. Toast Promise (remains the same)
       toast.promise(
@@ -528,33 +529,37 @@ export const useJournalEntryById = (entryId, enabled = true) => {
 
 // --- FIND THIS AT THE BOTTOM OF useJournalData.js AND ADD THESE BELOW IT ---
 
-export const useReflectionChat = () => {
-  return useMutation({
-    mutationFn: async ({ query, sessionId, rememberChat }) => {
-      const token = getToken();
-      if (!token) throw new Error('Not authenticated.');
-
-      const response = await axios.post(
-        `${API_BASE_URL}/chat/reflect`,
-        { query, sessionId, rememberChat },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      return response.data.answer;
-    }
-  });
-};
-
-export const useClearChatMemory = () => {
-  return useMutation({
-    mutationFn: async (sessionId) => {
-      const token = getToken();
-      if (!token) throw new Error('Not authenticated.');
-      if (!sessionId) return;
-
-      return axios.delete(`${API_BASE_URL}/chat/clear-memory`, {
-        params: { sessionId },
-        headers: { Authorization: `Bearer ${token}` }
-      });
-    }
-  });
-};
+//export const useReflectionChat = () => {
+//const queryClient = useQueryClient();
+//  return useMutation({
+//    mutationFn: async ({ query, sessionId, rememberChat }) => {
+//      const token = getToken();
+//      if (!token) throw new Error('Not authenticated.');
+//
+//      const response = await axios.post(
+//        `${API_BASE_URL}/chat/reflect`,
+//        { query, sessionId, rememberChat },
+//        { headers: { Authorization: `Bearer ${token}` } }
+//      );
+//      return response.data.answer;
+//    },
+//         onSuccess: () => {
+//           queryClient.invalidateQueries({ queryKey: ['gamificationStats'] }); // 💡 ADD THIS
+//         }
+//  });
+//};
+//
+//export const useClearChatMemory = () => {
+//  return useMutation({
+//    mutationFn: async (sessionId) => {
+//      const token = getToken();
+//      if (!token) throw new Error('Not authenticated.');
+//      if (!sessionId) return;
+//
+//      return axios.delete(`${API_BASE_URL}/chat/clear-memory`, {
+//        params: { sessionId },
+//        headers: { Authorization: `Bearer ${token}` }
+//      });
+//    }
+//  });
+//};

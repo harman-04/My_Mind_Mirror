@@ -7,6 +7,7 @@ import com.mymindmirror.backend.payload.request.CustomTaskRequest; // NEW IMPORT
 import com.mymindmirror.backend.payload.response.CustomTaskResponse;
 import com.mymindmirror.backend.repository.CustomTaskRepository;
 import com.mymindmirror.backend.repository.ScheduledTaskRepository;
+import com.mymindmirror.backend.service.GamificationService;
 import com.mymindmirror.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -28,6 +29,7 @@ public class CustomTaskController {
     private final CustomTaskRepository customTaskRepository;
     private final UserService userService;
     private final ScheduledTaskRepository scheduledTaskRepository;
+    private final GamificationService gamificationService;
 
     @GetMapping
     public ResponseEntity<List<CustomTaskResponse>> getUserTasks(@AuthenticationPrincipal UserDetails userDetails) {
@@ -64,6 +66,8 @@ public class CustomTaskController {
 
         // Save to DB
         CustomTask saved = customTaskRepository.save(task);
+
+        gamificationService.recordActivity(userOpt.get(), "TASK_CREATE");
 
         // Map to Response DTO
         CustomTaskResponse response = new CustomTaskResponse(
@@ -117,6 +121,14 @@ public class CustomTaskController {
                 saved.getDueDate(), saved.getEstimatedHours(),
                 saved.getPriority(), saved.isCompleted(), saved.getCreatedAt()
         );
+
+        // --- 💡 NEW: Gamification Sync ---
+        // If the task wasn't completed before, but it is now, reward them!
+        if (!existing.isCompleted() && saved.isCompleted()) {
+            gamificationService.recordActivity(userOpt.get(), "TASK");
+        }
+
+        // Map to Response DTO...
         return ResponseEntity.ok(response);
     }
 

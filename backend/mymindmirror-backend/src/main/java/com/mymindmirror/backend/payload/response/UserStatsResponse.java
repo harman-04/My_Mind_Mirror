@@ -16,4 +16,11 @@ public class UserStatsResponse {
     private LocalDate lastActiveDate;
     private Set<String> badges;
     private int totalTasksCompleted;
+
+    // --- 💡 NEW: RPG Leveling & Counters exposed to UI ---
+    private int experiencePoints;
+    private int level;
+    private int totalJournalEntries;
+    private int totalChats;
+    private int schedulesGenerated;
 }

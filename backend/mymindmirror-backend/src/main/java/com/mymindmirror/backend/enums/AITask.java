@@ -33,7 +33,8 @@ public enum AITask {
     // Tasking & Calendars
     MILESTONE_INSIGHTS("gemini-3.1-flash-lite", "gemini-2.5-flash"),
     PARSE_GROWTH_TIP("gemini-3.1-flash-lite", "gemini-2.5-flash-lite"),    // Capture 2.5 Lite pool
-    SCHEDULE_GENERATION("gemini-3.1-flash-lite", "gemini-3-flash");
+    SCHEDULE_GENERATION("gemini-3.1-flash-lite", "gemini-3-flash"),
+    SCHEDULE_REOPTIMIZATION("gemini-3.1-flash-lite", "gemini-2.5-flash");
 
     private final String primaryModel;
     private final String fallbackModel;

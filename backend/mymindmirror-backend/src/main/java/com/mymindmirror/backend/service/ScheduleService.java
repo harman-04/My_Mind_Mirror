@@ -35,6 +35,7 @@ public class ScheduleService {
     private final CustomTaskRepository customTaskRepository;
     private final ObjectMapper objectMapper;
     private final DynamicAiClientService aiClientService;
+    private final GamificationService gamificationService;
 
     @Transactional
     public void generateSchedule(User user, String mode) {
@@ -162,6 +163,8 @@ public class ScheduleService {
 
             scheduledTaskRepository.save(scheduled);
         }
+        // 💡 NEW: Reward the user for planning their time!
+        gamificationService.recordActivity(user, "SCHEDULE");
     }
 
     private String buildSmartSchedulePrompt(List<ScheduleTaskRequest.TaskItem> tasks,
@@ -477,7 +480,7 @@ public class ScheduleService {
         boolean useFallback = false;
 
         try {
-            aiResponse = aiClientService.generateStructured(prompt, ScheduleResponse.class, user.getId(), AITask.SCHEDULE_GENERATION);
+            aiResponse = aiClientService.generateStructured(prompt, ScheduleResponse.class, user.getId(), AITask.SCHEDULE_REOPTIMIZATION);
             if (aiResponse == null || aiResponse.schedule() == null) useFallback = true;
         } catch (Exception e) {
             log.error("AI re-optimization failed, using fallback", e);
@@ -551,7 +554,11 @@ public class ScheduleService {
                 scheduled.setPriority("LOW");
             }
             scheduledTaskRepository.save(scheduled);
+
+
         }
+        // 💡 NEW: Reward the user for planning their time!
+        gamificationService.recordActivity(user, "SCHEDULE");
     }
 
     private String buildReoptimizePrompt(List<ScheduleTaskRequest.TaskItem> tasks, UserPreferences prefs, LocalDateTime currentDateTime, LocalDate today) {

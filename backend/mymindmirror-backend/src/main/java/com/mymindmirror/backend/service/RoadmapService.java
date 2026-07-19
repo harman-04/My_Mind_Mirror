@@ -141,6 +141,10 @@ public class RoadmapService {
         }
 
         roadmap.setStatus("ACTIVE");
+
+        // 💡 NEW: Reward for architecting a future plan!
+        gamificationService.recordActivity(user, "ROADMAP_GENERATE");
+
         return roadmapRepository.save(roadmap);
     }
 
@@ -390,7 +394,7 @@ public class RoadmapService {
 
         // If task was completed (just became true), update gamification
         if (!wasCompleted && task.isCompleted()) {
-            gamificationService.updateStreakAndBadges(user, true);
+            gamificationService.recordActivity(user, "TASK");
             // Check if all tasks in this roadmap are now completed
             Roadmap roadmap = task.getRoadmap();
             boolean allCompleted = roadmap.getTasks().stream().allMatch(RoadmapTask::isCompleted);
@@ -560,6 +564,8 @@ public class RoadmapService {
             task.setSubtasks("[]");
         }
 
+        // 💡 NEW: Reward for deep-diving into learning!
+        gamificationService.recordActivity(user, "ELABORATE_TASK");
         return taskRepository.save(task);
     }
 

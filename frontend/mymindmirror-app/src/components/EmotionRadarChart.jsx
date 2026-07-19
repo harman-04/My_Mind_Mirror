@@ -1,28 +1,35 @@
 // src/components/EmotionRadarChart.jsx
-import React, { useMemo, useRef } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
+import { Radar } from 'react-chartjs-2';
+import { SkeletonChart } from './Skeleton';
+import { useTheme } from '../contexts/ThemeContext';
+import DownloadChartButton from './DownloadChartButton';
+import { Activity, TrendingUp, Radar as RadarIcon } from 'lucide-react';
 import {
-  Radar,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  ResponsiveContainer,
+  Chart as ChartJS,
+  RadialLinearScale,
+  PointElement,
+  LineElement,
+  Filler,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+
+ChartJS.register(
+  RadialLinearScale,
+  PointElement,
+  LineElement,
+  Filler,
   Tooltip,
   Legend
-} from 'recharts';
-import { useTheme } from '../contexts/ThemeContext';
-import { SkeletonChart } from './Skeleton';
-import DownloadChartButton from './DownloadChartButton';
-import { Activity, TrendingUp } from 'lucide-react';
+);
 
-// Emotion order (consistent for comparison)
 const EMOTION_ORDER = [
   'joy', 'sadness', 'anger', 'fear', 'surprise',
   'love', 'anxiety', 'relief', 'neutral', 'excitement',
   'contentment', 'frustration', 'gratitude', 'hope'
 ];
 
-// Display labels
 const EMOTION_LABELS = {
   joy: 'Joy', sadness: 'Sadness', anger: 'Anger', fear: 'Fear',
   surprise: 'Surprise', love: 'Love', anxiety: 'Anxiety', relief: 'Relief',
@@ -30,43 +37,43 @@ const EMOTION_LABELS = {
   frustration: 'Frustration', gratitude: 'Gratitude', hope: 'Hope'
 };
 
-// Emotion colours (for legend & tooltip)
-const EMOTION_COLORS = {
-  joy: '#FBBF24', sadness: '#60A5FA', anger: '#EF4444', fear: '#A855F7',
-  surprise: '#F97316', love: '#EC4899', anxiety: '#8B5CF6', relief: '#10B981',
-  neutral: '#9CA3AF', excitement: '#F59E0B', contentment: '#34D399',
-  frustration: '#F87171', gratitude: '#6EE7B7', hope: '#38BDF8'
-};
-
-// Custom tooltip
-const CustomTooltip = ({ active, payload, label, isDarkMode }) => {
-  if (active && payload && payload.length) {
-    const emotionKey = Object.keys(EMOTION_LABELS).find(
-      key => EMOTION_LABELS[key] === label
-    );
-    const color = emotionKey ? EMOTION_COLORS[emotionKey] : (isDarkMode ? '#8DE2DD' : '#B399D4');
-    return (
-      <div className={`p-3 rounded-lg shadow-lg ${isDarkMode ? 'bg-gray-800/95 text-gray-200' : 'bg-white/95 text-gray-800'} backdrop-blur-sm border ${isDarkMode ? 'border-gray-700' : 'border-gray-200'}`}>
-        <div className="flex items-center gap-2">
-          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
-          <span className="font-semibold">{label}</span>
-        </div>
-        <p className="text-sm mt-1">
-          <span className="opacity-70">Intensity:</span>{' '}
-          <span className="font-bold">{payload[0].value.toFixed(3)}</span>
-        </p>
-      </div>
-    );
-  }
-  return null;
+// 💡 NEW: A completely distinct, vivid "Jewel & Neon" palette for maximum contrast
+const EMOTION_COLORS_VIVID = {
+  joy: '#FFE600',        // Vivid Yellow
+  sadness: '#3B82F6',    // Bright Blue
+  anger: '#FF3333',      // Bright Red
+  fear: '#9D4EDD',       // Deep Purple
+  surprise: '#FF8A00',   // Vivid Orange
+  love: '#FF42A1',       // Hot Pink
+  anxiety: '#D97706',    // Amber/Bronze
+  relief: '#14B8A6',     // Teal
+  neutral: '#A8A29E',    // Silver/Gray
+  excitement: '#00D4FF', // Cyan/Neon Blue
+  contentment: '#22C55E',// Green
+  frustration: '#E11D48',// Rose/Crimson
+  gratitude: '#84CC16',  // Lime
+  hope: '#0EA5E9'        // Sky Blue
 };
 
 const EmotionRadarChart = ({ entries, isLoading }) => {
   const { theme } = useTheme();
   const isDarkMode = theme === 'dark';
+
   const chartContainerRef = useRef(null);
 
-  const chartData = useMemo(() => {
+  // Track window size for responsive sizing inside ChartJS config
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
+
+  useEffect(() => {
+      const handleResize = () => setIsMobile(window.innerWidth < 640);
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const cardBg = isDarkMode ? 'bg-[#1A162F]/60 backdrop-blur-xl' : 'bg-white/70 backdrop-blur-xl';
+  const cardBorder = isDarkMode ? 'border-white/10' : 'border-white/50';
+
+  const chartDataRaw = useMemo(() => {
     if (!entries || entries.length === 0) return [];
 
     const emotionSums = {};
@@ -99,167 +106,172 @@ const EmotionRadarChart = ({ entries, isLoading }) => {
     });
   }, [entries]);
 
+  const { chartData, chartOptions } = useMemo(() => {
+    if (!chartDataRaw || chartDataRaw.length === 0) return { chartData: null, chartOptions: null };
+
+    const textColor = isDarkMode ? '#E0E0E0' : '#1E1A3E';
+    const axisColor = isDarkMode ? '#94A3B8' : '#475569';
+    const gridColor = isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+    const radarColorStr = isDarkMode ? '141, 226, 221' : '179, 153, 212';
+    const radarColorHex = isDarkMode ? '#8DE2DD' : '#B399D4';
+
+    // 💡 Map to the new vivid palette
+    const pointColors = chartDataRaw.map(d => EMOTION_COLORS_VIVID[d.fullName] || radarColorHex);
+
+    const data = {
+      labels: chartDataRaw.map(d => d.emotion),
+      datasets: [
+        {
+          label: 'Emotion Intensity',
+          data: chartDataRaw.map(d => d.intensity),
+          backgroundColor: (context) => {
+            const chart = context.chart;
+            const { ctx, chartArea } = chart;
+            if (!chartArea) return `rgba(${radarColorStr}, 0.2)`;
+
+            const centerX = (chartArea.left + chartArea.right) / 2;
+            const centerY = (chartArea.top + chartArea.bottom) / 2;
+            const r = Math.min(chartArea.right - chartArea.left, chartArea.bottom - chartArea.top) / 2;
+
+            const gradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, r);
+            gradient.addColorStop(0, `rgba(${radarColorStr}, 0.5)`);
+            gradient.addColorStop(1, `rgba(${radarColorStr}, 0.05)`);
+            return gradient;
+          },
+          borderColor: radarColorHex,
+          borderWidth: 2,
+          pointBackgroundColor: pointColors,
+          pointBorderColor: isDarkMode ? '#131127' : '#ffffff',
+          pointBorderWidth: 2,
+          // 💡 Bumped up radius to make the beautiful colors extremely visible
+          pointRadius: isMobile ? 4 : 5,
+          pointHoverBackgroundColor: isDarkMode ? '#ffffff' : '#1f2937',
+          pointHoverBorderColor: pointColors,
+          pointHoverBorderWidth: 3,
+          pointHoverRadius: isMobile ? 6 : 8,
+          pointHitRadius: 15,
+          fill: true,
+        }
+      ]
+    };
+
+    const options = {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: 'nearest',
+        intersect: true,
+      },
+      plugins: {
+        legend: { display: false },
+        title: { display: false },
+        tooltip: {
+          backgroundColor: isDarkMode ? 'rgba(30, 41, 59, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+          titleColor: textColor,
+          bodyColor: axisColor,
+          borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+          borderWidth: 1,
+          padding: 12,
+          boxPadding: 6,
+          usePointStyle: true,
+          callbacks: {
+            label: (ctx) => `Intensity: ${ctx.parsed.r.toFixed(3)}`,
+          },
+        },
+      },
+      scales: {
+        r: {
+          angleLines: { color: gridColor, borderDash: [4, 4] },
+          grid: { color: gridColor, circular: false, borderDash: [4, 4] },
+          pointLabels: {
+            color: axisColor,
+            font: { family: 'Inter', size: isMobile ? 10 : 12, weight: 600 }, // 💡 Bolder text for readability
+          },
+          ticks: {
+            display: true,
+            color: isDarkMode ? 'rgba(148, 163, 184, 0.8)' : 'rgba(71, 85, 105, 0.8)',
+            backdropColor: 'transparent',
+            max: 1.0,
+            min: 0,
+            stepSize: 0.25,
+            z: 1,
+            font: { family: 'Inter', size: isMobile ? 9 : 10, weight: 500 }
+          },
+        },
+      },
+    };
+
+    return { chartData: data, chartOptions: options };
+  }, [chartDataRaw, isDarkMode, isMobile]);
+
   if (isLoading) return <SkeletonChart />;
 
-  // Empty state – beautiful illustration (now consistent with card layout)
-  if (chartData.length === 0 || chartData.every(d => d.intensity === 0)) {
+  if (!chartDataRaw || chartDataRaw.length === 0 || chartDataRaw.every(d => d.intensity === 0)) {
     return (
-      <div className="rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden transition-all duration-300">
-        <div className="flex justify-between items-center p-4 bg-white/70 dark:bg-gray-800/50 backdrop-blur-sm">
-          <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200">
-            Emotion Radar
-          </h3>
-          {/* Download button is disabled in empty state – but we keep the header consistent */}
-          <DownloadChartButton
-            chartRef={chartContainerRef}
-            filename="emotion_radar_chart"
-            darkMode={isDarkMode}
-            className="hover:scale-105 transition-transform opacity-50 pointer-events-none"
-          />
-        </div>
-        <div
-          ref={chartContainerRef}
-          className="p-4 flex flex-col items-center justify-center"
-          style={{ backgroundColor: isDarkMode ? '#1f2937' : '#ffffff', minHeight: '440px' }}
-        >
-          <div className="relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-purple-400/20 to-teal-400/20 rounded-full blur-2xl" />
-            <Activity size={64} className="relative text-purple-400 dark:text-teal-400 animate-pulse" />
+      <div className={`w-full rounded-2xl lg:rounded-3xl border ${cardBorder} shadow-lg ring-1 ring-black/5 dark:ring-white/5 overflow-hidden ${cardBg} flex flex-col h-full`}>
+          <div className="flex flex-wrap justify-between items-center gap-4 p-4 lg:p-6 border-b border-gray-200/50 dark:border-gray-700/50">
+              <h3 className="text-lg lg:text-xl font-poppins font-extrabold text-gray-800 dark:text-gray-100 tracking-tight">
+                  Emotion Radar
+              </h3>
+              <DownloadChartButton
+                  chartRef={chartContainerRef}
+                  filename="emotion_radar_chart"
+                  darkMode={isDarkMode}
+                  className="opacity-50 pointer-events-none mt-2 sm:mt-0 shrink-0"
+              />
           </div>
-          <p className="text-lg font-medium mt-4 text-gray-700 dark:text-gray-300">Not enough emotional data yet</p>
-          <p className="text-sm text-center max-w-md mt-2 text-gray-500 dark:text-gray-400">
-            Your emotion radar will appear here once you have journal entries with detected emotions.
-            <br />Keep writing – your feelings will shape a beautiful insight!
-          </p>
-          <div className="flex items-center gap-2 text-xs text-gray-400 mt-4">
-            <TrendingUp size={14} />
-            <span>The more you journal, the clearer your emotional patterns become</span>
+          <div className="w-full flex-grow flex flex-col items-center justify-center p-6 lg:p-10 text-center" style={{ backgroundColor: isDarkMode ? '#131127' : '#ffffff', minHeight: '300px' }}>
+             <div className="relative mb-4 lg:mb-6">
+                <div className="absolute inset-0 bg-gradient-to-r from-purple-400/20 to-teal-400/20 rounded-full blur-2xl" />
+                <Activity className="w-12 h-12 lg:w-16 lg:h-16 relative text-purple-400 dark:text-teal-400 animate-pulse" />
+              </div>
+              <p className="text-lg lg:text-xl font-bold text-gray-700 dark:text-gray-300">Not enough emotional data yet</p>
+              <p className="text-sm lg:text-base text-center max-w-md mt-2 text-gray-500 dark:text-gray-400">
+                Your emotion radar will appear here once you have journal entries with detected emotions.
+              </p>
+              <div className="flex items-center justify-center gap-2 text-xs lg:text-sm font-medium text-gray-400 mt-4 lg:mt-6">
+                <TrendingUp className="w-4 h-4" />
+                <span>The more you journal, the clearer your patterns become</span>
+              </div>
           </div>
-        </div>
       </div>
     );
   }
 
-  // Styling for the chart (theme‑aware)
-  const axisColor = isDarkMode ? '#CBD5E1' : '#475569';
-  const gridColor = isDarkMode ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)';
-  const radarColor = isDarkMode ? '#8DE2DD' : '#B399D4';
-  const fillGradientId = 'radarGradient';
-
-  // Custom legend renderer (with emotion colours)
-  const renderLegend = (props) => {
-    const { payload } = props;
-    if (!payload || payload.length === 0) return null;
-    return (
-      <div className="flex justify-center gap-4 flex-wrap mt-4 text-xs">
-        {payload.map((entry, index) => {
-          const emotionKey = Object.keys(EMOTION_LABELS).find(
-            key => EMOTION_LABELS[key] === entry.value
-          );
-          const color = emotionKey ? EMOTION_COLORS[emotionKey] : radarColor;
-          return (
-            <div key={`legend-${index}`} className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
-              <span className="text-gray-700 dark:text-gray-300">{entry.value}</span>
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
   return (
-    <div className="rounded-2xl border border-gray-200 dark:border-gray-700 shadow-lg overflow-hidden transition-all duration-300">
-      {/* Header with title and download button */}
-      <div className="flex justify-between items-center p-4 bg-white/70 dark:bg-gray-800/50 backdrop-blur-sm">
-        <h3 className="text-xl font-poppins font-semibold text-gray-800 dark:text-gray-200">
-          Emotion Radar
-        </h3>
-        <DownloadChartButton
-          chartRef={chartContainerRef}
-          filename="emotion_radar_chart"
-          darkMode={isDarkMode}
-          className="hover:scale-105 transition-transform"
-        />
+    <div className={`w-full rounded-2xl lg:rounded-3xl border ${cardBorder} shadow-lg ring-1 ring-black/5 dark:ring-white/5 overflow-hidden ${cardBg} flex flex-col h-full transition-all duration-300 hover:shadow-xl hover:-translate-y-0.5`}>
+
+      <div className={`flex flex-wrap justify-between items-center gap-4 p-4 lg:p-6 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/30 dark:bg-black/10`}>
+          <div className="flex-1 min-w-[200px]">
+              <h3 className="text-lg lg:text-xl font-poppins font-extrabold text-gray-800 dark:text-gray-100 tracking-tight flex items-center gap-2">
+                  <RadarIcon className="w-5 h-5 lg:w-6 lg:h-6 text-indigo-500" />
+                  Emotion Radar
+              </h3>
+              <p className="text-[11px] lg:text-xs text-gray-500 dark:text-gray-400 mt-0.5 lg:mt-1 font-medium">
+                  The interconnected web of your emotional state.
+              </p>
+          </div>
+
+          <DownloadChartButton
+              chartRef={chartContainerRef}
+              filename="emotion_radar_chart"
+              darkMode={isDarkMode}
+              className="hover:scale-105 transition-transform shrink-0"
+          />
       </div>
-      {/* Chart container – solid background for reliable PNG capture */}
+
       <div
         ref={chartContainerRef}
-        className="p-4"
-        style={{ backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }}
+        className="w-full flex-grow flex items-center justify-center p-4 sm:p-6 lg:p-8"
+        style={{ backgroundColor: isDarkMode ? '#131127' : '#ffffff' }}
       >
-        <div className="w-full h-[440px] relative">
-          {/* Radial gradient definition */}
-          <svg style={{ position: 'absolute', width: 0, height: 0 }}>
-            <defs>
-              <radialGradient id={fillGradientId} cx="50%" cy="50%" r="50%">
-                <stop offset="0%" stopColor={radarColor} stopOpacity={0.4} />
-                <stop offset="100%" stopColor={radarColor} stopOpacity={0.05} />
-              </radialGradient>
-              <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="3" result="blur" />
-                <feMerge>
-                  <feMergeNode in="blur" />
-                  <feMergeNode in="SourceGraphic" />
-                </feMerge>
-              </filter>
-            </defs>
-          </svg>
-
-          <ResponsiveContainer width="100%" height="100%">
-            <RadarChart cx="50%" cy="50%" outerRadius="75%" data={chartData}>
-              <PolarGrid stroke={gridColor} strokeDasharray="4 4" />
-              <PolarAngleAxis
-                dataKey="emotion"
-                tick={{ fill: axisColor, fontSize: 11, fontWeight: 500, dy: 4 }}
-                axisLine={{ stroke: gridColor }}
-              />
-              <PolarRadiusAxis
-                angle={30}
-                domain={[0, 1]}
-                tick={{ fill: axisColor, fontSize: 10 }}
-                axisLine={{ stroke: gridColor }}
-                tickCount={5}
-              />
-              <Radar
-                name="Emotion Intensity"
-                dataKey="intensity"
-                stroke={radarColor}
-                strokeWidth={2}
-                fill={`url(#${fillGradientId})`}
-                fillOpacity={0.7}
-                animationDuration={800}
-                animationEasing="ease-out"
-                dot={{
-                  r: 4,
-                  fill: radarColor,
-                  stroke: isDarkMode ? '#1E293B' : '#FFFFFF',
-                  strokeWidth: 1.5,
-                  filter: 'url(#glow)'
-                }}
-                activeDot={{ r: 6, fill: radarColor, strokeWidth: 0 }}
-              />
-              <Tooltip
-                content={<CustomTooltip isDarkMode={isDarkMode} />}
-                cursor={{ stroke: radarColor, strokeWidth: 1, strokeDasharray: '3 3' }}
-              />
-              <Legend
-                content={renderLegend}
-                verticalAlign="bottom"
-                height={60}
-                wrapperStyle={{ paddingTop: 10 }}
-              />
-            </RadarChart>
-          </ResponsiveContainer>
-
-          {/* Subtle annotation */}
-          <div className="absolute bottom-2 right-4 text-[10px] text-gray-400 dark:text-gray-500 flex items-center gap-1">
-            <span>Based on your journal entries</span>
-          </div>
+        <div className="relative w-full max-w-3xl mx-auto h-[300px] sm:h-[400px] lg:h-[450px]">
+          <Radar data={chartData} options={chartOptions} />
         </div>
       </div>
+
     </div>
   );
 };
 
-export default EmotionRadarChart;
+export default React.memo(EmotionRadarChart);

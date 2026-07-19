@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 public class MilestoneInsightService {
 
     private final DynamicAiClientService aiClientService;
+    private final GamificationService gamificationService;
 
     public Mono<MilestoneInsightResponse> getMilestoneInsights(Milestone milestone) {
         User user = milestone.getUser();
@@ -47,7 +48,12 @@ public class MilestoneInsightService {
         // Wrap the synchronous blocking AI call in a reactive Mono on a background thread
         return Mono.fromCallable(() -> {
             try {
-                return aiClientService.generateStructured(prompt, MilestoneInsightResponse.class, user.getId(), AITask.MILESTONE_INSIGHTS);
+                MilestoneInsightResponse response = aiClientService.generateStructured(prompt, MilestoneInsightResponse.class, user.getId(), AITask.MILESTONE_INSIGHTS);
+
+                // 💡 NEW: Reward for strategic review!
+                gamificationService.recordActivity(user, "AI_INSIGHT");
+
+                return response;
             } catch (Exception e) {
                 log.error("Failed to get milestone insights from AI natively", e);
                 return MilestoneInsightResponse.createFallback();

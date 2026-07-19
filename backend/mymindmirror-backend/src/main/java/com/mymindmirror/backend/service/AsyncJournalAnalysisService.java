@@ -81,6 +81,9 @@ public class AsyncJournalAnalysisService {
         }
     }
 
+
+//    2.  **Core Concerns**: Categorize the entry into 1 to 3 BROAD, standardized life themes. You MUST try to use one-to-two word categories like "Work", "Relationships", "Health", "Finances", "Family", "Mental Health", "Education", or "Hobbies". Do NOT invent highly specific phrases here; keep them generic so they can be grouped mathematically over time. Use the same mixed language/style if necessary, but keep it broad.
+
     private String buildJournalAnalysisPrompt(String journalText) {
         // This is the exact prompt from Flask's `get_gemini_journal_analysis`
         // We will embed it as a multi-line string.

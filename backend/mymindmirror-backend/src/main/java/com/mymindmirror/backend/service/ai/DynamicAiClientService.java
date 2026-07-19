@@ -44,12 +44,7 @@ public class DynamicAiClientService {
     @Value("${spring.ai.google.genai.chat.options.temperature:0.4}")
     private Double defaultTemperature;
 
-//    @Retry(name = "geminiRetry", fallbackMethod = "handleGenerateFallback")
-//    public String generate(String prompt, UUID userId, AITask task) {
-//        String activeModelName = getActiveModelName(task);
-//        ChatModel model = getChatModel(userId, activeModelName);
-//        return model.call(prompt);
-//    }
+
 @Retry(name = "geminiRetry", fallbackMethod = "handleGenerateFallback")
 public String generate(String prompt, UUID userId, AITask task) {
     String activeModelName = getActiveModelName(task);
@@ -212,27 +207,7 @@ public String generate(String prompt, UUID userId, AITask task) {
     private GoogleGenAiChatModel buildSpecificModel(String apiKey, String modelName) {
         Client googleClient = Client.builder().apiKey(apiKey).build();
 
-//        GoogleGenAiChatOptions.Builder optionsBuilder = GoogleGenAiChatOptions.builder()
-//                .model(modelName) // KEEP THIS: Required for parameter validation
-//                .temperature(defaultTemperature);
-//
-////        // CRITICAL FIX FOR GEMMA 4
-////        if (modelName.contains("gemma-4")) {
-////            // Gemma 4 DOES NOT support thinkingBudget. It requires thinkingLevel.
-////            // MINIMAL disables the extended thinking chain (saves tokens & hides thoughts).
-////            // HIGH enables deep reasoning.
-////            optionsBuilder.thinkingLevel(GoogleGenAiThinkingLevel.MINIMAL);
-////
-////            // includeThoughts is technically redundant with MINIMAL but safe to keep as defense-in-depth
-//////            optionsBuilder.includeThoughts(false);
-////        }
-//
-//        GoogleGenAiChatOptions options = optionsBuilder.build();
-//
-//        return GoogleGenAiChatModel.builder()
-//                .genAiClient(googleClient)
-//                .defaultOptions(options)
-//                .build();
+
         GoogleGenAiChatOptions options =
                 GoogleGenAiChatOptions.builder()
                         .model(modelName)

@@ -1,25 +1,19 @@
 // src/components/ReflectionChat.jsx
 import React, { useState, useRef, useEffect } from 'react';
+import ReactDOM from 'react-dom';
 import { useTheme } from '../contexts/ThemeContext';
-import { useReflectionChat, useClearChatMemory } from '../hooks/useJournalData'; // 💡 NEW HOOKS IMPORTED
-import axios from 'axios';
+import { useSuggestQuestion, useSendChatMessage, useClearChatMemory } from '../hooks/useReflectionChat';
 import {
   Send, Bot, User as UserIcon, Sparkles, RefreshCw,
-  Lightbulb, ArrowDown, Copy, Check, Trash2, Repeat, Plus, Brain // 💡 Added Brain Icon
+  Lightbulb, ArrowDown, Copy, Check, Trash2, Repeat, Plus, Brain, AlertTriangle, Loader
 } from 'lucide-react';
-
-const API_BASE_URL = 'http://localhost:8080/api';
-const getToken = () => localStorage.getItem('jwtToken');
 
 const CACHE_KEY = 'reflection_last_question';
 const CACHE_EXPIRY = 60 * 60 * 1000;
 
 const cacheQuestion = (question) => {
   try {
-    sessionStorage.setItem(CACHE_KEY, JSON.stringify({
-      question,
-      timestamp: Date.now()
-    }));
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify({ question, timestamp: Date.now() }));
   } catch (e) {}
 };
 
@@ -28,9 +22,7 @@ const getCachedQuestion = () => {
     const cached = sessionStorage.getItem(CACHE_KEY);
     if (cached) {
       const { question, timestamp } = JSON.parse(cached);
-      if (Date.now() - timestamp < CACHE_EXPIRY) {
-        return question;
-      }
+      if (Date.now() - timestamp < CACHE_EXPIRY) return question;
     }
   } catch (e) {}
   return null;
@@ -38,31 +30,23 @@ const getCachedQuestion = () => {
 
 const formatMarkdown = (text) => {
   if (!text) return '';
-  const escapeHtml = (str) => {
-    return str.replace(/[&<>]/g, (m) => {
-      if (m === '&') return '&amp;';
-      if (m === '<') return '&lt;';
-      if (m === '>') return '&gt;';
-      return m;
-    });
-  };
+  const escapeHtml = (str) => str.replace(/[&<>]/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[m]));
 
   let processed = text;
   const codeBlocks = [];
 
-  // FIX: This regex is now safely on one single line!
   processed = processed.replace(/```([\s\S]*?)```/g, (match, code) => {
     const idx = codeBlocks.length;
-    codeBlocks.push(`<pre><code>${escapeHtml(code)}</code></pre>`);
+    codeBlocks.push(`<pre class="bg-black/5 dark:bg-black/40 p-3 lg:p-4 rounded-xl overflow-x-auto text-xs lg:text-sm my-3 border border-black/5 dark:border-white/10"><code class="font-mono text-pink-600 dark:text-teal-400">${escapeHtml(code)}</code></pre>`);
     return `__CODEBLOCK_${idx}__`;
   });
 
   const formatInline = (str) => {
     let formatted = escapeHtml(str);
-    formatted = formatted.replace(/`([^`]+)`/g, '<code>$1</code>');
-    formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    formatted = formatted.replace(/`([^`]+)`/g, '<code class="bg-black/5 dark:bg-black/40 px-1.5 py-0.5 rounded-md text-pink-600 dark:text-teal-400 font-mono text-[0.9em]">$1</code>');
+    formatted = formatted.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-purple-600 dark:text-teal-400 hover:underline font-bold">$1</a>');
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-gray-900 dark:text-gray-100">$1</strong>');
+    formatted = formatted.replace(/\*(.*?)\*/g, '<em class="italic text-gray-800 dark:text-gray-200">$1</em>');
     return formatted;
   };
 
@@ -77,21 +61,18 @@ const formatMarkdown = (text) => {
     const headingMatch = line.match(/^(#{1,6})\s+(.*)/);
     if (headingMatch) {
       const level = headingMatch[1].length;
-      const content = formatInline(headingMatch[2]);
-      result.push(`<h${level} class="chat-heading">${content}</h${level}>`);
-      i++;
-      continue;
+      result.push(`<h${level} class="font-poppins font-bold text-gray-900 dark:text-gray-100 mt-4 mb-2 tracking-tight ${level === 1 ? 'text-lg lg:text-xl' : 'text-base lg:text-lg'}">${formatInline(headingMatch[2])}</h${level}>`);
+      i++; continue;
     }
 
     const bulletMatch = line.match(/^\s*[\*\-]\s+(.*)/);
     if (bulletMatch) {
       const items = [];
       while (i < total && lines[i].match(/^\s*[\*\-]\s+(.*)/)) {
-        const content = formatInline(lines[i].match(/^\s*[\*\-]\s+(.*)/)[1]);
-        items.push(`<li>${content}</li>`);
+        items.push(`<li class="mb-1">${formatInline(lines[i].match(/^\s*[\*\-]\s+(.*)/)[1])}</li>`);
         i++;
       }
-      result.push(`<ul class="chat-list">${items.join('')}</ul>`);
+      result.push(`<ul class="list-disc list-outside ml-4 lg:ml-5 my-2 space-y-1 marker:text-purple-500 dark:marker:text-teal-500">${items.join('')}</ul>`);
       continue;
     }
 
@@ -99,83 +80,106 @@ const formatMarkdown = (text) => {
     if (numberMatch) {
       const items = [];
       while (i < total && lines[i].match(/^\s*\d+\.\s+(.*)/)) {
-        const content = formatInline(lines[i].match(/^\s*\d+\.\s+(.*)/)[1]);
-        items.push(`<li>${content}</li>`);
+        items.push(`<li class="mb-1">${formatInline(lines[i].match(/^\s*\d+\.\s+(.*)/)[1])}</li>`);
         i++;
       }
-      result.push(`<ol class="chat-list">${items.join('')}</ol>`);
+      result.push(`<ol class="list-decimal list-outside ml-4 lg:ml-5 my-2 space-y-1 font-medium text-gray-800 dark:text-gray-200">${items.join('')}</ol>`);
       continue;
     }
 
     if (line.startsWith('> ')) {
       let quote = line.substring(2);
       let j = i + 1;
-      while (j < total && lines[j].startsWith('> ')) {
-        quote += '\n' + lines[j].substring(2);
-        j++;
-      }
-      const quotedHtml = formatMarkdown(quote);
-      result.push(`<blockquote class="chat-blockquote">${quotedHtml}</blockquote>`);
-      i = j;
-      continue;
+      while (j < total && lines[j].startsWith('> ')) { quote += '\n' + lines[j].substring(2); j++; }
+      result.push(`<blockquote class="border-l-4 border-purple-500 dark:border-teal-500 bg-purple-50 dark:bg-teal-900/10 p-3 lg:p-4 rounded-r-xl my-3 italic text-gray-700 dark:text-gray-300 text-sm lg:text-base">${formatMarkdown(quote)}</blockquote>`);
+      i = j; continue;
     }
 
-    if (/^(\*{3,}|-{3,}|_{3,})$/.test(line.trim())) {
-      result.push('<hr class="chat-hr"/>');
-      i++;
-      continue;
-    }
+    if (/^(\*{3,}|-{3,}|_{3,})$/.test(line.trim())) { result.push('<hr class="border-gray-200 dark:border-white/10 my-4 lg:my-6"/>'); i++; continue; }
+    if (line.trim() === '') { result.push('<br/>'); i++; continue; }
 
-    if (line.trim() === '') {
-      result.push('<br/>');
-      i++;
-      continue;
-    }
-
-    result.push(`<p class="chat-paragraph">${formatInline(line)}</p>`);
+    result.push(`<p class="mb-2 lg:mb-3 leading-relaxed text-gray-800 dark:text-gray-300 text-sm lg:text-base">${formatInline(line)}</p>`);
     i++;
   }
 
   let finalHtml = result.join('');
-  codeBlocks.forEach((block, idx) => {
-    finalHtml = finalHtml.replace(`__CODEBLOCK_${idx}__`, block);
-  });
+  codeBlocks.forEach((block, idx) => { finalHtml = finalHtml.replace(`__CODEBLOCK_${idx}__`, block); });
   return finalHtml;
 };
 
-const fetchReflectiveQuestion = async () => {
-  const token = getToken();
-  if (!token) throw new Error('Not authenticated');
-  const response = await axios.post(
-    `${API_BASE_URL}/chat/suggest-question`,
-    {},
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
-  return response.data?.answer || "What's one thing you've learned about yourself recently?";
-};
-
+// ------------------------------------------------------------------
+// UI Sub-components
+// ------------------------------------------------------------------
 const TypingIndicator = () => (
-  <div className="flex gap-1 items-center py-2 px-3">
-    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+  <div className="flex gap-1.5 items-center py-2 px-3">
+    <div className="w-2 h-2 bg-purple-500 dark:bg-teal-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+    <div className="w-2 h-2 bg-purple-500 dark:bg-teal-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+    <div className="w-2 h-2 bg-purple-500 dark:bg-teal-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
   </div>
 );
 
+// 💡 FIX: Positioned beautifully inside the messages container
 const ScrollToBottom = ({ onClick, visible }) => (
   visible ? (
     <button
       onClick={onClick}
-      className="absolute bottom-24 right-4 p-2 rounded-full bg-purple-500/80 backdrop-blur-sm text-white shadow-lg hover:bg-purple-600 transition z-10"
+      className="absolute bottom-4 right-6 lg:right-8 p-2.5 lg:p-3 rounded-full bg-purple-500/90 dark:bg-teal-600/90 backdrop-blur-sm text-white shadow-lg hover:bg-purple-600 dark:hover:bg-teal-500 transition-all hover:scale-105 z-10"
       aria-label="Scroll to bottom"
     >
-      <ArrowDown size={18} />
+      <ArrowDown className="w-4 h-4 lg:w-5 lg:h-5" />
     </button>
   ) : null
 );
 
+const ConfirmModal = ({ isOpen, onClose, onConfirm, isLoading }) => {
+  const { theme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    if (isOpen) document.body.style.overflow = 'hidden';
+    else document.body.style.overflow = 'unset';
+    return () => { document.body.style.overflow = 'unset'; };
+  }, [isOpen]);
+
+  if (!isOpen || !mounted) return null;
+
+  const bgClass = theme === 'dark' ? 'bg-[#1A162F]/95 backdrop-blur-xl' : 'bg-white/95 backdrop-blur-xl';
+  const borderClass = theme === 'dark' ? 'border-white/10' : 'border-gray-200';
+
+  return ReactDOM.createPortal(
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
+      <div className="absolute inset-0" onClick={!isLoading ? onClose : undefined} aria-hidden="true" />
+      <div className={`relative max-w-sm w-full rounded-2xl lg:rounded-3xl ${bgClass} border ${borderClass} shadow-2xl p-6 lg:p-8 transform transition-all duration-300 animate-in fade-in zoom-in`}>
+        <div className="flex flex-col items-center text-center">
+          <div className="w-14 h-14 lg:w-16 lg:h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-4 lg:mb-6">
+            <AlertTriangle className="text-red-600 dark:text-red-400 w-7 h-7 lg:w-8 lg:h-8" />
+          </div>
+          <h3 className="text-xl lg:text-2xl font-poppins font-bold text-gray-900 dark:text-gray-100 tracking-tight mb-2">Clear Memory?</h3>
+          <p className="text-sm lg:text-base text-gray-500 dark:text-gray-400 mb-6 lg:mb-8 font-medium">
+            Are you sure you want to delete this conversation and wipe the AI's memory? This cannot be undone.
+          </p>
+          <div className="flex w-full gap-3">
+            <button onClick={onClose} disabled={isLoading} className="flex-1 py-2.5 lg:py-3 rounded-full bg-gray-100 dark:bg-black/20 text-gray-700 dark:text-gray-300 border border-transparent dark:border-white/10 font-bold hover:bg-gray-200 dark:hover:bg-black/40 transition disabled:opacity-50">Cancel</button>
+            <button onClick={onConfirm} disabled={isLoading} className="flex-1 py-2.5 lg:py-3 rounded-full bg-red-600 text-white font-bold hover:bg-red-700 transition flex items-center justify-center gap-2 disabled:opacity-70 shadow-md">
+              {isLoading ? <Loader className="w-4 h-4 lg:w-5 lg:h-5 animate-spin" /> : <Trash2 className="w-4 h-4 lg:w-5 lg:h-5" />}
+              {isLoading ? 'Clearing...' : 'Clear'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+// ------------------------------------------------------------------
+// Main Component
+// ------------------------------------------------------------------
 function ReflectionChat() {
   const { theme } = useTheme();
+  const isDarkMode = theme === 'dark';
+
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -185,7 +189,7 @@ function ReflectionChat() {
   const [copiedMessageId, setCopiedMessageId] = useState(null);
   const [refreshInBackground, setRefreshInBackground] = useState(false);
 
-  // 💡 NEW: Session & Memory State
+  const [showClearModal, setShowClearModal] = useState(false);
   const [rememberChat, setRememberChat] = useState(true);
   const [sessionId] = useState(() => crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36));
 
@@ -193,9 +197,20 @@ function ReflectionChat() {
   const messagesContainerRef = useRef(null);
   const inputRef = useRef(null);
 
-  // 💡 NEW: Hook Integrations
-  const reflectionChat = useReflectionChat();
+  const suggestQuestionMutation = useSuggestQuestion();
+  const sendChatMutation = useSendChatMessage();
   const clearMemoryMutation = useClearChatMemory();
+
+  // Premium Glassmorphism Sync
+  const cardBg = isDarkMode ? 'bg-[#1A162F]/60 backdrop-blur-xl' : 'bg-white/70 backdrop-blur-xl';
+  const cardBorder = isDarkMode ? 'border-white/10' : 'border-gray-200/50';
+  const headerBg = isDarkMode ? 'bg-white/10 dark:bg-black/10' : 'bg-gradient-to-r from-purple-50/50 to-teal-50/50';
+
+  // 💡 FIX: Refined button states for perfect Dark/Light mode visibility
+  const inactivePillClass = 'bg-white/60 dark:bg-black/20 text-gray-600 dark:text-gray-300 border border-gray-200/50 dark:border-white/5 hover:bg-white/90 dark:hover:bg-black/40';
+
+  const userBubbleClass = 'bg-gradient-to-r from-purple-500 to-teal-500 dark:from-purple-600 dark:to-teal-600 text-white border border-transparent shadow-md';
+  const assistantBubbleClass = isDarkMode ? 'bg-[#131127]/80 border border-white/5 text-gray-200 shadow-sm' : 'bg-white/90 border border-gray-200/50 text-gray-800 shadow-sm';
 
   useEffect(() => {
     const loadMessages = async () => {
@@ -204,20 +219,18 @@ function ReflectionChat() {
 
       if (cachedQuestion) {
         setMessages([{
-          id: 'welcome',
-          role: 'assistant',
+          id: 'welcome', role: 'assistant',
           content: `Hi! I'm your AI reflection coach. I've read your recent journal entries.\n\nHere's a reflective question to start: **${cachedQuestion}**\n\nFeel free to answer, ask anything, or click the refresh button for another question.`,
           timestamp: new Date(),
         }]);
         setIsInitializing(false);
         setRefreshInBackground(true);
         try {
-          const freshQuestion = await fetchReflectiveQuestion();
+          const freshQuestion = await suggestQuestionMutation.mutateAsync();
           if (freshQuestion && freshQuestion !== cachedQuestion) {
             cacheQuestion(freshQuestion);
-            setMessages((prev) => [{
-              id: 'welcome',
-              role: 'assistant',
+            setMessages([{
+              id: 'welcome', role: 'assistant',
               content: `Hi! I'm your AI reflection coach. I've read your recent journal entries.\n\nHere's a reflective question to start: **${freshQuestion}**\n\nFeel free to answer, ask anything, or click the refresh button for another question.`,
               timestamp: new Date(),
             }]);
@@ -229,19 +242,16 @@ function ReflectionChat() {
         }
       } else {
         try {
-          const freshQuestion = await fetchReflectiveQuestion();
+          const freshQuestion = await suggestQuestionMutation.mutateAsync();
           cacheQuestion(freshQuestion);
           setMessages([{
-            id: 'welcome',
-            role: 'assistant',
+            id: 'welcome', role: 'assistant',
             content: `Hi! I'm your AI reflection coach. I've read your recent journal entries.\n\nHere's a reflective question to start: **${freshQuestion}**\n\nFeel free to answer, ask anything, or click the refresh button for another question.`,
             timestamp: new Date(),
           }]);
         } catch (error) {
-          console.error('Failed to load initial question', error);
           setMessages([{
-            id: 'welcome',
-            role: 'assistant',
+            id: 'welcome', role: 'assistant',
             content: "Hi! I'm your AI reflection coach. I've read your recent journal entries. Ask me anything!",
             timestamp: new Date(),
           }]);
@@ -256,7 +266,7 @@ function ReflectionChat() {
   const handleNewQuestion = async () => {
     setIsLoading(true);
     try {
-      const question = await fetchReflectiveQuestion();
+      const question = await suggestQuestionMutation.mutateAsync();
       cacheQuestion(question);
       const newQuestionMsg = {
         id: Date.now().toString(),
@@ -264,6 +274,7 @@ function ReflectionChat() {
         content: `Here's another reflective question for you:\n\n**${question}**`,
         timestamp: new Date(),
       };
+
       if (replaceMode) {
         setMessages((prev) => {
           const lastIndex = prev.length - 1;
@@ -284,17 +295,17 @@ function ReflectionChat() {
     }
   };
 
-  // 💡 UPGRADED: Clears UI AND backend Redis Memory
-  const handleClearConversation = () => {
-    if (window.confirm('Clear all messages and AI memory? This cannot be undone.')) {
-      clearMemoryMutation.mutate(sessionId);
-      setMessages([{
-        id: 'welcome',
-        role: 'assistant',
-        content: "Conversation and memory cleared. Ask me anything about your journal entries!",
-        timestamp: new Date(),
-      }]);
-    }
+  const confirmClearConversation = () => {
+    clearMemoryMutation.mutate(sessionId, {
+      onSuccess: () => {
+        setShowClearModal(false);
+        setMessages([{
+          id: 'welcome', role: 'assistant',
+          content: "Conversation and memory cleared. Ask me anything about your journal entries!",
+          timestamp: new Date(),
+        }]);
+      }
+    });
   };
 
   const handleCopyMessage = (content, id) => {
@@ -303,66 +314,46 @@ function ReflectionChat() {
     setTimeout(() => setCopiedMessageId(null), 2000);
   };
 
-  // 💡 UPGRADED: Sends payload with Session UUID and Toggle State
   const handleSend = () => {
     if (!input.trim() || isLoading || isInitializing) return;
 
     const userMessage = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: input.trim(),
-      timestamp: new Date(),
+      id: Date.now().toString(), role: 'user',
+      content: input.trim(), timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMessage]);
     setInput('');
     setIsLoading(true);
 
-    reflectionChat.mutate(
+    sendChatMutation.mutate(
       { query: userMessage.content, sessionId, rememberChat },
       {
         onSuccess: (data) => {
+          const aiResponse = {
+            id: Date.now().toString(), role: 'assistant',
+            content: data, timestamp: new Date(),
+          };
+
           if (replaceMode) {
             setMessages((prev) => {
               const lastIndex = prev.length - 1;
               if (lastIndex >= 0 && prev[lastIndex].role === 'assistant') {
                 const newMessages = [...prev];
-                newMessages[lastIndex] = {
-                  ...newMessages[lastIndex],
-                  content: data,
-                  timestamp: new Date(),
-                };
+                newMessages[lastIndex] = aiResponse;
                 return newMessages;
               }
-              return [...prev, {
-                id: Date.now().toString(),
-                role: 'assistant',
-                content: data,
-                timestamp: new Date(),
-              }];
+              return [...prev, aiResponse];
             });
           } else {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: Date.now().toString(),
-                role: 'assistant',
-                content: data,
-                timestamp: new Date(),
-              },
-            ]);
+            setMessages((prev) => [...prev, aiResponse]);
           }
           setIsLoading(false);
         },
         onError: () => {
           setMessages((prev) => [
             ...prev,
-            {
-              id: Date.now().toString(),
-              role: 'assistant',
-              content: "Sorry, I'm having trouble connecting. Please try again later.",
-              timestamp: new Date(),
-            },
+            { id: Date.now().toString(), role: 'assistant', content: "Sorry, I'm having trouble connecting. Please try again later.", timestamp: new Date() }
           ]);
           setIsLoading(false);
         }
@@ -381,12 +372,10 @@ function ReflectionChat() {
     setInput(e.target.value);
     const textarea = e.target;
     textarea.style.height = 'auto';
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
+    textarea.style.height = `${Math.min(textarea.scrollHeight, 150)}px`;
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
 
   useEffect(() => {
     scrollToBottom();
@@ -405,280 +394,205 @@ function ReflectionChat() {
   }, []);
 
   const suggestionChips = [
-    "Tell me more about that",
-    "What can I do to feel better?",
-    "I'm grateful for...",
-    "One small step I can take today is...",
-    "That's interesting, why?",
-    "How can I apply this to my life?",
+    "Tell me more about that", "What can I do to feel better?",
+    "I'm grateful for...", "One small step I can take today is...",
+    "That's interesting, why?", "How can I apply this to my life?",
   ];
 
-  const handleSuggestionClick = (suggestion) => {
-    setInput(suggestion);
-    inputRef.current?.focus();
-  };
-
-  const isDarkMode = theme === 'dark';
-  const bgClass = isDarkMode ? 'bg-gray-800/60' : 'bg-white/70';
-  const borderClass = isDarkMode ? 'border-gray-700/50' : 'border-gray-200/50';
-  const userBubbleClass = isDarkMode
-    ? 'bg-gradient-to-r from-purple-600 to-purple-700 text-white'
-    : 'bg-gradient-to-r from-purple-500 to-purple-600 text-white';
-  const assistantBubbleClass = isDarkMode ? 'bg-gray-700/80 text-gray-100' : 'bg-gray-100 text-gray-800';
-
   return (
-    <div className={`relative rounded-2xl ${bgClass} border ${borderClass} backdrop-blur-sm overflow-hidden flex flex-col h-[600px] shadow-xl transition-all duration-300`}>
+    <div className={`relative rounded-2xl lg:rounded-3xl ${cardBg} border ${cardBorder} overflow-hidden flex flex-col h-[600px] lg:h-[700px] shadow-xl hover:shadow-2xl transition-all duration-300 w-full`}>
 
-      <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex flex-wrap justify-between items-center gap-2 bg-gradient-to-r from-purple-50/30 to-teal-50/30 dark:from-purple-900/20 dark:to-teal-900/20">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 flex items-center justify-center shadow-md">
-            <Sparkles size={20} className="text-white" />
+      {/* Header */}
+      <div className={`shrink-0 p-4 lg:p-6 border-b border-gray-200/50 dark:border-white/5 flex flex-wrap justify-between items-center gap-4 ${headerBg}`}>
+        <div className="flex items-center gap-3 lg:gap-4">
+          <div className="w-10 h-10 lg:w-12 lg:h-12 rounded-xl lg:rounded-2xl bg-gradient-to-br from-purple-500 to-teal-500 flex items-center justify-center shadow-md shrink-0">
+            <Sparkles className="w-5 h-5 lg:w-6 lg:h-6 text-white" />
           </div>
           <div>
-            <h3 className="font-poppins font-semibold text-lg">AI Reflection Coach</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+            <h3 className="font-poppins font-extrabold text-lg lg:text-xl text-gray-800 dark:text-gray-100 tracking-tight leading-tight">AI Reflection Coach</h3>
+            <p className="text-[11px] lg:text-xs font-medium text-gray-500 dark:text-gray-400 mt-0.5">
               Based on your journal entries
               {refreshInBackground && (
-                <span className="ml-2 inline-flex items-center gap-1 text-purple-500">
-                  <RefreshCw size={10} className="animate-spin" /> refreshing...
+                <span className="ml-2 inline-flex items-center gap-1 text-teal-500 dark:text-teal-400">
+                  <RefreshCw className="w-3 h-3 animate-spin" /> <span className="hidden sm:inline">refreshing...</span>
                 </span>
               )}
             </p>
           </div>
         </div>
 
-
-        <div className="flex items-center gap-2">
-
+        <div className="flex items-center gap-2 lg:gap-3 shrink-0 w-full sm:w-auto justify-end">
           <button
             onClick={() => setRememberChat(!rememberChat)}
-            className={`px-3 py-1.5 rounded-full transition flex items-center gap-1.5 text-xs font-medium border ${
+            className={`px-3 py-1.5 lg:px-4 lg:py-2 rounded-full transition-all flex items-center gap-1.5 text-xs lg:text-sm font-bold border shadow-sm hover:scale-105 active:scale-95 ${
               rememberChat
-                ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border-purple-300 dark:border-purple-700 shadow-sm'
-                : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 border-gray-200 dark:border-gray-700'
+                ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-teal-400 border-purple-200 dark:border-teal-500/30'
+                : inactivePillClass
             }`}
             title={rememberChat ? "AI remembers this conversation" : "AI forgets previous messages"}
           >
-            <Brain size={14} className={rememberChat ? 'animate-pulse text-purple-500' : 'opacity-50'} />
-            <span className="hidden sm:inline">{rememberChat ? 'Memory ON' : 'Memory OFF'}</span>
+            <Brain className={`w-3.5 h-3.5 lg:w-4 lg:h-4 ${rememberChat ? 'animate-pulse text-purple-500 dark:text-teal-400' : 'opacity-50'}`} />
+            <span className="hidden md:inline">{rememberChat ? 'Memory ON' : 'Memory OFF'}</span>
           </button>
 
           <button
             onClick={() => setReplaceMode(!replaceMode)}
-            className={`p-2 rounded-full transition flex items-center gap-1 text-xs ${replaceMode ? 'bg-purple-500 text-white shadow-sm' : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'}`}
+            className={`px-3 py-1.5 lg:px-4 lg:py-2 rounded-full transition-all flex items-center gap-1.5 text-xs lg:text-sm font-bold border shadow-sm hover:scale-105 active:scale-95 ${
+                replaceMode
+                    ? 'bg-gradient-to-r from-purple-500 to-teal-500 text-white border-transparent'
+                    : inactivePillClass
+            }`}
             title={replaceMode ? "Replace last response" : "Append new response"}
           >
-            {replaceMode ? <Repeat size={14} /> : <Plus size={14} />}
-            <span className="hidden sm:inline">{replaceMode ? 'Replace' : 'Append'}</span>
+            {replaceMode ? <Repeat className="w-3.5 h-3.5 lg:w-4 lg:h-4" /> : <Plus className="w-3.5 h-3.5 lg:w-4 lg:h-4" />}
+            <span className="hidden md:inline">{replaceMode ? 'Replace' : 'Append'}</span>
           </button>
 
           <button
-            onClick={handleClearConversation}
-            className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"
+            onClick={() => setShowClearModal(true)}
+            className={`p-1.5 lg:p-2 rounded-xl transition-all shadow-sm hover:text-red-500 dark:hover:text-red-400 hover:scale-105 active:scale-95 ${inactivePillClass}`}
             title="Clear conversation & memory"
           >
-            <Trash2 size={16} className="text-red-400" />
+            <Trash2 className="w-4 h-4 lg:w-5 lg:h-5" />
           </button>
 
           <button
             onClick={handleNewQuestion}
-            disabled={isLoading || isInitializing}
-            className="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition disabled:opacity-50"
-            title="New reflective question"
+            disabled={isLoading || isInitializing || suggestQuestionMutation.isPending}
+            className={`p-1.5 lg:p-2 rounded-xl transition-all shadow-sm hover:text-purple-600 dark:hover:text-teal-400 disabled:opacity-50 hover:scale-105 active:scale-95 ${inactivePillClass}`}
+            title="Generate new reflective question"
           >
-            <RefreshCw size={18} className={isLoading ? 'animate-spin' : ''} />
+            <RefreshCw className={`w-4 h-4 lg:w-5 lg:h-5 ${(isLoading || suggestQuestionMutation.isPending) ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
 
+      {/* 💡 FIX: Messages Area wrapper securely holds the ScrollToBottom button */}
+      <div className="relative flex-1 flex flex-col min-h-0">
+          <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 lg:p-6 space-y-5 lg:space-y-6 custom-scrollbar scroll-smooth">
+            {messages.map((msg) => (
+              <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300 group`}>
+                <div className={`flex gap-3 lg:gap-4 max-w-[90%] lg:max-w-[80%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
 
-      <div
-        ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar"
-      >
-        {messages.map((msg) => (
-          <div
-            key={msg.id}
-            className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300 group`}
-          >
-            <div className={`flex gap-3 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-              <div className="flex-shrink-0">
-                {msg.role === 'user' ? (
-                  <div className="w-8 h-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center shadow-sm">
-                    <UserIcon size={16} className="text-gray-600 dark:text-gray-300" />
-                  </div>
-                ) : (
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500/30 to-teal-500/30 flex items-center justify-center shadow-sm">
-                    <Bot size={16} className="text-purple-500" />
-                  </div>
-                )}
-              </div>
-              <div className="relative">
-                <div className={`rounded-2xl px-4 py-2 shadow-sm ${msg.role === 'user' ? userBubbleClass : assistantBubbleClass}`}>
-                  {msg.role === 'assistant' ? (
-                    <div
-                      className="text-sm prose prose-sm max-w-none dark:prose-invert chat-content"
-                      dangerouslySetInnerHTML={{ __html: formatMarkdown(msg.content) }}
-                    />
-                  ) : (
-                    <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                  )}
-                </div>
-                <div className="flex justify-between items-center mt-1 px-1">
-                  <p className="text-xs text-gray-400">
-                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
-                  <button
-                    onClick={() => handleCopyMessage(msg.content, msg.id)}
-                    className="opacity-0 group-hover:opacity-100 transition p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
-                    title="Copy message"
-                  >
-                    {copiedMessageId === msg.id ? (
-                      <Check size={12} className="text-green-500" />
+                  <div className="flex-shrink-0 mt-auto mb-5">
+                    {msg.role === 'user' ? (
+                      <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-purple-100 dark:bg-purple-900/40 border border-purple-200 dark:border-purple-500/30 flex items-center justify-center shadow-sm">
+                        <UserIcon className="w-4 h-4 lg:w-5 lg:h-5 text-purple-600 dark:text-teal-400" />
+                      </div>
                     ) : (
-                      <Copy size={12} className="text-gray-400" />
+                      <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-gradient-to-br from-purple-500 to-teal-500 flex items-center justify-center shadow-sm">
+                        <Sparkles className="w-4 h-4 lg:w-5 lg:h-5 text-white" />
+                      </div>
                     )}
-                  </button>
+                  </div>
+
+                  <div className="relative">
+                    <div className={`px-5 py-3 lg:px-6 lg:py-4 shadow-sm ${msg.role === 'user' ? `${userBubbleClass} rounded-2xl rounded-br-sm` : `${assistantBubbleClass} rounded-2xl rounded-bl-sm`}`}>
+                      {msg.role === 'assistant' ? (
+                        <div className="chat-content" dangerouslySetInnerHTML={{ __html: formatMarkdown(msg.content) }} />
+                      ) : (
+                        <p className="text-sm lg:text-base font-medium whitespace-pre-wrap">{msg.content}</p>
+                      )}
+                    </div>
+                    <div className={`flex items-center mt-1.5 px-1 gap-2 ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                      <p className="text-[10px] lg:text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+                        {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                      <button
+                        onClick={() => handleCopyMessage(msg.content, msg.id)}
+                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded-md hover:bg-gray-200 dark:hover:bg-white/10"
+                        title="Copy message"
+                      >
+                        {copiedMessageId === msg.id ? <Check className="w-3 h-3 lg:w-4 lg:h-4 text-emerald-500" /> : <Copy className="w-3 h-3 lg:w-4 lg:h-4 text-gray-400 dark:text-gray-500" />}
+                      </button>
+                    </div>
+                  </div>
+
                 </div>
               </div>
-            </div>
-          </div>
-        ))}
+            ))}
 
-        {isInitializing && messages.length === 0 && (
-          <div className="flex justify-start animate-in fade-in duration-300">
-            <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500/30 to-teal-500/30 flex items-center justify-center">
-                <Bot size={16} className="text-purple-500" />
+            {isInitializing && messages.length === 0 && (
+              <div className="flex justify-start animate-in fade-in duration-300">
+                <div className="flex gap-3 lg:gap-4 max-w-[80%]">
+                  <div className="flex-shrink-0 mt-auto mb-5">
+                      <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-gradient-to-br from-purple-500 to-teal-500 flex items-center justify-center shadow-sm">
+                          <Sparkles className="w-4 h-4 lg:w-5 lg:h-5 text-white" />
+                      </div>
+                  </div>
+                  <div className={`px-5 py-3 lg:px-6 lg:py-4 rounded-2xl rounded-bl-sm ${assistantBubbleClass} flex items-center gap-3`}>
+                    <TypingIndicator />
+                    <span className="text-xs lg:text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Reviewing your journal...</span>
+                  </div>
+                </div>
               </div>
-              <div className="rounded-2xl px-4 py-2 bg-gray-100 dark:bg-gray-700 shadow-sm flex items-center gap-2">
-                <TypingIndicator />
-                <span className="text-xs text-gray-500 dark:text-gray-400">Reviewing your journal...</span>
-              </div>
-            </div>
-          </div>
-        )}
+            )}
 
-        {isLoading && reflectionChat.isPending && (
-          <div className="flex justify-start animate-in fade-in duration-300">
-            <div className="flex gap-3">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-r from-purple-500/30 to-teal-500/30 flex items-center justify-center">
-                <Bot size={16} className="text-purple-500" />
+            {isLoading && sendChatMutation.isPending && (
+              <div className="flex justify-start animate-in fade-in duration-300">
+                <div className="flex gap-3 lg:gap-4 max-w-[80%]">
+                   <div className="flex-shrink-0 mt-auto mb-5">
+                      <div className="w-8 h-8 lg:w-10 lg:h-10 rounded-full bg-gradient-to-br from-purple-500 to-teal-500 flex items-center justify-center shadow-sm">
+                          <Sparkles className="w-4 h-4 lg:w-5 lg:h-5 text-white" />
+                      </div>
+                  </div>
+                  <div className={`px-5 py-3 lg:px-6 lg:py-4 rounded-2xl rounded-bl-sm ${assistantBubbleClass}`}>
+                      <TypingIndicator />
+                  </div>
+                </div>
               </div>
-              <div className="rounded-2xl px-4 py-2 bg-gray-100 dark:bg-gray-700 shadow-sm">
-                <TypingIndicator />
-              </div>
-            </div>
+            )}
+            <div ref={messagesEndRef} className="h-4 shrink-0" />
           </div>
-        )}
-        <div ref={messagesEndRef} />
+
+          <ScrollToBottom onClick={scrollToBottom} visible={showScrollButton} />
       </div>
 
-
+      {/* Suggestion Chips */}
       {messages.length > 0 && !isLoading && !isInitializing && (
-        <div className="px-4 pb-2 flex gap-2 overflow-x-auto custom-scrollbar">
+        <div className="shrink-0 px-4 lg:px-6 mb-3 lg:mb-4 flex gap-2 overflow-x-auto custom-scrollbar">
           {suggestionChips.map((chip, idx) => (
-            <button
-              key={idx}
-              onClick={() => handleSuggestionClick(chip)}
-              className="flex-shrink-0 px-3 py-1.5 text-xs rounded-full bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/40 transition"
-            >
-              <Lightbulb size={12} className="inline mr-1" />
-              {chip}
+            <button key={idx} onClick={() => handleSuggestionClick(chip)} className="flex-shrink-0 px-3 lg:px-4 py-1.5 lg:py-2 text-xs lg:text-sm font-bold rounded-full bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-teal-400 border border-purple-200 dark:border-teal-500/30 hover:bg-purple-100 dark:hover:bg-teal-900/50 transition-colors shadow-sm hover:shadow-md hover:-translate-y-0.5 active:scale-95 flex items-center gap-1.5">
+              <Lightbulb className="w-3 h-3 lg:w-4 lg:h-4" />{chip}
             </button>
           ))}
         </div>
       )}
 
-
-      <div className="p-4 border-t border-gray-200 dark:border-gray-700 bg-white/30 dark:bg-gray-900/20">
-        <div className="flex gap-2 items-end">
+      {/* Input Area */}
+      <div className="shrink-0 p-4 lg:p-6 border-t border-gray-200/50 dark:border-white/10 bg-white/50 dark:bg-black/20">
+        <div className="flex gap-2 lg:gap-3 items-end relative">
           <textarea
-            ref={inputRef}
-            value={input}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyPress}
+            ref={inputRef} value={input} onChange={handleInputChange} onKeyDown={handleKeyPress}
             disabled={isInitializing}
-            placeholder={isInitializing ? "AI is reading your journal..." : "Answer the question or ask something..."}
+            placeholder={isInitializing ? "AI is reading your journal..." : "Answer the question or share your thoughts..."}
             rows={1}
-            className="flex-1 p-3 rounded-xl border resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-800 dark:border-gray-600 dark:text-white transition disabled:opacity-60 disabled:cursor-not-allowed"
-            style={{ minHeight: '48px', maxHeight: '120px' }}
+            className={`flex-1 p-3 lg:p-4 rounded-xl lg:rounded-2xl border ${isDarkMode ? 'bg-[#131127]/80 border-white/10 focus:border-teal-400 focus:ring-teal-400 text-gray-100 placeholder-gray-500' : 'bg-white border-gray-300 focus:border-purple-500 focus:ring-purple-500 text-gray-800 placeholder-gray-400'} resize-none focus:outline-none focus:ring-1 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-inner text-sm lg:text-base custom-scrollbar`}
+            style={{ minHeight: '52px', maxHeight: '150px' }}
           />
           <button
-            onClick={handleSend}
-            disabled={!input.trim() || isLoading || isInitializing}
-            className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-500 to-teal-500 text-white font-medium hover:shadow-lg transition disabled:opacity-50 disabled:hover:shadow-none"
+            onClick={handleSend} disabled={!input.trim() || isLoading || isInitializing}
+            className="p-3 lg:p-4 rounded-xl lg:rounded-2xl bg-gradient-to-r from-purple-500 to-teal-500 text-white font-bold hover:shadow-lg transition-all disabled:opacity-50 disabled:hover:shadow-none shrink-0"
           >
-            <Send size={18} />
+            <Send className="w-5 h-5 lg:w-6 lg:h-6" />
           </button>
         </div>
-        <p className="text-xs text-gray-400 mt-2 text-center">
+        <p className="text-[10px] lg:text-xs font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mt-2 lg:mt-3 text-center">
           Press Enter to send, Shift+Enter for new line
         </p>
       </div>
 
-      <ScrollToBottom onClick={scrollToBottom} visible={showScrollButton} />
+      <ConfirmModal
+        isOpen={showClearModal}
+        onClose={() => setShowClearModal(false)}
+        onConfirm={confirmClearConversation}
+        isLoading={clearMemoryMutation.isPending}
+      />
 
       <style>{`
-        .chat-content h1, .chat-content h2, .chat-content h3 {
-          font-weight: 600;
-          margin-top: 0.5rem;
-          margin-bottom: 0.5rem;
-        }
-        .chat-content h1 { font-size: 1.25rem; }
-        .chat-content h2 { font-size: 1.125rem; }
-        .chat-content h3 { font-size: 1rem; }
-        .chat-content p {
-          margin-bottom: 0.5rem;
-          line-height: 1.5;
-        }
-        .chat-content ul, .chat-content ol {
-          margin-left: 1.5rem;
-          margin-bottom: 0.5rem;
-        }
-        .chat-content li {
-          margin-bottom: 0.25rem;
-        }
-        .chat-content code {
-          background: rgba(0,0,0,0.05);
-          padding: 0.2rem 0.3rem;
-          border-radius: 0.25rem;
-          font-size: 0.85rem;
-        }
-        .chat-content pre {
-          background: rgba(0,0,0,0.05);
-          padding: 0.5rem;
-          border-radius: 0.5rem;
-          overflow-x: auto;
-          margin-bottom: 0.5rem;
-        }
-        .chat-content blockquote {
-          border-left: 3px solid #8B5CF6;
-          padding-left: 0.75rem;
-          margin: 0.5rem 0;
-          color: #6B7280;
-          font-style: italic;
-        }
-        .custom-scrollbar::-webkit-scrollbar {
-          width: 6px;
-          height: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-          background: ${isDarkMode ? '#374151' : '#E5E7EB'};
-          border-radius: 10px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-          background: ${isDarkMode ? '#8B5CF6' : '#C084FC'};
-          border-radius: 10px;
-        }
-        @keyframes fade-in {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-        .animate-in {
-          animation: fade-in 0.3s ease-out;
-        }
-      `}</style>
+              @keyframes fade-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+              .animate-in { animation: fade-in 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+            `}</style>
     </div>
   );
 }

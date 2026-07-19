@@ -54,6 +54,7 @@ export const useGenerateSchedule = () => {
         },
         onSuccess: (_, mode) => {
             queryClient.invalidateQueries({ queryKey: ['scheduledTasks'] });
+            queryClient.invalidateQueries({ queryKey: ['gamificationStats'] });
             toast.success(`Schedule generated (${mode === 'custom' ? 'custom only' : 'all tasks'})!`);
         },
         onError: () => toast.error('Generation failed'),
@@ -68,6 +69,7 @@ export const useReoptimizeSchedule = () => {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['scheduledTasks'] });
+            queryClient.invalidateQueries({ queryKey: ['gamificationStats'] });
             toast.success('Today re-optimized successfully! ⚡');
         },
         onError: () => toast.error('Re-optimization failed'),
@@ -122,6 +124,7 @@ export const useCompleteScheduledTask = (dateRange) => {
         onSettled: () => {
             queryClient.invalidateQueries({ queryKey: ['scheduledTasks'] });
             queryClient.invalidateQueries({ queryKey: ['customTasks'] });
+            queryClient.invalidateQueries({ queryKey: ['gamificationStats'] });
         },
     });
 };
@@ -147,6 +150,7 @@ export const useCreateCustomTask = () => {
         mutationFn: async (task) => await axios.post(`${API_BASE_URL}/custom-tasks`, task, { headers: getAuthHeader() }),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['customTasks'] });
+            queryClient.invalidateQueries({ queryKey: ['gamificationStats'] });
             toast.success('Task added');
         },
     });

@@ -7,12 +7,17 @@ import { Chart as ChartJS, ArcElement, Tooltip, Legend } from "chart.js";
 import { useTheme } from "../contexts/ThemeContext";
 import { useUpdateJournalEntry, useDeleteJournalEntry,  useImportGrowthTip, useJournalEntryById  } from '../hooks/useJournalData';
 import { SkeletonCard } from './Skeleton';
-import { AlertTriangle, Download, ChevronDown, ChevronUp, Edit, Trash2, Save, X, BookOpen, Lightbulb, Heart, Brain, Target, Clock, Plus, Loader, Sparkles } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, Edit, Trash2, BookOpen, Lightbulb, Heart, Brain, Target, Clock, Plus, Loader, Sparkles } from 'lucide-react';
 import { downloadChartAsPng } from '../utils/downloadChart';
+import DownloadChartButton from './DownloadChartButton';
 
-// Helper to format markdown-like text (headings, blockquotes, lists, bold, italic, line breaks)
+// 💡 UPGRADED: Enterprise Markdown Parser
 const formatText = (text) => {
   if (!text) return '';
+
+  // Prevent AI from squishing numbered lists into a single paragraph
+  let processedText = text.replace(/([:;?!.])\s+(?=\d+\.\s+[A-Z])/g, '$1\n');
+
   const escapeHtml = (str) => {
     return str.replace(/[&<>]/g, (m) => {
       if (m === '&') return '&amp;';
@@ -22,21 +27,33 @@ const formatText = (text) => {
     });
   };
 
-  // 💡 HELPER: Applies Bold, Italic, and Link formatting to any string
   const applyMarkdown = (str) => {
-    return str
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    let formatted = escapeHtml(str);
 
-      .replace(
-        /\[([^\]]+)\]\(([^)]+)\)/g,
-        `<a href="$2" target="_blank" rel="noopener noreferrer" class="resource-link">
-          $1 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline; margin-left:2px; vertical-align:middle;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
-        </a>`
-      );
+    // 💡 NEW: Inline Code
+    formatted = formatted.replace(/`([^`]+)`/g, '<code class="guide-code">$1</code>');
+
+    // 💡 NEW: @Annotations (Uses our new index.css class!)
+    formatted = formatted.replace(/(^|[\s([{])(@[A-Za-z0-9_]+)/g, '$1<span class="code-annotation">$2</span>');
+
+    // Bold
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+
+    // Italics
+    formatted = formatted.replace(/\*(.*?)\*/g, '<em>$1</em>');
+
+    // Links with SVG icon
+    formatted = formatted.replace(
+      /\[([^\]]+)\]\(([^)]+)\)/g,
+      `<a href="$2" target="_blank" rel="noopener noreferrer" class="resource-link">
+        $1 <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline; margin-left:2px; vertical-align:middle;"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+      </a>`
+    );
+
+    return formatted;
   };
 
-  const lines = text.split('\n');
+  const lines = processedText.split('\n');
   const result = [];
   let i = 0;
   const total = lines.length;
@@ -57,7 +74,7 @@ const formatText = (text) => {
     const line = lines[i];
 
     if (/^(\*{3,}|-{3,}|_{3,})$/.test(line.trim())) {
-      result.push('<hr class="guide-hr" />');
+      result.push('<hr class="guide-hr border-gray-200 dark:border-gray-700/50 my-4" />');
       i++;
       continue;
     }
@@ -65,7 +82,7 @@ const formatText = (text) => {
     const headingMatch = line.match(/^(#{1,6})\s+(.*)/);
     if (headingMatch) {
       const level = headingMatch[1].length;
-      result.push(`<h${level} class="guide-heading">${applyMarkdown(escapeHtml(headingMatch[2]))}</h${level}>`);
+      result.push(`<h${level} class="guide-heading">${applyMarkdown(headingMatch[2])}</h${level}>`);
       i++;
       continue;
     }
@@ -86,7 +103,7 @@ const formatText = (text) => {
         const number = currentLine.match(/^\s*(\d+)\.\s+(.*)/);
         if (bullet || number) {
           const content = bullet ? bullet[2] : number[2];
-          listItems.push(`<li>${applyMarkdown(escapeHtml(content))}</li>`);
+          listItems.push(`<li>${applyMarkdown(content)}</li>`);
           i++;
         } else {
           break;
@@ -97,7 +114,7 @@ const formatText = (text) => {
     }
 
     if (line.trim()) {
-      result.push(`<p class="guide-paragraph">${applyMarkdown(escapeHtml(line))}</p>`);
+      result.push(`<p class="guide-paragraph">${applyMarkdown(line)}</p>`);
     } else if (line === '') {
       result.push('<br/>');
     }
@@ -105,12 +122,11 @@ const formatText = (text) => {
   }
   return result.join('');
 };
+
 const TRUNCATION_LENGTH = 150;
 
-// Register Chart.js components
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-// Emotion color palettes
 const EMOTION_CHART_COLORS = {
   joy: "#5CC8C2", sadness: "#B399D4", anger: "#FF8A7A", fear: "#A93226",
   surprise: "#85C1E9", neutral: "#E0E0E0", love: "#E74C3C", disgust: "#6C3483",
@@ -129,7 +145,6 @@ const EMOTION_CHART_COLORS_DARK = {
   contentment: "#C0FFC0", frustration: "#FF7F50", gratitude: "#D0FF80", hope: "#C0E0FF",
 };
 
-// Emotion chip styles
 const emotionChipColors = {
   joy: "bg-green-500", sadness: "bg-blue-500", anger: "bg-red-500", fear: "bg-purple-500",
   surprise: "bg-yellow-500", disgust: "bg-indigo-500", love: "bg-pink-500", anxiety: "bg-orange-500",
@@ -137,9 +152,6 @@ const emotionChipColors = {
   frustration: "bg-rose-500", gratitude: "bg-amber-500", hope: "bg-cyan-500",
 };
 
-// ------------------------------------------------------------------
-// Portal-based Delete Confirmation Modal
-// ------------------------------------------------------------------
 const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, theme, isDeleting }) => {
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -152,31 +164,31 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, theme, isDeleting
   return ReactDOM.createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}>
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
-      <div className={`relative max-w-md w-full rounded-2xl shadow-2xl overflow-hidden transform transition-all duration-300 ${
-        theme === 'dark' ? 'bg-gray-800/95 backdrop-blur-md border-gray-700' : 'bg-white/95 backdrop-blur-md border-gray-200'
+      <div className={`relative max-w-md w-full rounded-2xl lg:rounded-3xl shadow-2xl overflow-hidden transform transition-all duration-300 ${
+        theme === 'dark' ? 'bg-[#1A162F]/95 backdrop-blur-xl border-white/10' : 'bg-white/95 backdrop-blur-xl border-gray-200'
       } border`}>
-        <div className="p-6 text-center">
-          <div className="mx-auto w-12 h-12 mb-4 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
-            <AlertTriangle className="w-6 h-6 text-red-600 dark:text-red-400" />
+        <div className="p-6 lg:p-8 text-center">
+          <div className="mx-auto w-14 h-14 lg:w-16 lg:h-16 mb-4 lg:mb-6 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center">
+            <AlertTriangle className="w-7 h-7 lg:w-8 lg:h-8 text-red-600 dark:text-red-400" />
           </div>
-          <h3 className="text-xl font-poppins font-semibold mb-2">Delete Journal Entry</h3>
-          <p className="text-gray-600 dark:text-gray-300 mb-6">Are you sure you want to delete this entry? This action cannot be undone.</p>
+          <h3 className="text-xl lg:text-2xl font-poppins font-bold mb-2 tracking-tight text-gray-800 dark:text-gray-100">Delete Entry?</h3>
+          <p className="text-sm lg:text-base text-gray-600 dark:text-gray-400 mb-6 lg:mb-8">Are you sure you want to delete this entry? This action cannot be undone.</p>
           <div className="flex justify-center gap-3">
             <button
-                                onClick={onConfirm}
-                                disabled={isDeleting}
-                                className="px-5 py-2 rounded-full bg-red-600 text-white flex items-center gap-2 disabled:opacity-50"
-                            >
-                                {isDeleting ? <Loader size={16} className="animate-spin" /> : null}
-                                {isDeleting ? "Deleting..." : "Delete"}
-                            </button>
-                            <button
-                                onClick={onClose}
-                                disabled={isDeleting}
-                                className="px-5 py-2 rounded-full bg-gray-200 text-gray-800 disabled:opacity-50"
-                            >
-                                Cancel
-                            </button>
+                onClick={onConfirm}
+                disabled={isDeleting}
+                className="px-6 py-2.5 lg:py-3 rounded-full bg-red-600 hover:bg-red-700 text-white flex items-center gap-2 font-medium disabled:opacity-50 transition-colors shadow-sm"
+            >
+                {isDeleting ? <Loader size={18} className="animate-spin" /> : null}
+                {isDeleting ? "Deleting..." : "Delete"}
+            </button>
+            <button
+                onClick={onClose}
+                disabled={isDeleting}
+                className="px-6 py-2.5 lg:py-3 rounded-full bg-gray-200 hover:bg-gray-300 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-800 dark:text-gray-200 font-medium disabled:opacity-50 transition-colors shadow-sm"
+            >
+                Cancel
+            </button>
           </div>
         </div>
       </div>
@@ -185,11 +197,14 @@ const DeleteConfirmationModal = ({ isOpen, onClose, onConfirm, theme, isDeleting
   );
 };
 
-const ExpandedEntryContent = ({ entry, isDarkMode, chartRefs, sectionBg, cardBorder, getMoodColorClass, getMoodLabel, getChipStyle, emotionChartOptions, importGrowthTipMutation, isPending }) => {
+const ExpandedEntryContent = ({ entry, isDarkMode, sectionBg, cardBorder, getMoodColorClass, getMoodLabel, getChipStyle, emotionChartOptions, importGrowthTipMutation, isPending }) => {
   const parsedEmotions = entry.emotions && typeof entry.emotions === "string" ? JSON.parse(entry.emotions) : entry.emotions || {};
   const parsedCoreConcerns = entry.coreConcerns && typeof entry.coreConcerns === "string" ? JSON.parse(entry.coreConcerns) : entry.coreConcerns || [];
   const parsedGrowthTips = entry.growthTips && typeof entry.growthTips === "string" ? JSON.parse(entry.growthTips) : entry.growthTips || [];
   const parsedKeyPhrases = Array.isArray(entry.keyPhrases) ? entry.keyPhrases : [];
+
+  const localChartRef = useRef(null);
+
   const chartData = (() => {
     if (!entry.emotions) return null;
     try {
@@ -213,8 +228,9 @@ const ExpandedEntryContent = ({ entry, isDarkMode, chartRefs, sectionBg, cardBor
         datasets: [{
           data: filteredData,
           backgroundColor: backgroundColors,
-          borderColor: backgroundColors.map(c => c + "CC"),
-          borderWidth: 1,
+          borderColor: isDarkMode ? '#131127' : '#ffffff',
+          borderWidth: isDarkMode ? 1 : 2,
+          hoverOffset: 6
         }],
       };
     } catch (e) {
@@ -223,48 +239,48 @@ const ExpandedEntryContent = ({ entry, isDarkMode, chartRefs, sectionBg, cardBor
   })();
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 lg:space-y-6">
       {/* Raw Text */}
-      <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
-        <div className="flex items-center gap-2 mb-2">
-          <BookOpen size={14} className="text-purple-400" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Journal Entry</span>
+      <div className={`rounded-xl lg:rounded-2xl  p-3 lg:p-6 ${sectionBg} border ${cardBorder}`}>
+        <div className="flex items-center gap-2 mb-2 lg:mb-3">
+          <BookOpen className="w-4 h-4 lg:w-5 lg:h-5 text-purple-500 dark:text-purple-400" />
+          <span className="text-xs lg:text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Journal Entry</span>
         </div>
-        <p className="text-gray-800 dark:text-gray-200 leading-relaxed whitespace-pre-wrap">{entry.rawText}</p>
+        <p className="text-sm lg:text-base text-gray-800 dark:text-gray-200 leading-relaxed lg:leading-loose whitespace-pre-wrap">{entry.rawText}</p>
       </div>
 
       {/* Summary */}
       {entry.summary && (
-        <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
-          <div className="flex items-center gap-2 mb-2">
-            <Brain size={14} className="text-teal-400" />
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Summary</span>
+        <div className={`rounded-xl lg:rounded-2xl p-3 lg:p-6 ${sectionBg} border ${cardBorder}`}>
+          <div className="flex items-center gap-2 mb-2 lg:mb-3">
+            <Brain className="w-4 h-4 lg:w-5 lg:h-5 text-teal-500 dark:text-teal-400" />
+            <span className="text-xs lg:text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Summary</span>
           </div>
-          <p className="text-sm text-gray-700 dark:text-gray-300">{entry.summary}</p>
+          <p className="text-sm lg:text-base text-gray-700 dark:text-gray-300 leading-relaxed">{entry.summary}</p>
         </div>
       )}
 
       {/* Mood Score */}
-      <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
-        <div className="flex justify-between items-center">
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Mood Score</span>
-          <span className={`font-bold text-lg ${getMoodColorClass(entry.moodScore)}`}>
-            {entry.moodScore?.toFixed(2) ?? "N/A"} ({getMoodLabel(entry.moodScore)})
+      <div className={`rounded-xl lg:rounded-2xl p-3 lg:p-6 ${sectionBg} border ${cardBorder}`}>
+        <div className="flex flex-wrap gap-2 justify-between items-center">
+          <span className="text-xs lg:text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Mood Score</span>
+          <span className={`font-bold text-lg lg:text-2xl ${getMoodColorClass(entry.moodScore)}`}>
+            {entry.moodScore?.toFixed(2) ?? "N/A"} <span className="text-sm lg:text-lg opacity-80">({getMoodLabel(entry.moodScore)})</span>
           </span>
         </div>
       </div>
 
       {/* Emotions */}
       {Object.keys(parsedEmotions).length > 0 && (
-        <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
-          <div className="flex items-center gap-2 mb-2">
-            <Heart size={14} className="text-pink-400" />
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Emotions</span>
+        <div className={`rounded-xl lg:rounded-2xl p-3 lg:p-6 ${sectionBg} border ${cardBorder}`}>
+          <div className="flex items-center gap-2 mb-3 lg:mb-4">
+            <Heart className="w-4 h-4 lg:w-5 lg:h-5 text-pink-500 dark:text-pink-400" />
+            <span className="text-xs lg:text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Emotions</span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 lg:gap-3">
             {Object.entries(parsedEmotions).filter(([,score]) => score > 0).sort((a,b)=>b[1]-a[1]).map(([emotion, score]) => (
-              <span key={emotion} className={`${getChipStyle(emotion)} inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs shadow-sm`}>
-                {emotion} <span className="opacity-80 text-[10px]">({score.toFixed(2)})</span>
+              <span key={emotion} className={`${getChipStyle(emotion)} inline-flex items-center gap-1.5 px-3 lg:px-4 py-1.5 lg:py-2 rounded-full text-xs lg:text-sm font-medium shadow-sm hover:-translate-y-0.5 transition-transform`}>
+                {emotion} <span className="opacity-80 text-[10px] lg:text-xs">({score.toFixed(2)})</span>
               </span>
             ))}
           </div>
@@ -273,14 +289,16 @@ const ExpandedEntryContent = ({ entry, isDarkMode, chartRefs, sectionBg, cardBor
 
       {/* Core Concerns */}
       {parsedCoreConcerns.length > 0 && (
-        <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
-          <div className="flex items-center gap-2 mb-2">
-            <Target size={14} className="text-blue-400" />
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Core Concerns</span>
+        <div className={`rounded-xl lg:rounded-2xl p-3 lg:p-6 ${sectionBg} border ${cardBorder}`}>
+          <div className="flex items-center gap-2 mb-3 lg:mb-4">
+            <Target className="w-4 h-4 lg:w-5 lg:h-5 text-blue-500 dark:text-blue-400" />
+            <span className="text-xs lg:text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Core Concerns</span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 lg:gap-3">
             {parsedCoreConcerns.map((c, idx) => (
-              <span key={idx} className="bg-blue-500/20 dark:bg-blue-500/30 text-blue-700 dark:text-blue-200 px-2 py-1 rounded-full text-xs border border-blue-200 dark:border-blue-500/30">{c}</span>
+              <span key={idx} className="bg-blue-50 dark:bg-blue-500/10 text-blue-700 dark:text-blue-300 px-3 lg:px-4 py-1.5 lg:py-2 rounded-full text-xs lg:text-sm font-medium border border-blue-200 dark:border-blue-500/20 hover:-translate-y-0.5 transition-transform">
+                {c}
+              </span>
             ))}
           </div>
         </div>
@@ -288,15 +306,15 @@ const ExpandedEntryContent = ({ entry, isDarkMode, chartRefs, sectionBg, cardBor
 
       {/* Growth Tips Section */}
       {parsedGrowthTips.length > 0 && (
-        <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
-          <div className="flex items-center gap-2 mb-3">
-            <Lightbulb size={14} className="text-amber-400" />
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Growth Tips & Resources</span>
+        <div className={`rounded-xl lg:rounded-2xl p-3 lg:p-6 ${sectionBg} border ${cardBorder}`}>
+          <div className="flex items-center gap-2 mb-4 lg:mb-5">
+            <Lightbulb className="w-4 h-4 lg:w-5 lg:h-5 text-amber-500 dark:text-amber-400" />
+            <span className="text-xs lg:text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Growth Tips & Resources</span>
           </div>
-          <div className="space-y-4">
+          <div className="space-y-4 lg:space-y-6">
             {parsedGrowthTips.map((tip, idx) => (
-              <div key={idx} className="relative group">
-                <div className="pr-12 prose prose-sm dark:prose-invert max-w-none">
+              <div key={idx} className="relative group bg-white/40 dark:bg-black/20 p-3 lg:p-5 rounded-xl border border-gray-100 dark:border-gray-700/50">
+                <div className="pr-10 lg:pr-14 prose prose-sm lg:prose-base dark:prose-invert max-w-none">
                   <div
                     className="growth-tip-content"
                     dangerouslySetInnerHTML={{ __html: formatText(tip) }}
@@ -305,10 +323,10 @@ const ExpandedEntryContent = ({ entry, isDarkMode, chartRefs, sectionBg, cardBor
                 <button
                   onClick={() => importGrowthTipMutation.mutate(tip)}
                   disabled={isPending}
-                  className="absolute top-0 right-0 p-1.5 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-300 hover:bg-blue-500/30 transition disabled:opacity-50"
+                  className="absolute top-3 right-3 lg:top-4 lg:right-4 p-2 lg:p-2.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 hover:scale-105 transition-all disabled:opacity-50 flex items-center justify-center shadow-sm"
                   title="Add to Milestones"
                 >
-                  <Plus size={14} />
+                  <Plus className="w-4 h-4 lg:w-5 lg:h-5" />
                 </button>
               </div>
             ))}
@@ -318,14 +336,16 @@ const ExpandedEntryContent = ({ entry, isDarkMode, chartRefs, sectionBg, cardBor
 
       {/* Key Phrases */}
       {parsedKeyPhrases.length > 0 && (
-        <div className={`rounded-xl p-3 ${sectionBg} border ${cardBorder}`}>
-          <div className="flex items-center gap-2 mb-2">
-            <Target size={14} className="text-purple-400" />
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Key Phrases</span>
+        <div className={`rounded-xl lg:rounded-2xl p-3 lg:p-6 ${sectionBg} border ${cardBorder}`}>
+          <div className="flex items-center gap-2 mb-3 lg:mb-4">
+            <Target className="w-4 h-4 lg:w-5 lg:h-5 text-purple-500 dark:text-purple-400" />
+            <span className="text-xs lg:text-sm font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">Key Phrases</span>
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2 lg:gap-3">
             {parsedKeyPhrases.map((p, idx) => (
-              <span key={idx} className="bg-purple-500/20 dark:bg-purple-500/30 text-purple-700 dark:text-purple-200 px-2 py-1 rounded-full text-xs border border-purple-200 dark:border-purple-500/30">{p}</span>
+              <span key={idx} className="bg-purple-50 dark:bg-purple-500/10 text-purple-700 dark:text-purple-300 px-3 lg:px-4 py-1.5 lg:py-2 rounded-full text-xs lg:text-sm font-medium border border-purple-200 dark:border-purple-500/20 hover:-translate-y-0.5 transition-transform">
+                {p}
+              </span>
             ))}
           </div>
         </div>
@@ -333,61 +353,55 @@ const ExpandedEntryContent = ({ entry, isDarkMode, chartRefs, sectionBg, cardBor
 
       {/* Emotion Breakdown Chart */}
       {chartData && chartData.datasets[0].data.length > 0 ? (
-        <div className={`rounded-2xl ${sectionBg} border ${cardBorder} overflow-hidden`}>
-          <div className="flex justify-between items-center p-3 border-b border-gray-200 dark:border-gray-700">
-            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">Emotion Breakdown</span>
-            <button
-              onClick={() => {
-                const el = chartRefs.current[entry.id];
-                if (el) downloadChartAsPng(el, `entry_emotion_breakdown_${entry.id}`, isDarkMode);
-              }}
-              className="p-1.5 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition"
-              title="Download chart as PNG"
-            >
-              <Download size={16} className="text-gray-600 dark:text-gray-300" />
-            </button>
+        <div className={`rounded-xl lg:rounded-2xl ${sectionBg} border ${cardBorder} overflow-hidden`}>
+          <div className="flex flex-wrap gap-3 justify-between items-center p-4 lg:p-5 border-b border-gray-200/50 dark:border-gray-700/50 bg-white/30 dark:bg-black/10">
+            <span className="text-sm lg:text-base font-bold tracking-tight text-gray-800 dark:text-gray-200">Emotion Breakdown</span>
+
+            <DownloadChartButton
+              chartRef={localChartRef}
+              filename={`entry_emotion_breakdown_${entry.id}`}
+              darkMode={isDarkMode}
+              className="hover:scale-105 transition-transform shrink-0"
+            />
           </div>
-          <div ref={el => { if (el) chartRefs.current[entry.id] = el; }} className="p-4 flex flex-col items-center" style={{ backgroundColor: isDarkMode ? '#1f2937' : '#ffffff' }}>
-            <div className="text-center mb-2 text-xs text-gray-500 dark:text-gray-400">
+
+          <div ref={localChartRef} className="p-4 sm:p-6 lg:p-8 flex flex-col items-center" style={{ backgroundColor: isDarkMode ? '#131127' : '#ffffff' }}>
+            <div className="text-center mb-4 text-xs lg:text-sm font-medium text-gray-500 dark:text-gray-400">
               {format(parseISO(entry.entryDate), 'EEEE, MMMM d, yyyy')}
-              {entry.creationTimestamp && <span className="ml-2">• {format(parseISO(entry.creationTimestamp), 'h:mm a')}</span>}
+              {entry.creationTimestamp && <span className="ml-2 opacity-70">• {format(parseISO(entry.creationTimestamp), 'h:mm a')}</span>}
             </div>
-            <div className="h-48 w-full max-w-xs mx-auto">
+            <div className="relative w-full h-[220px] sm:h-[260px] lg:h-[300px] flex items-center justify-center">
               <Doughnut data={chartData} options={emotionChartOptions} />
             </div>
           </div>
         </div>
       ) : (
-        <div className="text-center p-4 rounded-xl bg-gray-100 dark:bg-gray-800/50 text-gray-500 italic text-sm">No detailed emotion data for this entry.</div>
+        <div className={`text-center p-6 lg:p-8 rounded-xl lg:rounded-2xl ${sectionBg} border ${cardBorder} text-gray-500 dark:text-gray-400 italic text-sm lg:text-base`}>
+          No detailed emotion data for this entry.
+        </div>
       )}
     </div>
   );
 };
 
 const AnalysisLoadingState = ({ sectionBg, cardBorder }) => (
-  <div className={`space-y-4 p-4 rounded-xl ${sectionBg} border ${cardBorder} animate-pulse`}>
-    <div className="flex items-center gap-2 mb-2">
-      <Brain size={14} className="text-purple-400 animate-bounce" />
-      <div className="h-3 w-24 bg-gray-300 dark:bg-gray-600 rounded"></div>
+  <div className={`space-y-4 lg:space-y-6 p-4 lg:p-6 rounded-xl lg:rounded-2xl ${sectionBg} border ${cardBorder} animate-pulse`}>
+    <div className="flex items-center gap-2 mb-2 lg:mb-4">
+      <Brain className="w-5 h-5 lg:w-6 lg:h-6 text-purple-500 dark:text-purple-400 animate-bounce" />
+      <div className="h-4 lg:h-5 w-32 bg-gray-300 dark:bg-gray-700/50 rounded-full"></div>
     </div>
-    <div className="space-y-2">
-      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-full"></div>
-      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
+    <div className="space-y-3 lg:space-y-4">
+      <div className="h-4 lg:h-5 bg-gray-200 dark:bg-gray-700/50 rounded-full w-full"></div>
+      <div className="h-4 lg:h-5 bg-gray-200 dark:bg-gray-700/50 rounded-full w-5/6"></div>
+      <div className="h-4 lg:h-5 bg-gray-200 dark:bg-gray-700/50 rounded-full w-4/5"></div>
     </div>
-    <div className="flex gap-2 pt-4">
-      <div className="h-8 w-20 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
-      <div className="h-8 w-20 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
-    </div>
-    <div className="h-48 w-48 mx-auto rounded-full border-4 border-dashed border-gray-200 dark:border-gray-700 flex items-center justify-center">
-       <span className="text-[10px] text-gray-400">Processing Insights...</span>
+    <div className="flex gap-3 pt-4 lg:pt-6">
+      <div className="h-8 lg:h-10 w-24 lg:w-32 bg-gray-200 dark:bg-gray-700/50 rounded-full"></div>
+      <div className="h-8 lg:h-10 w-24 lg:w-32 bg-gray-200 dark:bg-gray-700/50 rounded-full"></div>
     </div>
   </div>
 );
 
-// ------------------------------------------------------------------
-// Main JournalHistory Component
-// ------------------------------------------------------------------
-// 💡 UPDATED: Now receives searchType as a prop
 function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase, isLoading, searchType }) {
   const [expandedEntryId, setExpandedEntryId] = useState(null);
   const [editingEntryId, setEditingEntryId] = useState(null);
@@ -397,7 +411,6 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
   const [deleteEntryId, setDeleteEntryId] = useState(null);
   const { theme } = useTheme();
   const isDarkMode = theme === 'dark';
-  const chartRefs = useRef({});
 
   const updateMutation = useUpdateJournalEntry();
   const deleteMutation = useDeleteJournalEntry();
@@ -412,9 +425,47 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
       isProcessing(entries?.find(e => e.id === expandedEntryId))
   );
 
-  const cardBg = isDarkMode ? 'bg-gray-800/60 backdrop-blur-md' : 'bg-white/70 backdrop-blur-md';
-  const cardBorder = isDarkMode ? 'border-gray-700/50' : 'border-gray-200/50';
-  const sectionBg = isDarkMode ? 'bg-gray-800/40 backdrop-blur-sm' : 'bg-white/80 backdrop-blur-sm';
+  const cardBg = isDarkMode ? 'bg-[#1A162F]/60 backdrop-blur-xl' : 'bg-white/70 backdrop-blur-xl';
+  const cardBorder = isDarkMode ? 'border-white/10' : 'border-gray-200/50';
+  const sectionBg = isDarkMode ? 'bg-[#131127]/60 backdrop-blur-md' : 'bg-white/80 backdrop-blur-md';
+
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
+  useEffect(() => {
+      const handleResize = () => setIsMobile(window.innerWidth < 640);
+      window.addEventListener('resize', handleResize);
+      return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const emotionChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: isMobile ? "bottom" : "right",
+        labels: {
+          color: isDarkMode ? '#E0E0E0' : '#2D3748',
+          font: { family: "Inter", size: isMobile ? 10 : 12 },
+          boxWidth: isMobile ? 8 : 12,
+          padding: isMobile ? 12 : 16,
+          usePointStyle: true,
+        },
+      },
+      tooltip: {
+        backgroundColor: isDarkMode ? 'rgba(30, 41, 59, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+        titleColor: isDarkMode ? '#E0E0E0' : '#1E1A3E',
+        bodyColor: isDarkMode ? '#CBD5E1' : '#475569',
+        borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+        borderWidth: 1,
+        padding: 12,
+        boxPadding: 6,
+        usePointStyle: true,
+        callbacks: {
+          label: (ctx) => `${ctx.label}: ${(ctx.parsed * 100).toFixed(1)}%`,
+        },
+      },
+    },
+    cutout: isMobile ? "60%" : "65%",
+  };
 
   if (isLoading) return <SkeletonCard count={3} />;
 
@@ -429,17 +480,14 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
     );
   }
 
-  // 💡 NEW: Relevance Bypass Logic
   let groupedEntries = {};
   let sortedDates = [];
 
   if (searchType === 'semantic') {
-    // If it's a semantic search, DO NOT sort by date. Preserve the AI relevance array!
     const semanticKey = "Matches Ranked by AI Relevance";
     groupedEntries[semanticKey] = filteredEntries;
     sortedDates = [semanticKey];
   } else {
-    // Standard Date grouping for normal history viewing
     groupedEntries = filteredEntries.reduce((acc, entry) => {
       const dateKey = format(parseISO(entry.entryDate), "EEEE, MMMM dd, yyyy");
       if (!acc[dateKey]) acc[dateKey] = [];
@@ -509,7 +557,6 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
       }
       setShowDeleteConfirm(false);
       setDeleteEntryId(null);
-      toast.success("Entry deleted successfully");
     } catch (err) {
       setShowDeleteConfirm(false);
       setDeleteEntryId(null);
@@ -544,26 +591,6 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
     return `${base} text-white text-xs px-2 py-1 rounded-full`;
   };
 
-  const emotionChartOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    plugins: {
-      legend: {
-        position: "right",
-        labels: {
-          font: { family: "Inter", size: 12 },
-          color: isDarkMode ? "#E0E0E0" : "rgb(75, 85, 99)",
-        },
-      },
-      tooltip: {
-        callbacks: {
-          label: (ctx) => `${ctx.label}: ${(ctx.parsed * 100).toFixed(1)}%`,
-        },
-      },
-    },
-    cutout: "60%",
-  };
-
   if (filteredEntries.length === 0) {
     let msg = "No journal entries yet. Start writing your first reflection!";
     if (filterClusterId !== null && filterClusterId !== undefined) {
@@ -572,20 +599,21 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
     } else if (filterPhrase) {
       msg = `No entries found containing the phrase "${filterPhrase}".`;
     }
-    return <div className="text-center py-12 text-gray-500 dark:text-gray-400 font-inter">{msg}</div>;
+    return <div className="text-center py-12 lg:py-16 text-gray-500 dark:text-gray-400 font-inter text-base lg:text-lg">{msg}</div>;
   }
 
   return (
-    <div className="font-inter w-full space-y-6">
+    <div className="font-inter w-full space-y-6 lg:space-y-8">
       {sortedDates.map(dateKey => (
-        <div key={dateKey} className="space-y-4">
-          <h3 className="text-xl font-poppins font-semibold text-purple-600 dark:text-teal-400 mb-2 pb-2 border-b border-purple-200 dark:border-teal-800">
+        <div key={dateKey} className="space-y-4 lg:space-y-5">
+          <h3 className="text-xl lg:text-2xl font-poppins font-bold text-purple-600 dark:text-teal-400 mb-3 lg:mb-4 pb-2 lg:pb-3 border-b border-purple-200 dark:border-teal-800/50 tracking-tight">
             {searchType === 'semantic' ? (
-                <span className="flex items-center gap-2">
-                    <Sparkles size={20} /> {dateKey}
+                <span className="flex items-center gap-2 lg:gap-3">
+                    <Sparkles className="w-5 h-5 lg:w-6 lg:h-6 text-purple-600 dark:text-teal-400" /> {dateKey}
                 </span>
             ) : dateKey}
           </h3>
+
           {groupedEntries[dateKey].map((entry, index) => {
               const isThisEntryExpanded = expandedEntryId === entry.id;
               const displayEntry = (isThisEntryExpanded && fetchedEntry && fetchedEntry.id === entry.id)
@@ -594,106 +622,107 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
 
               const isProcessing = displayEntry.moodScore === null;
               const showSkeleton = isThisEntryExpanded && isProcessing;
-                return (
-                        <div key={entry.id} className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg transition-all duration-500 overflow-hidden`}>
-                            {/* Card Header */}
-                            <div
-                                className="p-4 cursor-pointer flex justify-between items-center bg-white/10 dark:bg-black/10"
-                                onClick={() => toggleExpand(entry.id)}
-                            >
-                                <div className="flex flex-wrap items-center gap-3">
-                                    <Clock size={14} className="text-purple-400" />
-                                    <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
-                                        {/* If semantic, show full date next to time since they aren't grouped by date anymore */}
-                                        {searchType === 'semantic' && entry.creationTimestamp
-                                            ? format(parseISO(entry.creationTimestamp), "MMM d, yyyy • h:mm a")
-                                            : entry.creationTimestamp ? format(parseISO(entry.creationTimestamp), "h:mm a") : "N/A"}
-                                    </span>
 
-                                   <span className={`text-sm font-semibold flex items-center gap-2 ${isProcessing ? 'text-purple-500' : getMoodColorClass(displayEntry.moodScore)}`}>
-                                     {isProcessing ? (
-                                       <span className="inline-flex items-center gap-1 bg-purple-500/10 px-2 py-0.5 rounded-md animate-pulse">
-                                         <Loader size={12} className="animate-spin" /> Analyzing...
-                                       </span>
-                                     ) : (
-                                       <>
-                                         {getMoodLabel(displayEntry.moodScore)}
-                                         <span className="text-xs opacity-60">({displayEntry.moodScore?.toFixed(2)})</span>
-                                       </>
-                                     )}
-                                   </span>
-                                </div>
-                                <div className="text-gray-500">
-                                    {expandedEntryId === entry.id ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
-                                </div>
-                            </div>
+              return (
+                  <div key={entry.id} className={`rounded-2xl lg:rounded-3xl ${cardBg} border ${cardBorder} shadow-lg ring-1 ring-black/5 dark:ring-white/5 transition-all duration-500 overflow-hidden hover:shadow-xl`}>
 
-                           {/* Collapsed Preview */}
-                           {expandedEntryId !== entry.id && (
-                               <div className="p-4 pt-0 text-sm text-gray-600 dark:text-gray-400">
-                                   {entry.rawText.length > TRUNCATION_LENGTH
-                                       ? `${entry.rawText.slice(0, TRUNCATION_LENGTH)}...`
-                                       : entry.rawText}
-                               </div>
-                           )}
+                      {/* Card Header */}
+                      <div className="p-3 lg:p-5 cursor-pointer flex flex-wrap justify-between items-center bg-white/30 dark:bg-black/20 hover:bg-white/50 dark:hover:bg-black/40 transition-colors gap-3" onClick={() => toggleExpand(entry.id)}>
+                          <div className="flex flex-wrap items-center gap-3 lg:gap-4">
+                              {/* 💡 FIX: Clock icon now properly syncs with Dark Mode Teal */}
+                              <Clock className="w-4 h-4 lg:w-5 lg:h-5 text-purple-500 dark:text-teal-400" />
+                              <span className="text-sm lg:text-base font-semibold text-gray-800 dark:text-gray-200">
+                                  {searchType === 'semantic' && entry.creationTimestamp
+                                      ? format(parseISO(entry.creationTimestamp), "MMM d, yyyy • h:mm a")
+                                      : entry.creationTimestamp ? format(parseISO(entry.creationTimestamp), "h:mm a") : "N/A"}
+                              </span>
 
-                           {/* Expanded Content */}
-                           {expandedEntryId === entry.id && (
-                               <div className="p-4 pt-0 space-y-4">
-                                   {editingEntryId === entry.id ? (
-                      <div id={`edit-area-${entry.id}`} className="space-y-3">
-                        <textarea
-                          value={editedText}
-                          onChange={e => setEditedText(e.target.value)}
-                          className={`w-full p-3 rounded-xl border resize-y min-h-[120px] focus:ring-2 focus:ring-purple-500 focus:outline-none transition ${
-                            isDarkMode ? 'bg-gray-800 text-gray-200 border-gray-600' : 'bg-gray-50 text-gray-800 border-gray-300'
-                          }`}
-                        />
-                        {editError && <p className="text-red-500 text-sm">{editError}</p>}
-                        <div className="flex justify-end gap-3">
-                          <button onClick={handleCancelEdit} className="px-4 py-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 transition">Cancel</button>
-                          <button onClick={() => handleSaveEdit(entry.id)} disabled={updateMutation.isPending} className="px-4 py-2 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 text-white font-medium hover:shadow-md transition">
-                            {updateMutation.isPending ? "Saving..." : "Save Changes"}
-                          </button>
-                        </div>
+                             <span className={`text-sm lg:text-base font-bold flex items-center gap-2 ${isProcessing ? 'text-purple-500' : getMoodColorClass(displayEntry.moodScore)}`}>
+                               {isProcessing ? (
+                                 <span className="inline-flex items-center gap-1.5 bg-purple-500/10 px-2.5 py-1 rounded-md animate-pulse">
+                                   <Loader className="w-3.5 h-3.5 lg:w-4 lg:h-4 animate-spin" /> Analyzing...
+                                 </span>
+                               ) : (
+                                 <>
+                                   {getMoodLabel(displayEntry.moodScore)}
+                                   <span className="text-xs lg:text-sm font-medium opacity-70 hidden sm:inline-block">({displayEntry.moodScore?.toFixed(2)})</span>
+                                 </>
+                               )}
+                             </span>
+                          </div>
+
+                          <div className="text-gray-500 shrink-0 ml-auto sm:ml-2">
+                              {expandedEntryId === entry.id ? <ChevronUp className="w-5 h-5 lg:w-6 lg:h-6" /> : <ChevronDown className="w-5 h-5 lg:w-6 lg:h-6" />}
+                          </div>
                       </div>
-                    ) : showSkeleton ? (
-                                                <AnalysisLoadingState sectionBg={sectionBg} cardBorder={cardBorder} />
-                                            ) : (
-                                                <>
-                                                    <ExpandedEntryContent
-                                                        entry={displayEntry}
-                                                        isDarkMode={isDarkMode}
-                                                        chartRefs={chartRefs}
-                                                        sectionBg={sectionBg}
-                                                        cardBorder={cardBorder}
-                                                        getMoodColorClass={getMoodColorClass}
-                                                        getMoodLabel={getMoodLabel}
-                                                        getChipStyle={getChipStyle}
-                                                        emotionChartOptions={emotionChartOptions}
-                                                        importGrowthTipMutation={importGrowthTipMutation}
-                                                        isPending={importGrowthTipMutation.isPending}
-                                                    />
-                        <div className="flex justify-end gap-2 pt-2">
-                          <button
-                            onClick={() => handleEditClick(entry)}
-                            className="px-3 py-1.5 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-300 hover:bg-blue-500/30 transition flex items-center gap-1 text-sm"
-                          >
-                            <Edit size={14} /> Edit
-                          </button>
-                          <button
-                            onClick={() => handleDeleteClick(entry.id)}
-                            className="px-3 py-1.5 rounded-full bg-red-500/20 text-red-600 dark:text-red-300 hover:bg-red-500/30 transition flex items-center gap-1 text-sm"
-                          >
-                            <Trash2 size={14} /> Delete
-                          </button>
-                        </div>
-                      </>
-                    )}
+
+                      {/* Collapsed Preview */}
+                      {expandedEntryId !== entry.id && (
+                          <div className="p-3 lg:p-5 pt-0 lg:pt-0 text-sm lg:text-base text-gray-600 dark:text-gray-400 leading-relaxed lg:leading-loose">
+                              {entry.rawText.length > TRUNCATION_LENGTH
+                                  ? `${entry.rawText.slice(0, TRUNCATION_LENGTH)}...`
+                                  : entry.rawText}
+                          </div>
+                      )}
+
+                      {/* Expanded Content */}
+                      {expandedEntryId === entry.id && (
+                          <div className="p-3 lg:p-6 pt-3 space-y-3 lg:space-y-6">
+                              {editingEntryId === entry.id ? (
+                                  <div id={`edit-area-${entry.id}`} className="space-y-3 lg:space-y-4 pt-3">
+                                    <textarea
+                                      value={editedText}
+                                      onChange={e => setEditedText(e.target.value)}
+                                      className={`w-full p-4 lg:p-5 rounded-xl lg:rounded-2xl border resize-y min-h-[150px] focus:ring-2 focus:ring-purple-500 focus:outline-none transition-all text-sm lg:text-base ${
+                                        isDarkMode ? 'bg-[#131127]/80 text-gray-200 border-gray-600/50' : 'bg-white/80 text-gray-800 border-gray-300'
+                                      }`}
+                                    />
+                                    {editError && <p className="text-red-500 text-sm font-medium">{editError}</p>}
+                                    <div className="flex flex-wrap justify-end gap-3 mt-3">
+                                      <button onClick={handleCancelEdit} className="px-5 py-2 lg:py-2.5 rounded-full bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors text-sm lg:text-base font-semibold">Cancel</button>
+                                      <button onClick={() => handleSaveEdit(entry.id)} disabled={updateMutation.isPending} className="px-5 py-2 lg:py-2.5 rounded-full bg-gradient-to-r from-purple-500 to-teal-500 hover:from-purple-600 hover:to-teal-600 text-white font-semibold shadow-md hover:shadow-lg transition-all text-sm lg:text-base disabled:opacity-50">
+                                        {updateMutation.isPending ? "Saving..." : "Save Changes"}
+                                      </button>
+                                    </div>
+                                  </div>
+                              ) : showSkeleton ? (
+                                  <div className="pt-3">
+                                      <AnalysisLoadingState sectionBg={sectionBg} cardBorder={cardBorder} />
+                                  </div>
+                              ) : (
+                                  <>
+                                      <ExpandedEntryContent
+                                          entry={displayEntry}
+                                          isDarkMode={isDarkMode}
+                                          sectionBg={sectionBg}
+                                          cardBorder={cardBorder}
+                                          getMoodColorClass={getMoodColorClass}
+                                          getMoodLabel={getMoodLabel}
+                                          getChipStyle={getChipStyle}
+                                          emotionChartOptions={emotionChartOptions}
+                                          importGrowthTipMutation={importGrowthTipMutation}
+                                          isPending={importGrowthTipMutation.isPending}
+                                      />
+                                     <div className="flex flex-wrap justify-end gap-2 lg:gap-3 pt-3 lg:pt-4 border-t border-gray-200 dark:border-gray-700/50 mt-3 lg:mt-4">
+                                        <button
+                                          onClick={() => handleEditClick(entry)}
+                                          className="px-4 py-2 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-500/20 transition flex items-center gap-1.5 text-xs lg:text-sm font-bold shadow-sm"
+                                        >
+                                          <Edit className="w-4 h-4" /> Edit
+                                        </button>
+                                        <button
+                                          onClick={() => handleDeleteClick(entry.id)}
+                                          className="px-4 py-2 rounded-full bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20 transition flex items-center gap-1.5 text-xs lg:text-sm font-bold shadow-sm"
+                                        >
+                                          <Trash2 className="w-4 h-4" /> Delete
+                                        </button>
+                                      </div>
+                                  </>
+                              )}
+                          </div>
+                      )}
                   </div>
-                )}
-              </div>
-            );
+              );
           })}
         </div>
       ))}
@@ -701,7 +730,7 @@ function JournalHistory({ entries, clusterThemes, filterClusterId, filterPhrase,
       <DeleteConfirmationModal isOpen={showDeleteConfirm} onClose={cancelDelete} onConfirm={confirmDelete} theme={theme}  isDeleting={deleteMutation.isPending}/>
 
       {(updateMutation.isError || deleteMutation.isError) && (
-        <div className="fixed bottom-4 right-4 bg-red-100 dark:bg-red-900/80 text-red-800 dark:text-red-200 px-4 py-2 rounded-lg shadow-lg z-50">
+        <div className="fixed bottom-4 right-4 bg-red-100 dark:bg-red-900/90 text-red-800 dark:text-red-200 px-5 py-3 rounded-xl shadow-2xl z-50 font-medium text-sm lg:text-base">
           {updateMutation.isError && `Update failed: ${updateMutation.error.message}`}
           {deleteMutation.isError && `Delete failed: ${deleteMutation.error.message}`}
         </div>

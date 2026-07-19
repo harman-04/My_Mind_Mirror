@@ -50,30 +50,7 @@ public class UserController {
         throw new SecurityException("Authorization header missing or invalid.");
     }
 
-//    @GetMapping("/profile")
-//    public ResponseEntity<?> getUserProfile(HttpServletRequest request) {
-//        try {
-//            UUID userId = getUserIdFromRequest(request);
-//            log.info("Attempting to retrieve profile for user ID: {}", userId);
-//
-//            Optional<User> userOptional = userService.findById(userId);
-//            if (userOptional.isPresent()) {
-//                User user = userOptional.get();
-//                UserProfileResponse response = new UserProfileResponse(user.getId(), user.getUsername(), user.getEmail());
-//                log.info("Profile retrieved successfully for user ID: {}", userId);
-//                return ResponseEntity.ok(response);
-//            } else {
-//                log.warn("User profile not found for ID: {}", userId);
-//                return ResponseEntity.status(HttpStatus.NOT_FOUND).body("User profile not found.");
-//            }
-//        } catch (SecurityException e) {
-//            log.error("Security error during profile retrieval: {}", e.getMessage());
-//            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
-//        } catch (Exception e) {
-//            log.error("An unexpected error occurred while retrieving user profile: {}", e.getMessage(), e);
-//            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("Failed to retrieve user profile due to an internal error.");
-//        }
-//    }
+
 
     @PutMapping("/profile")
     public ResponseEntity<?> updateUserProfile(
@@ -153,16 +130,7 @@ public class UserController {
         }
     }
 
-    // In UserController.java, add:
 
-//    @GetMapping("/roadmap-preferences")
-//    public ResponseEntity<UserRoadmapPreferences> getRoadmapPreferences(HttpServletRequest request) {
-//        UUID userId = getUserIdFromRequest(request);
-//        User user = userService.findById(userId).orElseThrow();
-//        return ResponseEntity.ok(userService.getRoadmapPreferences(user));
-//    }
-
-    // In UserController.java
 
     @PutMapping("/roadmap-preferences")
     public ResponseEntity<?> updateRoadmapPreferences(
@@ -234,36 +202,6 @@ public class UserController {
                     .body("Failed to retrieve full profile due to an internal error.");
         }
     }
-
-//    @GetMapping("/preferences")
-//    public ResponseEntity<UserPreferencesResponse> getUserPreferences(@AuthenticationPrincipal UserDetails userDetails) {
-//        User user = userService.findByUsername(userDetails.getUsername())
-//                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-//        UserPreferences prefs = userService.getUserPreferences(user);
-//        UserPreferencesResponse response = new UserPreferencesResponse(
-//                prefs.getAvailableHoursJson(),
-//                prefs.getTimezone()
-//        );
-//        return ResponseEntity.ok(response);
-//    }
-
-    // In UserController.java, update the PUT /preferences method
-
-//    @PutMapping("/preferences")
-//    public ResponseEntity<UserPreferencesResponse> updateUserPreferences(@AuthenticationPrincipal UserDetails userDetails,
-//                                                                         @RequestBody Map<String, String> request) {
-//        User user = userService.findByUsername(userDetails.getUsername())
-//                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-//        String availableHoursJson = request.get("availableHoursJson");
-//        String timezone = request.get("timezone");
-//        UserPreferences updated = userService.updateUserPreferences(user, availableHoursJson, timezone);
-//
-//        UserPreferencesResponse response = new UserPreferencesResponse(
-//                updated.getAvailableHoursJson(),
-//                updated.getTimezone()
-//        );
-//        return ResponseEntity.ok(response);
-//    }
 
     @PutMapping("/preferences")
     public ResponseEntity<UserPreferencesResponse> updateUserPreferences(@AuthenticationPrincipal UserDetails userDetails,

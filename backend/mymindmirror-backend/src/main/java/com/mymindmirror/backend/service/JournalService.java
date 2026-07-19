@@ -46,7 +46,7 @@ public class JournalService {
     private final ObjectMapper objectMapper;
     private final UserService userService;
     private final ApiKeyService apiKeyService;
-    private final MLServiceClient mlServiceClient;
+//    private final MLServiceClient mlServiceClient;
     private final Map<String, CachedQuestion> questionCache = new ConcurrentHashMap<>();
     private final AsyncJournalAnalysisService asyncJournalAnalysisService;
     private final DailyJournalSummaryRepository dailyJournalSummaryRepository;
@@ -54,7 +54,7 @@ public class JournalService {
     private final AnomalyDetectionService anomalyDetectionService;
     private final EmbeddingGenerationService embeddingGenerationService;
     private final ChatMemoryService chatMemoryService;
-
+    private final GamificationService gamificationService;
 
     @Value("${app.ml-service.url}")
     private String mlServiceBaseUrl;
@@ -110,6 +110,9 @@ public class JournalService {
         // Save the entry to get the UUID
         JournalEntry savedEntry = journalEntryRepository.save(newEntry);
         questionCache.remove(user.getId().toString());
+
+        // 💡 NEW: Reward the user for Journaling!
+        gamificationService.recordActivity(user, "JOURNAL");
 
         // Ensure the async task only starts after the DB transaction has committed
         if (TransactionSynchronizationManager.isActualTransactionActive()) {
@@ -426,60 +429,60 @@ public class JournalService {
      * @param nClusters The desired number of clusters.
      * @return A ClusterResult object containing cluster themes and entry-to-cluster mappings.
      */
-    public ClusterResult triggerJournalClustering(User user, List<String> journalTexts, Integer nClusters) {
-        log.info("Triggering journal clustering for user: {} with {} clusters and {} texts.", user.getUsername(), nClusters, journalTexts.size());
-
-        log.info("NClusters received in JournalService.triggerJournalClustering: {}", nClusters);
-
-        List<JournalEntry> allUserEntries = journalEntryRepository.findByUser(user);
-        allUserEntries.sort(Comparator.comparing(JournalEntry::getCreationTimestamp));
-
-        if (allUserEntries.isEmpty()) {
-            log.warn("No journal entries found for user {}. Cannot perform clustering.", user.getUsername());
-            return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList());
-        }
-
-        if (journalTexts.size() != allUserEntries.size()) {
-            log.error("Mismatch in journalTexts size ({}) and allUserEntries size ({}). Cannot reliably assign cluster IDs.", journalTexts.size(), allUserEntries.size());
-        }
-
-        String apiKey = apiKeyService.getDecryptedApiKey(user);
-        Map<String, Object> requestBody = new HashMap<>();
-        requestBody.put("userId", user.getId().toString());
-        requestBody.put("journalTexts", journalTexts);
-        requestBody.put("nClusters", nClusters);
-
-        ClusterResult clusterResult = null;
-        try {
-            log.info("Sending ML service clustering request");
-            clusterResult = mlServiceClient.clusterJournalEntries(requestBody, apiKey).block();
-            log.info("ML service for journal clustering responded successfully.");
-
-            if (clusterResult != null && clusterResult.getEntryClusters() != null && !clusterResult.getEntryClusters().isEmpty()) {
-                if (clusterResult.getEntryClusters().size() == allUserEntries.size()) {
-                    for (int i = 0; i < allUserEntries.size(); i++) {
-                        JournalEntry entry = allUserEntries.get(i);
-                        entry.setClusterId(clusterResult.getEntryClusters().get(i));
-                        journalEntryRepository.save(entry);
-                    }
-                    log.info("Updated {} journal entries with cluster IDs.", allUserEntries.size());
-                } else {
-                    log.error("Mismatch between number of entries ({}) and cluster IDs received ({}). Cannot reliably assign cluster IDs.", allUserEntries.size(), clusterResult.getEntryClusters().size());
-                }
-            } else {
-                log.warn("Clustering result from ML service was empty or malformed.");
-            }
-        }  catch (Exception e) {
-            log.error("Error during ML service call for clustering: {}", e.getMessage(), e);
-            return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList());
-        }
-        // If clusterResult is null (e.g., Mono.empty().block()), return fallback
-        if (clusterResult == null) {
-            log.warn("ML service returned null cluster result. Returning empty result.");
-            return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList());
-        }
-        return clusterResult;
-    }
+//    public ClusterResult triggerJournalClustering(User user, List<String> journalTexts, Integer nClusters) {
+//        log.info("Triggering journal clustering for user: {} with {} clusters and {} texts.", user.getUsername(), nClusters, journalTexts.size());
+//
+//        log.info("NClusters received in JournalService.triggerJournalClustering: {}", nClusters);
+//
+//        List<JournalEntry> allUserEntries = journalEntryRepository.findByUser(user);
+//        allUserEntries.sort(Comparator.comparing(JournalEntry::getCreationTimestamp));
+//
+//        if (allUserEntries.isEmpty()) {
+//            log.warn("No journal entries found for user {}. Cannot perform clustering.", user.getUsername());
+//            return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList());
+//        }
+//
+//        if (journalTexts.size() != allUserEntries.size()) {
+//            log.error("Mismatch in journalTexts size ({}) and allUserEntries size ({}). Cannot reliably assign cluster IDs.", journalTexts.size(), allUserEntries.size());
+//        }
+//
+//        String apiKey = apiKeyService.getDecryptedApiKey(user);
+//        Map<String, Object> requestBody = new HashMap<>();
+//        requestBody.put("userId", user.getId().toString());
+//        requestBody.put("journalTexts", journalTexts);
+//        requestBody.put("nClusters", nClusters);
+//
+//        ClusterResult clusterResult = null;
+//        try {
+//            log.info("Sending ML service clustering request");
+//            clusterResult = mlServiceClient.clusterJournalEntries(requestBody, apiKey).block();
+//            log.info("ML service for journal clustering responded successfully.");
+//
+//            if (clusterResult != null && clusterResult.getEntryClusters() != null && !clusterResult.getEntryClusters().isEmpty()) {
+//                if (clusterResult.getEntryClusters().size() == allUserEntries.size()) {
+//                    for (int i = 0; i < allUserEntries.size(); i++) {
+//                        JournalEntry entry = allUserEntries.get(i);
+//                        entry.setClusterId(clusterResult.getEntryClusters().get(i));
+//                        journalEntryRepository.save(entry);
+//                    }
+//                    log.info("Updated {} journal entries with cluster IDs.", allUserEntries.size());
+//                } else {
+//                    log.error("Mismatch between number of entries ({}) and cluster IDs received ({}). Cannot reliably assign cluster IDs.", allUserEntries.size(), clusterResult.getEntryClusters().size());
+//                }
+//            } else {
+//                log.warn("Clustering result from ML service was empty or malformed.");
+//            }
+//        }  catch (Exception e) {
+//            log.error("Error during ML service call for clustering: {}", e.getMessage(), e);
+//            return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList());
+//        }
+//        // If clusterResult is null (e.g., Mono.empty().block()), return fallback
+//        if (clusterResult == null) {
+//            log.warn("ML service returned null cluster result. Returning empty result.");
+//            return new ClusterResult(0, Collections.emptyMap(), Collections.emptyList());
+//        }
+//        return clusterResult;
+//    }
 
     /**
      * Fetches all journal entries for a user (used by clustering).
@@ -729,7 +732,7 @@ public class JournalService {
         // 3. Build the secure prompt inside the server
         String prompt =   String.format("""
             Based on the following journal entries from today, their detected emotions, and core concerns,
-            generate a concise (1-3 sentences), empathetic, and insightful "Today's Reflection" or a short, encouraging thought.
+            generate a concise (2-5 sentences), empathetic, and insightful "Today's Reflection" or a short, encouraging thought.
 
             **Language & Style Instruction:**
             - Detect the language(s) and style (casual, formal, emotional) of the journal entries.
@@ -739,7 +742,7 @@ public class JournalService {
             **CRITICAL SYSTEM INSTRUCTION:**
             - DO NOT output your internal thought process, drafts, or constraints.
             - DO NOT use "Input:", "Goal:", or "Draft" labels.
-            - Return ONLY the final 1-3 sentence reflection, with no introductory or concluding remarks.
+            - Return ONLY the final 2-5 sentence reflection, with no introductory or concluding remarks.
 
             Journal Entries (combined): "%s"
             Detected Emotions (averaged): %s

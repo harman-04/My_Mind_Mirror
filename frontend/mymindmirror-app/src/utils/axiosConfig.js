@@ -1,15 +1,23 @@
+// src/utils/axiosConfig.js
 import axios from 'axios';
 import { toast } from 'sonner';
 
-// Optional: Configure default base URL
-axios.defaults.baseURL = 'http://localhost:8080/api';
+// 💡 UPGRADE 1: Environment Variables for Production
+// If VITE_API_BASE_URL is set in your .env file, it uses that. Otherwise, defaults to localhost.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
+axios.defaults.baseURL = API_BASE_URL;
 
 // Request interceptor – add auth token automatically
 axios.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('jwtToken');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // 💡 UPGRADE 2: Security check! Only attach JWT if the request is going to YOUR backend.
+    const isOurBackend = config.url?.startsWith(API_BASE_URL) || config.url?.startsWith('/');
+
+    if (isOurBackend) {
+      const token = localStorage.getItem('jwtToken');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
     }
     return config;
   },
@@ -20,13 +28,18 @@ axios.interceptors.request.use(
 axios.interceptors.response.use(
   (response) => response,
   (error) => {
-    const { response, request } = error;
+    const { response, request, config } = error;
+
+    // 💡 UPGRADE 3: Allow specific API calls to bypass global toasts if they want to handle it themselves
+    if (config?.hideGlobalError) {
+      return Promise.reject(error);
+    }
 
     // Network error (no response from server)
     if (!response) {
       if (request) {
         toast.error('Network error. Cannot reach the server.', {
-          description: 'Please check your internet connection and try again.',
+          description: 'Please check your internet connection and verify the backend is running.',
         });
       } else {
         toast.error('Request setup error', {
@@ -45,12 +58,14 @@ axios.interceptors.response.use(
         toast.error('Bad Request', { description: errorMessage });
         break;
       case 401:
-        toast.error('Session expired', {
-          description: 'Please log in again.',
-        });
-        // Clear token and redirect to login
-        localStorage.removeItem('jwtToken');
-        window.location.href = '/login';
+        // Only toast and redirect if we aren't already on the login page
+        if (window.location.pathname !== '/login') {
+            toast.error('Session expired', {
+            description: 'Please log in again.',
+            });
+            localStorage.removeItem('jwtToken');
+            window.location.href = '/login';
+        }
         break;
       case 403:
         toast.error('Access Denied', {
