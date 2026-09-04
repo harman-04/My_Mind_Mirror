@@ -40,4 +40,11 @@ public interface ScheduledTaskRepository extends JpaRepository<ScheduledTask, UU
     @Modifying
     @Query("DELETE FROM ScheduledTask st WHERE st.user = :user AND st.completed = false AND st.scheduledDate = :today")
     void deleteIncompleteTodayByUser(@Param("user") User user, @Param("today") LocalDate today);
+
+
+    /**
+     * Find all scheduled tasks for a given user.
+     * Used for efficient retrieval of already‑scheduled task IDs.
+     */
+    List<ScheduledTask> findByUser(User user);
 }

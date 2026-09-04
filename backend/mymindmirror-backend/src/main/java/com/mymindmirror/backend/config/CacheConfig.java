@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
+import com.mymindmirror.backend.constants.CacheConstants;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.context.annotation.Bean;
@@ -18,7 +19,6 @@ import org.springframework.data.redis.serializer.RedisSerializationContext;
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 
 import java.time.Duration;
-import java.util.Set;
 
 @Configuration
 @EnableCaching
@@ -30,9 +30,10 @@ public class CacheConfig {
         ObjectMapper objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JavaTimeModule());
 
+        // 🔥 FIX: Use EVERYTHING instead of NON_FINAL
         objectMapper.activateDefaultTyping(
                 BasicPolymorphicTypeValidator.builder().allowIfSubType(Object.class).build(),
-                ObjectMapper.DefaultTyping.NON_FINAL,
+                ObjectMapper.DefaultTyping.EVERYTHING,
                 JsonTypeInfo.As.PROPERTY
         );
         return objectMapper;
@@ -71,13 +72,8 @@ public class CacheConfig {
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(config)
-                .initialCacheNames(Set.of(
-                        "userPreferencesDto",
-                        "gamificationStats",
-                        "keyPhraseFrequencies",
-                        "apiKeyStatus",
-                        "userFullProfile"
-                ))
+                .initialCacheNames(CacheConstants.allCacheNames())
+
                 .build();
     }
 }

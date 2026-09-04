@@ -1,11 +1,4 @@
 package com.mymindmirror.backend.payload.response;
 
-import lombok.AllArgsConstructor;
-import lombok.Data;
+public record ApiKeyResponse(String maskedKey, boolean isSet) {}
 
-@Data
-@AllArgsConstructor
-public class ApiKeyResponse {
-    private String maskedKey;
-    private boolean isSet;
-}

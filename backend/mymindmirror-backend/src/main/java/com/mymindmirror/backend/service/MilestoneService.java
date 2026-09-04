@@ -2,17 +2,17 @@
 package com.mymindmirror.backend.service;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mymindmirror.backend.enums.AITask;
+import com.mymindmirror.backend.enums.GamificationAction;
 import com.mymindmirror.backend.enums.Status;
+import com.mymindmirror.backend.mapper.MilestoneMapper;
 import com.mymindmirror.backend.model.Milestone;
 import com.mymindmirror.backend.model.Task;
 import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.payload.response.GrowthTipParseResponse;
 import com.mymindmirror.backend.payload.response.GrowthTipTask;
 import com.mymindmirror.backend.payload.response.MilestoneResponse;
-import com.mymindmirror.backend.payload.response.TaskResponse;
 import com.mymindmirror.backend.repository.MilestoneRepository;
 import com.mymindmirror.backend.repository.TaskRepository;
 import com.mymindmirror.backend.service.ai.DynamicAiClientService;
@@ -21,13 +21,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.hibernate.Hibernate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.web.reactive.function.client.WebClient;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
-import java.util.stream.Collectors;
-
 /**
  * Service class for managing Milestone-related business logic.
  * Handles creating, retrieving, updating, and deleting milestones,
@@ -40,12 +38,12 @@ public class MilestoneService {
 
 
     private final MilestoneRepository milestoneRepository;
-    private final UserService userService; // To fetch User entities
     private final TaskRepository taskRepository;
-    private final WebClient webClient;
     private final ObjectMapper objectMapper;
     private final DynamicAiClientService aiClientService;
     private final GamificationService gamificationService;
+    private final MilestoneMapper milestoneMapper;
+    private final TransactionTemplate transactionTemplate;
 
 
 
@@ -62,7 +60,7 @@ public class MilestoneService {
         log.info("Creating new milestone for user {}: {}", user.getUsername(), title);
         Milestone milestone = new Milestone(user, title, description, dueDate);
         milestone.setStatus(Status.PENDING); // New milestones start as PENDING
-        gamificationService.recordActivity(user, "MILESTONE_CREATE");
+        gamificationService.recordActivity(user, GamificationAction.MILESTONE_CREATE);
         return milestoneRepository.save(milestone);
     }
 
@@ -115,21 +113,29 @@ public class MilestoneService {
                                      String newTitle, String newDescription,
                                      LocalDate newDueDate, Status newStatus) {
         log.info("Updating milestone {} for user {}", milestoneId, user.getUsername());
-        Milestone existingMilestone = getMilestoneByIdForUser(milestoneId, user)
-                .orElseThrow(() -> new IllegalArgumentException("Milestone not found or not owned by user."));
 
+        // Fetch the milestone directly inside the transaction
+        List<Milestone> milestones = milestoneRepository.findByIdAndUser(milestoneId, user);
+        if (milestones.isEmpty()) {
+            log.warn("Milestone {} not found or not owned by user {}", milestoneId, user.getUsername());
+            throw new IllegalArgumentException("Milestone not found or not owned by user.");
+        }
+        Milestone existingMilestone = milestones.get(0);
+
+        // Apply updates – we do NOT need to initialize lazy collections here
         if (newTitle != null && !newTitle.trim().isEmpty()) {
             existingMilestone.setTitle(newTitle);
         }
-        if (newDescription != null) { // Allow setting to null to clear description
+        if (newDescription != null) {
             existingMilestone.setDescription(newDescription);
         }
-        if (newDueDate != null) { // Allow setting to null to clear due date
+        if (newDueDate != null) {
             existingMilestone.setDueDate(newDueDate);
         }
         if (newStatus != null) {
             existingMilestone.setStatus(newStatus);
         }
+
         return milestoneRepository.save(existingMilestone);
     }
 
@@ -195,13 +201,16 @@ public class MilestoneService {
         return createMilestone(user, title, "Auto-generated from roadmap", null);
     }
 
-    @Transactional
+
+    /**
+     * Parses a growth tip using AI and creates corresponding tasks.
+     * AI call is outside the transaction to prevent holding database connections.
+     */
     public List<Task> importGrowthTipAsTask(User user, String tipText) {
-        // 1. Call AI to parse tip (using the dynamic client, not Flask)
+        // 1. Call AI (outside any transaction)
         String prompt = buildParseGrowthTipPrompt(tipText);
         GrowthTipParseResponse response;
         try {
-            // Added AITask.PARSE_GROWTH_TIP here!
             response = aiClientService.generateStructured(prompt, GrowthTipParseResponse.class, user.getId(), AITask.PARSE_GROWTH_TIP);
         } catch (Exception e) {
             log.error("Failed to parse growth tip via AI", e);
@@ -212,38 +221,45 @@ public class MilestoneService {
             throw new RuntimeException("No tasks extracted from growth tip");
         }
 
-        // 2. Get or create "AI Growth Tips" milestone
-        Milestone milestone = getOrCreateMilestoneByTitle(user, "AI Growth Tips");
+        // 2. Perform all DB operations in a short transaction
+        return transactionTemplate.execute(status -> {
+            // a) Get or create the milestone
+            Milestone milestone = getOrCreateMilestoneByTitle(user, "AI Growth Tips");
 
-        List<Task> createdTasks = new ArrayList<>();
+            // b) Build task list
+            List<Task> tasksToSave = new ArrayList<>();
+            for (GrowthTipTask taskData : response.tasks()) {
+                Task task = new Task();
+                task.setMilestone(milestone);
+                task.setDescription(taskData.title());
+                task.setDetails(taskData.description() != null ? taskData.description() : "");
+                task.setStatus(Status.PENDING);
+                task.setCreationTimestamp(LocalDateTime.now());
+                task.setDueDate(LocalDate.now().plusDays(3));
 
-        // 3. Create a task for each extracted action item
-        for (GrowthTipTask taskData : response.tasks()) {
-            Task task = new Task();
-            task.setMilestone(milestone);
-            task.setDescription(taskData.title());
-            task.setDetails(taskData.description());
-            task.setStatus(Status.PENDING);
-            task.setCreationTimestamp(LocalDateTime.now());
-
-            if (taskData.subtasks() != null && !taskData.subtasks().isEmpty()) {
-                try {
-                    String subtasksJson = objectMapper.writeValueAsString(taskData.subtasks());
-                    task.setSubtasksJson(subtasksJson);
-                } catch (JsonProcessingException e) {
-                    log.warn("Failed to serialize subtasks for task {}", taskData.title(), e);
-                    task.setSubtasksJson("[]");
+                if (taskData.subtasks() != null && !taskData.subtasks().isEmpty()) {
+                    try {
+                        String subtasksJson = objectMapper.writeValueAsString(taskData.subtasks());
+                        task.setSubtasksJson(subtasksJson);
+                    } catch (JsonProcessingException e) {
+                        log.warn("Failed to serialize subtasks for task {}", taskData.title(), e);
+                        task.setSubtasksJson("[]");
+                    }
+                } else {
+                    task.setSubtasksJson(null);
                 }
-            } else {
-                task.setSubtasksJson(null);
+                tasksToSave.add(task);
             }
 
-            createdTasks.add(taskRepository.save(task));
-        }
+            // c) Batch save all tasks
+            List<Task> savedTasks = taskRepository.saveAll(tasksToSave);
 
-        updateMilestoneStatusBasedOnTasks(milestone.getId());
+            // d) Update milestone status based on new tasks
+            updateMilestoneStatusBasedOnTasks(milestone.getId());
 
-        return createdTasks;
+            // e) Return the saved tasks
+            return savedTasks;
+        });
     }
 
     private String buildParseGrowthTipPrompt(String tipText) {
@@ -280,64 +296,24 @@ public class MilestoneService {
     @Transactional(readOnly = true)
     public List<MilestoneResponse> getAllMilestonesForUserAsDTO(User user) {
         List<Milestone> milestones = milestoneRepository.findByUserOrderByCreationDateDesc(user);
-        return milestones.stream().map(this::toMilestoneResponse).collect(Collectors.toList());
+        return milestoneMapper.toResponseList(milestones); // ✅ REPLACED whole stream block
     }
 
     public MilestoneResponse getMilestoneResponseById(UUID milestoneId, User user) {
         Milestone milestone = getMilestoneByIdForUser(milestoneId, user)
                 .orElseThrow(() -> new IllegalArgumentException("Milestone not found"));
-        return toMilestoneResponse(milestone);
+        return milestoneMapper.toResponse(milestone); // ✅ REPLACED
     }
 
     public MilestoneResponse createMilestoneAsDTO(User user, String title, String description, LocalDate dueDate) {
         Milestone milestone = createMilestone(user, title, description, dueDate);
-        return toMilestoneResponse(milestone);
+        return milestoneMapper.toResponse(milestone); // ✅ REPLACED
     }
 
     public MilestoneResponse updateMilestoneAsDTO(UUID milestoneId, User user,
                                                   String title, String description,
                                                   LocalDate dueDate, Status status) {
         Milestone updated = updateMilestone(milestoneId, user, title, description, dueDate, status);
-        return toMilestoneResponse(updated);
-    }
-
-    private MilestoneResponse toMilestoneResponse(Milestone milestone) {
-        MilestoneResponse dto = new MilestoneResponse();
-        dto.setId(milestone.getId());
-        dto.setTitle(milestone.getTitle());
-        dto.setDescription(milestone.getDescription());
-        dto.setCreationDate(milestone.getCreationDate());
-        dto.setDueDate(milestone.getDueDate());
-        dto.setStatus(milestone.getStatus());
-        dto.setCompletionPercentage(milestone.getCompletionPercentage());
-        if (milestone.getTasks() != null) {
-            List<TaskResponse> taskDTOs = milestone.getTasks().stream()
-                    .map(this::toTaskResponse)
-                    .collect(Collectors.toList());
-            dto.setTasks(taskDTOs);
-        }
-        return dto;
-    }
-
-    private TaskResponse toTaskResponse(Task task) {
-        TaskResponse dto = new TaskResponse();
-        dto.setId(task.getId());
-        dto.setDescription(task.getDescription());
-        dto.setCreationTimestamp(task.getCreationTimestamp());
-        dto.setDueDate(task.getDueDate());
-        dto.setStatus(task.getStatus());
-        dto.setDetails(task.getDetails());
-        dto.setRoadmapTaskId(task.getRoadmapTaskId());
-        if (task.getSubtasksJson() != null) {
-            try {
-                dto.setSubtasks(objectMapper.readValue(task.getSubtasksJson(),
-                        new TypeReference<List<String>>() {}));
-            } catch (JsonProcessingException e) {
-                dto.setSubtasks(List.of());
-            }
-        } else {
-            dto.setSubtasks(List.of());
-        }
-        return dto;
+        return milestoneMapper.toResponse(updated); // ✅ REPLACED
     }
 }

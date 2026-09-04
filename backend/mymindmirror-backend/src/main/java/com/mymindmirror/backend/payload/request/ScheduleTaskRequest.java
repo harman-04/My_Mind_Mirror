@@ -1,20 +1,6 @@
 package com.mymindmirror.backend.payload.request;
-
-import lombok.Data;
-
 import java.util.List;
 
-@Data
-public class ScheduleTaskRequest {
-    private List<TaskItem> tasks;
-    private String availableHours; // JSON string
-
-    @Data
-    public static class TaskItem {
-        private String id;
-        private String title;
-        private Double estimatedHours;
-        private String dueDate;
-        private String priority;
-    }
+public record ScheduleTaskRequest(List<TaskItem> tasks, String availableHours) {
+    public record TaskItem(String id, String title, Double estimatedHours, String dueDate, String priority) {}
 }

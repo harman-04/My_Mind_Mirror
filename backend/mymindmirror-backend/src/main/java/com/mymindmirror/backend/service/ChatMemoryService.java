@@ -20,15 +20,17 @@ public class ChatMemoryService {
 
 
     // Standard POJO representation of a message turn
+//
+//    @Getter
+//    @Setter
+//    @NoArgsConstructor
+//    @AllArgsConstructor
+//    public static class ChatMessage implements Serializable {
+//        private String role; // "user" or "model"
+//        private String content;
+//}
+    public record ChatMessage(String role, String content) implements Serializable {}
 
-    @Getter
-    @Setter
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class ChatMessage implements Serializable {
-        private String role; // "user" or "model"
-        private String content;
-    }
 
     private String buildKey(UUID userId, String sessionId) {
         return KEY_PREFIX + userId.toString() + ":" + sessionId;

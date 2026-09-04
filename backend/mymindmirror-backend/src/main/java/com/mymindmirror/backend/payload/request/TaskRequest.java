@@ -1,16 +1,22 @@
 package com.mymindmirror.backend.payload.request;
 
 import com.mymindmirror.backend.enums.Status;
-import lombok.Data;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 
 import java.time.LocalDate;
 import java.util.List;
 
-@Data
-public class TaskRequest {
-    private String description;
-    private LocalDate dueDate;
-    private Status status;
-    private String details;       // new
-    private List<String> subtasks; // new – will be serialized to JSON
-}
+public record TaskRequest(
+//        @NotBlank(message = "Task description cannot be empty")
+        String description,
+
+        LocalDate dueDate,
+
+//        @NotNull(message = "Task status is required")
+        Status status,
+
+        String details,
+
+        List<String> subtasks
+) {}

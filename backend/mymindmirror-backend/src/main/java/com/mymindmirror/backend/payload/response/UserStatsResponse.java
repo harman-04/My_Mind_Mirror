@@ -1,26 +1,16 @@
 package com.mymindmirror.backend.payload.response;
-
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import java.time.LocalDate;
 import java.util.Set;
 
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class UserStatsResponse {
-    private int currentStreak;
-    private int longestStreak;
-    private LocalDate lastActiveDate;
-    private Set<String> badges;
-    private int totalTasksCompleted;
-
-    // --- 💡 NEW: RPG Leveling & Counters exposed to UI ---
-    private int experiencePoints;
-    private int level;
-    private int totalJournalEntries;
-    private int totalChats;
-    private int schedulesGenerated;
-}
+public record UserStatsResponse(
+        int currentStreak,
+        int longestStreak,
+        LocalDate lastActiveDate,
+        Set<String> badges,
+        int totalTasksCompleted,
+        int experiencePoints,
+        int level,
+        int totalJournalEntries,
+        int totalChats,
+        int schedulesGenerated
+) {}

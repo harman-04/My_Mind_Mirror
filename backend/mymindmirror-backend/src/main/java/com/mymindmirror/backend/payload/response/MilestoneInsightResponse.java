@@ -1,20 +1,15 @@
 package com.mymindmirror.backend.payload.response;
-
 import com.mymindmirror.backend.enums.InsightStatus;
 import java.util.List;
 
-/**
- * DTO for receiving AI-generated milestone insights natively from Spring AI.
- */
 public record MilestoneInsightResponse(
         String remainingWork,
         String performanceAssessment,
         List<String> tips,
         String encouragement,
         List<String> suggestedNewTasks,
-        InsightStatus status // Native Jackson mapping will convert the string "SUCCESS" to this Enum
+        InsightStatus status
 ) {
-    // Static factory method for fallback errors
     public static MilestoneInsightResponse createFallback() {
         return new MilestoneInsightResponse(
                 "Unable to determine remaining work.",

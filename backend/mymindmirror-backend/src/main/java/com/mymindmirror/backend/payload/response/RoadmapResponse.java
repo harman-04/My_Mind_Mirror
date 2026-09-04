@@ -1,60 +1,25 @@
 package com.mymindmirror.backend.payload.response;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class RoadmapResponse {
-    private UUID id;
-    private String title;
-    private String description;
-    private LocalDate createdAt;
-    private String status;
-    private Integer durationWeeks;
-    private List<TaskDto> tasks;
-    private List<ResourceDto> resources;
-    private List<MilestoneDto> milestones;
-    private Integer generatedWeeks;
-    private Integer originalDurationValue;
-    private String originalDurationUnit;
-
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class TaskDto {
-        private UUID id;
-        private String description;
-        private Integer dayNumber;
-        private Integer weekNumber;
-        private Boolean completed;
-        private String taskType;
-        private String details;
-        private List<String> subtasks;
-        private Boolean importedToMilestone;
-    }
-
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class ResourceDto {
-        private UUID id;
-        private String name;
-        private String url;
-        private String type;
-    }
-
-    @Data
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class MilestoneDto {
-        private UUID id;
-        private String name;
-        private Integer weekNumber;
-        private Boolean achieved;
-    }
+public record RoadmapResponse(
+        UUID id,
+        String title,
+        String description,
+        LocalDate createdAt,
+        String status,
+        Integer durationWeeks,
+        List<TaskDto> tasks,
+        List<ResourceDto> resources,
+        List<MilestoneDto> milestones,
+        Integer generatedWeeks,
+        Integer originalDurationValue,
+        String originalDurationUnit
+) {
+    public record TaskDto(UUID id, String description, Integer dayNumber, Integer weekNumber,
+                          Boolean completed, String taskType, String details, List<String> subtasks,
+                          Boolean importedToMilestone) {}
+    public record ResourceDto(UUID id, String name, String url, String type) {}
+    public record MilestoneDto(UUID id, String name, Integer weekNumber, Boolean achieved) {}
 }

@@ -31,7 +31,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
-class MlControllerTest {
+class AnalyticsControllerTest {
 
     @Autowired
     private MockMvc mockMvc;

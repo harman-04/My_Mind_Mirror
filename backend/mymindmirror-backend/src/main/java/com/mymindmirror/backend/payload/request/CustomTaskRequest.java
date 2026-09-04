@@ -1,14 +1,21 @@
 package com.mymindmirror.backend.payload.request;
 
-import lombok.Data;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import java.time.LocalDate;
 
-@Data
-public class CustomTaskRequest {
-    private String title;
-    private String description;
-    private LocalDate dueDate;
-    private Double estimatedHours;
-    private String priority;
-    private Boolean completed;
-}
+public record CustomTaskRequest(
+        @NotBlank(message = "Title cannot be empty")
+        String title,
+
+        String description,
+
+        LocalDate dueDate,
+
+        @NotNull(message = "Estimated hours are required")
+        Double estimatedHours,
+
+        String priority,
+
+        Boolean completed
+) {}

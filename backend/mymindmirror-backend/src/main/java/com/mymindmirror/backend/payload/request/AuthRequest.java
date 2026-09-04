@@ -1,14 +1,10 @@
-// AuthRequest.java
 package com.mymindmirror.backend.payload.request;
 
-import lombok.Data;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
 
-/**
- * DTO for authentication requests (login and registration).
- */
-@Data // Lombok annotation for getters, setters, equals, hashCode, toString
-public class AuthRequest {
-    private String username;
-    private String email; // Only required for registration
-    private String password;
-}
+public record AuthRequest(
+        @NotBlank(message = "Username is required") String username,
+        @Email(message = "Email should be valid") String email, // Only required for registration
+        @NotBlank(message = "Password is required") String password
+) {}
