@@ -7,7 +7,6 @@ import { toast } from 'sonner';
 import { useInfiniteQuery } from '@tanstack/react-query';
 
 const API_BASE_URL = 'http://localhost:8080/api';
-// const FLASK_API_URL = 'http://localhost:5000'; // ⭐ REMOVED: No direct Flask API calls from frontend ⭐
 
 const getToken = () => localStorage.getItem('jwtToken');
 

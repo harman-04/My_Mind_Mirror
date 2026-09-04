@@ -1,3 +1,4 @@
+// src/components/DailyInspiration.jsx
 import React, { useState, useEffect } from 'react';
 import { WandSparkles, RefreshCw } from 'lucide-react';
 import { getRandomPrompt } from '../data/writingPrompts';
@@ -5,7 +6,7 @@ import { useTheme } from '../contexts/ThemeContext';
 
 const STORAGE_KEY = 'usedPrompts';
 
-function WritingPrompt() {
+function DailyInspiration() {
   const [prompt, setPrompt] = useState('');
   const [usedPrompts, setUsedPrompts] = useState([]);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -88,4 +89,4 @@ function WritingPrompt() {
   );
 }
 
-export default React.memo(WritingPrompt);
+export default React.memo(DailyInspiration);

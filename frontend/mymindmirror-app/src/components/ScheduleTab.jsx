@@ -1,4 +1,3 @@
-// src/pages/SchedulePage.jsx
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { Calendar, dateFnsLocalizer } from 'react-big-calendar';
@@ -15,16 +14,15 @@ import {
   ArrowUp, ArrowDown, BarChart3, ChevronLeft, ChevronRight, CalendarOff, AlertTriangle,
   Coffee, Utensils, Activity, Briefcase, Zap, ChevronDown
 } from 'lucide-react';
-import { SkeletonSchedule } from '../components/Skeleton';
-import PremiumInput from '../components/PremiumInput'; // 🌟 NEW: Import Design System
-
+import { SkeletonSchedule } from './Skeleton';
+import PremiumInput from './PremiumInput';
+import FadeIn from './FadeIn';
 import {
   useScheduledTasks, useCustomTasks, useGenerateSchedule,
   useMoveScheduledTask, useCompleteScheduledTask, useScheduleCustomTask,
   useCreateCustomTask, useUpdateCustomTask, useDeleteCustomTask,
   useReoptimizeSchedule
 } from '../hooks/useScheduleData';
-import FadeIn from '../components/FadeIn';
 
 const DnDCalendar = withDragAndDrop(Calendar);
 const locales = { 'en-US': enUS };
@@ -58,7 +56,6 @@ const TaskDetailModal = ({ task, isOpen, onClose, onComplete, onEdit, onDelete, 
   const PriorityIcon = priorityConfig.icon;
   const isOverdue = task.dueDate && new Date(task.dueDate) < new Date() && !task.completed;
 
-  // 🌟 FIX: Stripped blur, applied Master Palette Layer 1
   const bgClass = theme === 'dark' ? 'bg-[#1A162F]/95' : 'bg-white/95';
   const borderClass = theme === 'dark' ? 'border-white/10' : 'border-slate-200/80';
   const sectionBgClass = theme === 'dark' ? 'bg-[#131127]/80' : 'bg-slate-50/80';
@@ -75,9 +72,10 @@ const TaskDetailModal = ({ task, isOpen, onClose, onComplete, onEdit, onDelete, 
   const BlockIcon = blockInfo.icon;
 
   return ReactDOM.createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.6)' }}>
+    // 🌟 FIX: Cleaned up inline styles to Tailwind standard
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 transition-opacity duration-300">
       <div className="absolute inset-0" onClick={onClose} aria-hidden="true" />
-      <div className={`relative max-w-md w-full rounded-2xl lg:rounded-3xl ${bgClass} border ${borderClass} shadow-2xl overflow-hidden transform transition-all duration-300 scale-100 animate-in fade-in zoom-in`}>
+      <div className={`relative max-w-md w-full rounded-2xl lg:rounded-3xl ${bgClass} border ${borderClass} shadow-2xl overflow-hidden transform transition-all duration-300 animate-in fade-in zoom-in`}>
         <div className={`flex justify-between items-center p-5 lg:p-6 border-b ${borderClass} ${sectionBgClass}`}>
           <h3 className="text-lg lg:text-xl font-poppins font-extrabold bg-gradient-to-r from-purple-600 to-teal-600 dark:from-purple-400 dark:to-teal-400 bg-clip-text text-transparent">Schedule Details</h3>
           <button onClick={onClose} className="p-1.5 lg:p-2 rounded-full hover:bg-slate-200 dark:hover:bg-white/10 transition text-slate-500 dark:text-gray-400"><X className="w-5 h-5" /></button>
@@ -134,7 +132,7 @@ const TaskDetailModal = ({ task, isOpen, onClose, onComplete, onEdit, onDelete, 
                <button onClick={() => { onDelete(task.customTaskId || task.id, task.title); onClose(); }} className="px-5 py-2.5 rounded-full bg-rose-500 hover:bg-rose-600 text-white font-bold active:scale-95 transition-all shadow-md">Delete</button>
              </>
           )}
-          <button onClick={onClose} className={`px-5 py-2.5 rounded-full font-bold active:scale-95 transition-all ${theme === 'dark' ? 'bg-black/20 text-gray-200 hover:bg-black/40 border border-white/10' : 'bg-slate-200 text-slate-800 hover:bg-slate-300'}`}>Close</button>
+          <button onClick={onClose} className={`px-5 py-2.5 rounded-full font-bold active:scale-95 transition-all ${theme === 'dark' ? 'bg-white/5 text-gray-200 hover:bg-white/10 border border-white/10' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200/80'}`}>Close</button>
         </div>
       </div>
     </div>,
@@ -162,7 +160,8 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, isLoading })
   const borderClass = theme === 'dark' ? 'border-white/10' : 'border-slate-200/80';
 
   return ReactDOM.createPortal(
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4" style={{ backgroundColor: 'rgba(0,0,0,0.5)' }}>
+    // 🌟 FIX: Cleaned up inline styles to Tailwind standard
+    <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 transition-opacity duration-300">
       <div className="absolute inset-0" onClick={!isLoading ? onClose : undefined} aria-hidden="true" />
       <div className={`relative max-w-sm w-full rounded-2xl lg:rounded-3xl ${bgClass} border ${borderClass} shadow-2xl p-6 lg:p-8 transform transition-all duration-300 animate-in fade-in zoom-in`}>
         <div className="flex flex-col items-center text-center">
@@ -172,7 +171,7 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, isLoading })
           <h3 className="text-xl lg:text-2xl font-poppins font-bold text-slate-900 dark:text-gray-100 tracking-tight mb-2">{title}</h3>
           <p className="text-sm lg:text-base font-medium text-slate-500 dark:text-gray-400 mb-6 lg:mb-8">{message}</p>
           <div className="flex w-full gap-3">
-            <button onClick={onClose} disabled={isLoading} className={`flex-1 py-2.5 lg:py-3 rounded-full font-bold transition-all disabled:opacity-50 active:scale-95 ${theme === 'dark' ? 'bg-black/20 text-gray-200 hover:bg-black/40 border border-white/10' : 'bg-slate-200 text-slate-800 hover:bg-slate-300'}`}>Cancel</button>
+            <button onClick={onClose} disabled={isLoading} className={`flex-1 py-2.5 lg:py-3 rounded-full font-bold transition-all disabled:opacity-50 active:scale-95 ${theme === 'dark' ? 'bg-white/5 text-gray-200 hover:bg-white/10 border border-white/10' : 'bg-slate-100 text-slate-700 hover:bg-slate-200 border border-slate-200/80'}`}>Cancel</button>
             <button onClick={onConfirm} disabled={isLoading} className="flex-1 py-2.5 lg:py-3 rounded-full bg-red-600 hover:bg-red-700 text-white font-bold active:scale-95 transition-all flex items-center justify-center gap-2 disabled:opacity-70 shadow-md">
               {isLoading ? <Loader className="w-4 h-4 lg:w-5 lg:h-5 animate-spin" /> : <Trash2 className="w-4 h-4 lg:w-5 lg:h-5" />}
               {isLoading ? 'Deleting...' : 'Delete'}
@@ -231,7 +230,6 @@ function ScheduleTab() {
   const [newCustomTask, setNewCustomTask] = useState({
     title: '', description: '', dueDate: '', estimatedHours: 1, priority: 'MEDIUM'
   });
-// 🌟 NEW: Localized error state to trigger PremiumInput red glow
   const [taskErrors, setTaskErrors] = useState({});
   const [filterPriority, setFilterPriority] = useState('ALL');
   const [filterCompleted, setFilterCompleted] = useState('ALL');
@@ -241,9 +239,8 @@ function ScheduleTab() {
   const [taskToDelete, setTaskToDelete] = useState(null);
   const [scheduleMode, setScheduleMode] = useState('all');
 
-const customFormRef = useRef(null);
+  const customFormRef = useRef(null);
 
-  // 🌟 FIX: Grab isLoadingEvents and isLoadingCustomTasks for the initial page load!
   const { data: events = [], isFetching: isFetchingEvents, isLoading: isLoadingEvents } = useScheduledTasks(dateRange[0], dateRange[1]);
   const { data: customTasks = [], isLoading: isLoadingCustomTasks } = useCustomTasks();
 
@@ -339,7 +336,7 @@ const customFormRef = useRef(null);
 
 const handleAddCustom = (e) => {
     e.preventDefault();
-    setTaskErrors({}); // 🌟 Clear old errors
+    setTaskErrors({});
 
     const hrs = parseFloat(newCustomTask.estimatedHours);
     let errors = {};
@@ -362,7 +359,7 @@ const handleAddCustom = (e) => {
 
   const handleUpdateCustom = (e) => {
     e.preventDefault();
-    setTaskErrors({}); // 🌟 Clear old errors
+    setTaskErrors({});
 
     const hrs = parseFloat(newCustomTask.estimatedHours);
     let errors = {};
@@ -414,9 +411,7 @@ const handleAddCustom = (e) => {
       : customTasks.filter(task => task.priority === filterPriority);
   }, [customTasks, filterPriority]);
 
-
-// 🌟 UX UPGRADE: Unified Enterprise Palette
-// ==========================================================================
+  // ==========================================================================
   // 🌟 MASTER ELEVATION PALETTE (3-Layer Architecture)
   // ==========================================================================
   // Layer 1: Base Cards (Header, Filters, Calendar Container)
@@ -432,35 +427,31 @@ const handleAddCustom = (e) => {
   const textSecondary = isDarkMode ? 'text-gray-400' : 'text-slate-500';
 
   // Input specific layers
-  const inputBgLayer1 = isDarkMode ? 'bg-[#131127]/80' : 'bg-slate-50';
+  const inputBgLayer1 = isDarkMode ? 'bg-[#131127]' : 'bg-slate-50'; // 🌟 FIX: Removed /80 opacity to make it solidly punched in!
   const inputBorder = isDarkMode ? 'border-white/10' : 'border-slate-300';
   const inputFocusRing = 'focus:ring-2 focus:ring-purple-500 focus:border-purple-500 dark:focus:ring-teal-400 dark:focus:border-teal-400';
 
   // Pill Buttons
-  // Pill Buttons
-    const pillActiveClass = 'bg-gradient-to-r from-purple-500 to-teal-500 text-white border border-transparent shadow-sm';
-    // 🌟 FIX: Scrubbed the last traces of "gray" out of the inactive pill class!
-    const pillInactiveClass = isDarkMode ? 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10 hover:text-slate-200 transition-colors' : 'bg-slate-100 text-slate-600 border border-slate-200/80 hover:bg-slate-200 hover:text-slate-800 transition-colors';
+  const pillActiveClass = 'bg-gradient-to-r from-purple-500 to-teal-500 text-white border border-transparent shadow-sm';
+  const pillInactiveClass = isDarkMode ? 'bg-white/5 text-slate-400 border border-white/10 hover:bg-white/10 hover:text-slate-200 transition-colors' : 'bg-slate-100 text-slate-600 border border-slate-200/80 hover:bg-slate-200 hover:text-slate-800 transition-colors';
+
   const isLoadingInitial = isLoadingEvents || isLoadingCustomTasks;
     if (isLoadingInitial) {
         return <SkeletonSchedule />;
     }
+
 return (
     <div className="w-full space-y-6 sm:space-y-8 relative pb-10">
-
-      {isFetchingEvents && (
-        <div className={`fixed top-24 right-6 lg:right-10 z-50 ${cardBg} p-2.5 rounded-full border ${cardBorder}`}>
-          <Loader className="w-5 h-5 animate-spin text-purple-500 dark:text-teal-400" />
-        </div>
-      )}
 
       {/* Header */}
       <FadeIn delay={0.1} direction="down" fullWidth>
         <div className={`rounded-2xl lg:rounded-3xl ${cardBg} border ${cardBorder} p-6 lg:p-8 transition-shadow hover:shadow-md mt-4`}>
           <div className="flex flex-col xl:flex-row xl:items-center xl:justify-between gap-6">
             <div className="min-w-0">
-                <h1 className="text-2xl lg:text-3xl font-poppins font-extrabold tracking-tight bg-gradient-to-r from-purple-600 to-teal-500 dark:from-purple-400 dark:to-teal-400 bg-clip-text text-transparent leading-tight">
+                {/* 🌟 FIX: The Spinner is now perfectly inline with the title instead of floating wildly! */}
+                <h1 className="text-2xl lg:text-3xl font-poppins font-extrabold tracking-tight bg-gradient-to-r from-purple-600 to-teal-500 dark:from-purple-400 dark:to-teal-400 bg-clip-text text-transparent leading-tight flex items-center gap-3">
                   Smart Timetable
+                  {isFetchingEvents && <Loader className="w-5 h-5 lg:w-6 lg:h-6 animate-spin text-teal-500" />}
                 </h1>
                 <p className={`text-sm lg:text-base ${textSecondary} mt-1.5 font-medium`}>
                   AI-powered scheduling · Drag tasks to reschedule
@@ -563,7 +554,7 @@ return (
               <PremiumInput
                   label="Task Title"
                   required={true}
-                  inputBgClass={inputBgLayer1} // 🌟 Passed Layer 1 Background
+                  inputBgClass={inputBgLayer1}
                   placeholder="e.g., Workout, Team Meeting"
                   value={newCustomTask.title}
                   onChange={(e) => {
@@ -576,14 +567,14 @@ return (
               <PremiumInput
                   label="Description"
                   placeholder="Details (optional)"
-                  inputBgClass={inputBgLayer1} // 🌟 Passed Layer 1 Background
+                  inputBgClass={inputBgLayer1}
                   value={newCustomTask.description}
                   onChange={(e) => setNewCustomTask(prev => ({ ...prev, description: e.target.value }))}
               />
               <PremiumInput
                   type="date"
                   label="Due Date"
-                  inputBgClass={inputBgLayer1} // 🌟 Passed Layer 1 Background
+                  inputBgClass={inputBgLayer1}
                   value={newCustomTask.dueDate}
                   onChange={(e) => setNewCustomTask(prev => ({ ...prev, dueDate: e.target.value }))}
               />
@@ -593,7 +584,7 @@ return (
                   min="0.5"
                   max="24"
                   label="Est. Hours"
-                  inputBgClass={inputBgLayer1} // 🌟 Passed Layer 1 Background
+                  inputBgClass={inputBgLayer1}
                   value={newCustomTask.estimatedHours}
                   onChange={(e) => {
                       setNewCustomTask(prev => ({ ...prev, estimatedHours: parseFloat(e.target.value) || '' }));
@@ -624,7 +615,8 @@ return (
           </div>
         </FadeIn>
       )}
-   {/* Calendar Wrapper */}
+
+       {/* Calendar Wrapper */}
        <FadeIn delay={0.4} direction="up" fullWidth>
          <div className={`h-[600px] md:h-[700px] mb-8 rounded-2xl lg:rounded-3xl overflow-x-auto custom-scrollbar border ${cardBorder} relative ${cardBg}`}>
            {filteredEvents.length === 0 && !isFetchingEvents && (
@@ -671,15 +663,14 @@ return (
                          const isCompleted = props.event.resource?.completed;
                          const blockType = props.event.resource?.blockType;
 
-                         let dotColor = isDarkMode ? '#2dd4bf' : '#14b8a6'; // Teal
+                         let dotColor = isDarkMode ? '#2dd4bf' : '#14b8a6';
 
- if (isCompleted) dotColor = '#10b981'; // Emerald
-                       else if (blockType === 'MEAL') dotColor = '#f59e0b'; // Amber
-                       else if (blockType === 'BREAK') dotColor = '#10b981'; // Emerald
-                       else if (blockType === 'ROUTINE') dotColor = '#2dd4bf'; // Teal
-                       else if (priority === 'HIGH') dotColor = '#f43f5e'; // Rose
-                       // 🌟 FIX: Matched agenda dot color brightness
-                       else if (priority === 'LOW') dotColor = isDarkMode ? '#94a3b8' : '#64748b'; // Slate
+                       if (isCompleted) dotColor = '#10b981';
+                       else if (blockType === 'MEAL') dotColor = '#f59e0b';
+                       else if (blockType === 'BREAK') dotColor = '#10b981';
+                       else if (blockType === 'ROUTINE') dotColor = '#2dd4bf';
+                       else if (priority === 'HIGH') dotColor = '#f43f5e';
+                       else if (priority === 'LOW') dotColor = isDarkMode ? '#94a3b8' : '#64748b';
                          return (
                          <div className="flex items-center gap-2">
                              <div style={{ backgroundColor: dotColor }} className="w-3 h-3 rounded-full shrink-0 shadow-sm"></div>
@@ -694,21 +685,20 @@ return (
                          return { style: { backgroundColor: 'transparent', padding: 0, boxShadow: 'none' } };
                      }
 
-                     let bgColor = isDarkMode ? '#0d9488' : '#14b8a6'; // Teal Base
+                     let bgColor = isDarkMode ? '#0d9488' : '#14b8a6';
                      const blockType = event.resource?.blockType;
 
                      if (event.resource?.completed) {
-                     bgColor = '#10b981'; // Emerald
+                     bgColor = '#10b981';
                      } else if (blockType === 'MEAL') {
-                     bgColor = '#f59e0b'; // Amber
+                     bgColor = '#f59e0b';
                      } else if (blockType === 'BREAK') {
-                     bgColor = '#10b981'; // Emerald
+                     bgColor = '#10b981';
                      } else if (blockType === 'ROUTINE') {
-                     bgColor = '#0d9488'; // Teal
+                     bgColor = '#0d9488';
                 } else {
-                  if (event.resource?.priority === 'HIGH') bgColor = '#e11d48'; // Rose
-                  // 🌟 FIX: Brightened Dark Mode Slate (#475569) slightly so it pops off the #131127 calendar grid!
-                  else if (event.resource?.priority === 'LOW') bgColor = isDarkMode ? '#475569' : '#64748b'; // Slate
+                  if (event.resource?.priority === 'HIGH') bgColor = '#e11d48';
+                  else if (event.resource?.priority === 'LOW') bgColor = isDarkMode ? '#475569' : '#64748b';
                   }
 
                      return {
@@ -772,7 +762,6 @@ return (
                  key={task.id}
                  draggable={!task.completed}
                  onDragStart={() => handleDragStart(task)}
-                 // 🌟 FIX: Applied Layer 2 (sectionBg) to individual tasks!
                  className={`cursor-grab active:cursor-grabbing flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 lg:p-5 rounded-2xl transition-all shadow-sm border ${sectionBorder} ${
                    task.completed
                      ? `bg-slate-50 dark:bg-black/10 opacity-60`
@@ -819,7 +808,6 @@ return (
          />
 
          <style>{`
-           /* 🌟 FIX: Synced inline React Big Calendar CSS to Master Palette Slate/Dark hexes */
            .rbc-show-more {
                color: ${isDarkMode ? '#2DD4BF' : '#7C3AED'} !important;
                font-weight: 700;
