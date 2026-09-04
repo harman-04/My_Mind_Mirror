@@ -1,56 +1,72 @@
 // src/contexts/ThemeContext.jsx
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo } from 'react';
 
 // 1. Create the Context
-export const ThemeContext = createContext(null); // Explicitly set default value to null for clarity
+export const ThemeContext = createContext(null);
 
-// 2. Create the custom hook to use the ThemeContext
-//    This hook MUST be exported so other components can import and use it.
-//    It should be defined *before* the ThemeProvider for robust module evaluation.
+// 2. Create the custom hook
 export const useTheme = () => {
   const context = useContext(ThemeContext);
-  if (context === undefined) {
-    // This error indicates useTheme was called outside of a ThemeProvider
+  if (context === undefined || context === null) {
     throw new Error('useTheme must be used within a ThemeProvider');
   }
   return context;
 };
 
 // 3. Create the Provider Component
-//    This component MUST be exported so it can wrap your application in main.jsx.
 export const ThemeProvider = ({ children }) => {
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) {
-      return savedTheme;
-    }
-    // Check user's system preference only if no theme is saved
+    if (savedTheme) return savedTheme;
+    // Fallback to system preference
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
 
+  // 💡 UPGRADE 1: Real-time System Theme Syncing
   useEffect(() => {
-    const root = window.document.documentElement; // Get the <html> element
-    
-    // Add transition classes directly to the <html> element for smooth global theme transitions.
-    root.classList.add('transition-colors', 'duration-500'); 
-    
-    // Ensure only the current theme class is present
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const handleSystemThemeChange = (e) => {
+      // Only auto-switch if the user hasn't explicitly set a preference in localStorage
+      if (!localStorage.getItem('theme')) {
+        setTheme(e.matches ? 'dark' : 'light');
+      }
+    };
+
+    // Listen for OS-level theme changes (Mac/Windows)
+    mediaQuery.addEventListener('change', handleSystemThemeChange);
+    return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
+  }, []);
+
+  // 💡 UPGRADE 2: DOM Manipulation & Transition Fix
+  useEffect(() => {
+    const root = window.document.documentElement;
+
+    // Swap classes instantly
     root.classList.remove('light', 'dark');
     root.classList.add(theme);
-    
-    // Save the theme preference to localStorage
+
+    // Save preference
     localStorage.setItem('theme', theme);
 
-    console.log(`Theme set to: ${theme}`);
-  }, [theme]); // Re-run effect when theme changes
+    // Add transitions AFTER initial load to prevent a "flashing" screen on reload
+    const timeoutId = setTimeout(() => {
+        root.classList.add('transition-colors', 'duration-500');
+    }, 50);
+
+    return () => clearTimeout(timeoutId);
+  }, [theme]);
 
   const toggleTheme = () => {
     setTheme((prevTheme) => (prevTheme === 'light' ? 'dark' : 'light'));
   };
 
+  // 💡 UPGRADE 3: Memoize the context value for massive global app performance
+  const contextValue = useMemo(() => ({ theme, toggleTheme }), [theme]);
+
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext.Provider value={contextValue}>
       {children}
     </ThemeContext.Provider>
   );

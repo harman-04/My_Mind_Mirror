@@ -1,6 +1,5 @@
 // src/pages/JournalPage.jsx
-
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jwtDecode } from 'jwt-decode';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
@@ -35,17 +34,17 @@ import {
   Feather,
   User,
 } from 'lucide-react';
+
 const ALL_TABS = ['today', 'weekly', 'all', 'search', 'milestones', 'roadmap', 'chat', 'schedule'];
 
 function JournalPage() {
   const [username, setUsername] = useState('');
   const [userId, setUserId] = useState(null);
   const [currentClusterResults, setCurrentClusterResults] = useState(null);
-const [activeTab, setActiveTab] = useState(() => {
+  const [activeTab, setActiveTab] = useState(() => {
     const saved = sessionStorage.getItem('journalActiveTab');
-    const validTabs = ['today', 'weekly', 'all', 'search', 'milestones', 'roadmap', 'chat', 'schedule'];
-    return saved && validTabs.includes(saved) ? saved : 'today';
-});
+    return saved && ALL_TABS.includes(saved) ? saved : 'today';
+  });
 
   const navigate = useNavigate();
   const { theme } = useTheme();
@@ -64,7 +63,7 @@ const [activeTab, setActiveTab] = useState(() => {
     format(endOfCurrentWeek, 'yyyy-MM-dd')
   );
   const paginatedQuery = usePaginatedJournalEntries(20, {
-    enabled: activeTab === 'all',   // <<< key change
+    enabled: activeTab === 'all',
   });
 
   const totalEntries = paginatedQuery.data?.pages[0]?.totalElements || 0;
@@ -106,16 +105,17 @@ const [activeTab, setActiveTab] = useState(() => {
   const todayEntries = activeTab === 'today' ? entriesData : [];
   const weeklyEntries = activeTab === 'weekly' ? entriesData : [];
 
-useEffect(() => {
+  useEffect(() => {
     const hash = window.location.hash.slice(1);
     if (hash && ALL_TABS.includes(hash)) {
       setActiveTab(hash);
       window.history.replaceState(null, '', window.location.pathname);
     }
   }, []);
-useEffect(() => {
+
+  useEffect(() => {
     sessionStorage.setItem('journalActiveTab', activeTab);
-}, [activeTab]);
+  }, [activeTab]);
 
   useEffect(() => {
     const token = localStorage.getItem('jwtToken');
@@ -143,31 +143,27 @@ useEffect(() => {
     setCurrentClusterResults(results);
   };
 
-  const tabs = [
-    { id: 'today', label: 'Today', icon: <Calendar size={18} /> },
-    { id: 'weekly', label: 'Weekly', icon: <BarChart3 size={18} /> },
-    { id: 'all', label: 'History', icon: <History size={18} /> },
-    { id: 'search', label: 'Search', icon: <Search size={18} /> },
-    { id: 'milestones', label: 'Goals', icon: <Target size={18} /> },
-    { id: 'roadmap', label: 'Roadmap', icon: <Map size={18} /> },
-    { id: 'chat', label: 'AI Coach', icon: <Sparkles size={18} /> },
-    { id: 'schedule', label: 'Schedule', icon: <Calendar size={18} /> },
-  ];
+  // Memoized tabs
+  const tabs = useMemo(() => [
+    { id: 'today', label: 'Today', icon: Calendar },
+    { id: 'weekly', label: 'Weekly', icon: BarChart3 },
+    { id: 'all', label: 'History', icon: History },
+    { id: 'search', label: 'Search', icon: Search },
+    { id: 'milestones', label: 'Goals', icon: Target },
+    { id: 'roadmap', label: 'Roadmap', icon: Map },
+    { id: 'chat', label: 'AI Coach', icon: Sparkles },
+    { id: 'schedule', label: 'Schedule', icon: Calendar },
+  ], []);
 
   if (isLoading) return <AppLoader />;
+
   if (isError) {
     return (
-      <div
-        className={`w-full max-w-4xl flex-grow p-6 rounded-xl ${
-          theme === 'dark'
-            ? 'bg-black/30 text-[#FF8A7A] border-white/10'
-            : 'bg-white/70 text-[#FF8A7A] border-white/30'
-        } backdrop-blur-md shadow-lg transition-all duration-500 flex flex-col items-center justify-center font-inter text-lg`}
-      >
+      <div className={`w-full max-w-7xl mx-auto flex-grow p-6 rounded-2xl border ${isDarkMode ? 'bg-[#1A162F]/80 border-gray-700/50' : 'bg-white/80 border-gray-200/50'} backdrop-blur-md shadow-lg flex flex-col items-center justify-center font-inter text-lg text-rose-500`}>
         <p>{error?.message || 'Failed to load journal data.'}</p>
         <button
           onClick={handleLogout}
-          className="mt-4 py-2 px-4 rounded-full font-poppins font-semibold text-white bg-[#FF8A7A] hover:bg-[#FF6C5A] active:bg-[#D45E4D] shadow-md hover:shadow-lg transition-all duration-300"
+          className="mt-6 py-2.5 px-6 rounded-full font-poppins font-semibold text-white bg-gradient-to-r from-rose-500 to-rose-600 hover:from-rose-600 hover:to-rose-700 active:scale-95 shadow-md transition-all"
         >
           Logout
         </button>
@@ -175,144 +171,159 @@ useEffect(() => {
     );
   }
 
-  const bgClass = isDarkMode ? 'bg-gray-900' : 'bg-gray-50';
-  const cardBg = isDarkMode ? 'bg-black/30 backdrop-blur-md' : 'bg-white/70 backdrop-blur-md';
-  const cardBorder = isDarkMode ? 'border-white/10' : 'border-white/30';
-  const textSecondary = isDarkMode ? 'text-gray-300' : 'text-gray-600';
+  const cardBg = isDarkMode ? 'bg-[#1A162F]/40' : 'bg-white/40';
+  const cardBorder = isDarkMode ? 'border-white/10' : 'border-white/50';
+  const textSecondary = isDarkMode ? 'text-gray-400' : 'text-gray-500';
 
   return (
-    <div className={`min-h-screen w-full ${bgClass} transition-colors duration-300 relative p-2 sm:p-4`}>
-      {/* Animated Background */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 via-transparent to-teal-500/5" />
-        <div className="absolute top-20 left-1/4 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse-slow" />
-        <div className="absolute bottom-20 right-1/4 w-96 h-96 bg-teal-500/10 rounded-full blur-3xl animate-pulse-slow delay-1000" />
+    <div className="w-full flex-grow flex flex-col relative">
+
+      {/* Subtle Local Background Orbs */}
+      <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+        <div className="absolute top-[10%] left-[5%] w-[40vw] h-[40vw] bg-purple-500/10 dark:bg-purple-500/5 rounded-full blur-[120px] animate-pulse-slow" />
+        <div className="absolute bottom-[10%] right-[5%] w-[40vw] h-[40vw] bg-teal-500/10 dark:bg-teal-500/5 rounded-full blur-[120px] animate-pulse-slow" style={{ animationDelay: '2s' }} />
       </div>
 
-      {/* Floating Icons */}
-      <div className="absolute top-32 left-5 opacity-30 animate-float hidden lg:block z-20">
-        <Feather size={32} className="text-purple-400" />
+      {/* Floating Decorative Icons */}
+      <div className="absolute top-32 left-4 xl:left-8 opacity-20 animate-float hidden lg:block z-0 pointer-events-none">
+        <Feather size={48} className="text-purple-400" />
       </div>
-      <div className="absolute bottom-32 right-10 opacity-30 animate-float-delayed hidden lg:block z-20">
-        <User size={32} className="text-teal-400" />
+      <div className="absolute bottom-32 right-4 xl:right-8 opacity-20 animate-float hidden lg:block z-0 pointer-events-none" style={{ animationDelay: '1.5s' }}>
+        <User size={48} className="text-teal-400" />
       </div>
 
-      <main
-        className={`relative w-full max-w-4xl mx-auto flex-grow p-4 sm:p-6 rounded-xl
-                    ${cardBg} ${cardBorder} shadow-lg backdrop-blur-md
-                    transition-all duration-500 flex flex-col space-y-6 sm:space-y-8 z-10`}
-      >
-        {/* Achievements Widget */}
-        <div className="mb-2">
+<main className={`relative w-full max-w-7xl mx-auto flex-grow p-3 sm:p-6 lg:p-8 xl:p-10 rounded-[2rem] lg:rounded-[2.5rem] ${cardBg} ${cardBorder} border shadow-2xl backdrop-blur-xl flex flex-col space-y-6 lg:space-y-8 z-10`}>
+        {/* Core Widgets Area */}
+        <div className="space-y-6 lg:space-y-8">
           <AchievementsWidget />
+
+          <WritingPrompt
+            onUsePrompt={(prompt) => {
+              if (journalInputRef.current) {
+                journalInputRef.current.setText(prompt);
+                window.scrollTo({ top: 350, behavior: 'smooth' });
+              }
+            }}
+          />
+
+          <JournalInput ref={journalInputRef} />
+
+          <AnomalyAlerts />
         </div>
 
-        {/* Writing Prompt & Input */}
-        <WritingPrompt
-          onUsePrompt={(prompt) => {
-            if (journalInputRef.current) journalInputRef.current.setText(prompt);
-          }}
-        />
-        <JournalInput ref={journalInputRef} />
-        <AnomalyAlerts />
+        {/* 🚀 NEW DYNAMIC CENTER DOCK (Tabs + Export) */}
+        <div className="flex flex-wrap items-center justify-center gap-3 lg:gap-5 w-full pt-6 pb-2 sticky top-2 sm:top-4 z-40">
 
-        {/* Navigation & Export Islands */}
-        <div className="flex flex-col items-center gap-4 w-full">
-          {/* Floating Navigation Island – never scrolls */}
-          <div className="inline-flex p-1.5 bg-white/20 dark:bg-white/5 backdrop-blur-2xl rounded-2xl border border-white/30 dark:border-white/10 shadow-2xl">
-            <nav className="flex flex-nowrap justify-center gap-1">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`relative flex items-center gap-1.5 px-2 sm:px-3 py-2 rounded-xl transition-all duration-300 ${
-                    activeTab === tab.id
-                      ? 'text-white'
-                      : `${textSecondary} hover:text-gray-800 dark:hover:text-gray-200`
-                  }`}
-                >
-                  {/* Active Background */}
-                  {activeTab === tab.id && (
-                    <div className="absolute inset-0 bg-gradient-to-r from-[#5CC8C2] to-[#2E8B85] rounded-xl shadow-lg shadow-teal-500/30 z-0" />
-                  )}
-                  <span className="relative z-10 transition-transform duration-300 group-hover:scale-110">
-                    {tab.icon}
-                  </span>
-                  <span className="relative z-10 font-poppins font-medium text-xs sm:text-sm hidden sm:inline whitespace-nowrap">
-                    {tab.label}
-                  </span>
-                </button>
-              ))}
-            </nav>
+          {/* Main Tab Navigation Wrapper (Swipable on mobile) */}
+          <div className="w-full xl:w-auto overflow-x-auto scrollbar-hide -mx-4 px-4 xl:mx-0 xl:px-0 text-center">
+
+            {/* The Tab Island */}
+            <div className="inline-flex items-center p-1.5 bg-white/70 dark:bg-[#1A162F]/80 backdrop-blur-2xl rounded-[1.25rem] border border-white/60 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.3)] min-w-max">
+              <nav className="flex flex-nowrap gap-1">
+                {tabs.map((tab) => {
+                  const Icon = tab.icon;
+                  const isActive = activeTab === tab.id;
+
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
+                      className={`relative flex items-center justify-center gap-2 px-3 sm:px-4 lg:px-5 py-2.5 lg:py-3 rounded-xl transition-all duration-300 outline-none group ${
+                        isActive
+                          ? 'text-white shadow-md'
+                          : `${textSecondary} hover:text-gray-900 dark:hover:text-white hover:bg-black/5 dark:hover:bg-white/10`
+                      }`}
+                    >
+                      {/* 💡 UPDATED: Purple in Light Mode, Teal in Dark Mode */}
+                      {isActive && (
+                        <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-purple-600 dark:from-teal-500 dark:to-teal-700 rounded-xl z-0 shadow-inner" />
+                      )}
+
+                      {/* Icon */}
+                      <span className={`relative z-10 transition-transform duration-300 ${isActive ? 'scale-110' : 'group-hover:scale-110'}`}>
+                        <Icon className="w-4 h-4 sm:w-4 sm:h-4 lg:w-5 lg:h-5" />
+                      </span>
+
+                      {/* Label */}
+                      <span className="relative z-10 font-poppins font-semibold text-xs sm:text-sm lg:text-base hidden sm:inline whitespace-nowrap tracking-wide">
+                        {tab.label}
+                      </span>
+                    </button>
+                  );
+                })}
+              </nav>
+            </div>
           </div>
 
-          {/* Export Island */}
-          <div className="inline-flex p-1.5 bg-white/20 dark:bg-white/5 backdrop-blur-2xl rounded-2xl border border-white/30 dark:border-white/10">
-            <ExportButtons />
+          {/* Export Action Center Island */}
+          <div className="shrink-0 flex justify-center">
+            <div className="inline-flex items-center p-1.5 bg-white/70 dark:bg-[#1A162F]/80 backdrop-blur-2xl rounded-xl lg:rounded-[1.25rem] border border-white/60 dark:border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.06)] dark:shadow-[0_8px_30px_rgb(0,0,0,0.3)]">
+              <ExportButtons />
+            </div>
           </div>
         </div>
 
-        {/* Dashboard Content */}
-        {activeTab === 'today' && <TodayDashboard todayEntries={todayEntries} isLoading={isLoading} />}
-        {activeTab === 'weekly' && (
-          <WeeklyDashboard
-            weeklyEntries={weeklyEntries}
-            isLoading={isLoading}
-            userId={userId}
-            onClusteringComplete={handleClusteringComplete}
-            currentClusterResults={currentClusterResults}
-            startOfCurrentWeek={startOfCurrentWeek}
-            endOfCurrentWeek={endOfCurrentWeek}
-          />
-        )}
-        {activeTab === 'all' && (
-          <OverallDashboard
-            journalEntries={entriesData}
-            isLoading={isLoading}
-            userId={userId}
-            onClusteringComplete={handleClusteringComplete}
-            currentClusterResults={currentClusterResults}
-            loadMore={paginatedQuery.fetchNextPage}
-            hasNextPage={paginatedQuery.hasNextPage}
-            isFetchingNextPage={paginatedQuery.isFetchingNextPage}
-            totalEntries={totalEntries}
-          />
-        )}
-        {activeTab === 'search' && <JournalSearch userId={userId} />}
-        {activeTab === 'milestones' && <MilestoneTracker userId={userId} />}
-        {activeTab === 'roadmap' && <RoadmapPlanner />}
-        {activeTab === 'chat' && <ReflectionChat />}
-        {activeTab === 'schedule' && <SchedulePage />}
+        {/* Dashboard Content Container (Fade transition) */}
+        <div className="animate-fade-in pt-2 lg:pt-4 min-h-[50vh]">
+          {activeTab === 'today' && <TodayDashboard todayEntries={todayEntries} isLoading={isLoading} />}
+          {activeTab === 'weekly' && (
+            <WeeklyDashboard
+              weeklyEntries={weeklyEntries}
+              isLoading={isLoading}
+              userId={userId}
+              onClusteringComplete={handleClusteringComplete}
+              currentClusterResults={currentClusterResults}
+              startOfCurrentWeek={startOfCurrentWeek}
+              endOfCurrentWeek={endOfCurrentWeek}
+            />
+          )}
+          {activeTab === 'all' && (
+            <OverallDashboard
+              journalEntries={entriesData}
+              isLoading={isLoading}
+              userId={userId}
+              onClusteringComplete={handleClusteringComplete}
+              currentClusterResults={currentClusterResults}
+              loadMore={paginatedQuery.fetchNextPage}
+              hasNextPage={paginatedQuery.hasNextPage}
+              isFetchingNextPage={paginatedQuery.isFetchingNextPage}
+              totalEntries={totalEntries}
+            />
+          )}
+          {activeTab === 'search' && <JournalSearch userId={userId} />}
+          {activeTab === 'milestones' && <MilestoneTracker userId={userId} />}
+          {activeTab === 'roadmap' && <RoadmapPlanner />}
+          {activeTab === 'chat' && <ReflectionChat />}
+          {activeTab === 'schedule' && <SchedulePage />}
+        </div>
       </main>
 
-      {/* Global Animations */}
       <style>{`
-        @keyframes pulse-slow {
-          0%, 100% { opacity: 0.2; transform: scale(1); }
-          50% { opacity: 0.4; transform: scale(1.05); }
-        }
-        @keyframes float {
-          0% { transform: translateY(0px); }
-          50% { transform: translateY(-10px); }
-          100% { transform: translateY(0px); }
-        }
-        .animate-pulse-slow {
-          animation: pulse-slow 6s ease-in-out infinite;
-        }
-        .animate-float {
-          animation: float 4s ease-in-out infinite;
-        }
-        .animate-float-delayed {
-          animation: float 4s ease-in-out infinite 2s;
-        }
-        .no-scrollbar::-webkit-scrollbar {
-          display: none;
-        }
-        .no-scrollbar {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>
+              @keyframes pulse-slow {
+                0%, 100% { opacity: 0.3; transform: scale(1); }
+                50% { opacity: 0.6; transform: scale(1.05); }
+              }
+              @keyframes float {
+                0%, 100% { transform: translateY(0px) rotate(0deg); }
+                50% { transform: translateY(-20px) rotate(5deg); }
+              }
+              @keyframes fadeIn {
+                from { opacity: 0; transform: translateY(10px); }
+                to { opacity: 1; transform: translateY(0); }
+              }
+              .animate-pulse-slow { animation: pulse-slow 8s ease-in-out infinite; }
+              .animate-float { animation: float 6s ease-in-out infinite; }
+              .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+
+              /* Hide scrollbar for mobile tabs but allow smooth swiping */
+              .scrollbar-hide::-webkit-scrollbar {
+                  display: none;
+              }
+              .scrollbar-hide {
+                  -ms-overflow-style: none;
+                  scrollbar-width: none;
+              }
+            `}</style>
     </div>
   );
 }

@@ -1,7 +1,6 @@
 // src/components/ConfirmationModal.jsx
-
 import React from 'react';
-import { XCircle, AlertCircle } from 'lucide-react';
+import { XCircle, AlertTriangle, Loader } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 
 function ConfirmationModal({ isOpen, onClose, onConfirm, title, message, confirmText, cancelText, isDestructive = false, isLoading = false }) {
@@ -12,55 +11,59 @@ function ConfirmationModal({ isOpen, onClose, onConfirm, title, message, confirm
 
     const colors = {
         overlayBg: 'bg-black/60',
-        modalBg: isDarkMode ? 'bg-gray-800/90' : 'bg-white/90',
-        modalBorder: isDarkMode ? 'border-gray-700/70' : 'border-gray-200/70',
-        textColor: isDarkMode ? 'text-gray-100' : 'text-gray-800',
-        textSecondary: isDarkMode ? 'text-gray-300' : 'text-gray-600',
-        buttonPrimary: isDestructive ? 'bg-red-600 hover:bg-red-700' : 'bg-purple-600 hover:bg-purple-700',
-        buttonSecondary: 'bg-gray-500 hover:bg-gray-600',
+        modalBg: isDarkMode ? 'bg-[#1A162F]/95 backdrop-blur-xl' : 'bg-white/95 backdrop-blur-xl',
+        modalBorder: isDarkMode ? 'border-white/10' : 'border-gray-200/70',
+        textColor: isDarkMode ? 'text-gray-100' : 'text-gray-900',
+        textSecondary: isDarkMode ? 'text-gray-400' : 'text-gray-500',
+        buttonPrimary: isDestructive ? 'bg-red-600 hover:bg-red-700' : 'bg-gradient-to-r from-purple-500 to-teal-500 hover:from-purple-600 hover:to-teal-600',
+        buttonSecondary: isDarkMode ? 'bg-black/20 hover:bg-black/40 text-gray-200 border border-white/10' : 'bg-gray-100 hover:bg-gray-200 text-gray-800 border border-transparent',
         buttonText: 'text-white',
-        iconColor: isDestructive ? 'text-red-500' : (isDarkMode ? 'text-purple-400' : 'text-teal-500'),
+        iconBg: isDestructive ? 'bg-red-100 dark:bg-red-900/30' : 'bg-purple-100 dark:bg-teal-900/30',
+        iconColor: isDestructive ? 'text-red-600 dark:text-red-400' : 'text-purple-600 dark:text-teal-400',
         shadow: 'shadow-2xl shadow-black/50',
     };
 
     return (
-        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${colors.overlayBg} backdrop-blur-sm transition-opacity duration-300`}>
-            <div className={`relative p-8 rounded-3xl ${colors.modalBg} ${colors.modalBorder} border ${colors.shadow}
+        <div className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${colors.overlayBg} backdrop-blur-md transition-opacity duration-300`}>
+            {/* Click outside to close (disabled if loading) */}
+            <div className="absolute inset-0" onClick={!isLoading ? onClose : undefined} aria-hidden="true" />
+
+            <div className={`relative p-6 lg:p-8 rounded-2xl lg:rounded-3xl ${colors.modalBg} ${colors.modalBorder} border ${colors.shadow}
                              max-w-md w-full text-center transform scale-95 opacity-0 animate-scale-in`}>
-                
-                <div className="flex justify-center mb-6">
+
+                <div className={`mx-auto w-14 h-14 lg:w-16 lg:h-16 mb-4 lg:mb-6 rounded-full flex items-center justify-center ${colors.iconBg}`}>
                     {isDestructive ? (
-                        <XCircle size={60} className={colors.iconColor} />
+                        <XCircle className={`w-7 h-7 lg:w-8 lg:h-8 ${colors.iconColor}`} />
                     ) : (
-                        <AlertCircle size={60} className={colors.iconColor} />
+                        <AlertTriangle className={`w-7 h-7 lg:w-8 lg:h-8 ${colors.iconColor}`} />
                     )}
                 </div>
 
-                <h2 className={`text-2xl font-poppins font-bold mb-4 ${colors.textColor}`}>
+                <h2 className={`text-xl lg:text-2xl font-poppins font-bold tracking-tight mb-2 ${colors.textColor}`}>
                     {title}
                 </h2>
-                <p className={`text-md mb-8 ${colors.textSecondary}`}>
+                <p className={`text-sm lg:text-base font-medium mb-6 lg:mb-8 ${colors.textSecondary}`}>
                     {message}
                 </p>
 
-                <div className="flex flex-col sm:flex-row justify-center gap-4">
+                <div className="flex flex-col sm:flex-row justify-center gap-3">
                     <button
                         onClick={onClose}
-                        className={`py-3 px-6 rounded-full font-poppins font-semibold text-sm ${colors.buttonSecondary} ${colors.buttonText}
-                                   transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-400`}
+                        className={`flex-1 py-2.5 lg:py-3 px-6 rounded-full font-bold text-sm lg:text-base ${colors.buttonSecondary}
+                                   transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-50`}
                         disabled={isLoading}
                     >
                         {cancelText || 'Cancel'}
                     </button>
                     <button
                         onClick={onConfirm}
-                        className={`py-3 px-6 rounded-full font-poppins font-semibold text-sm ${colors.buttonPrimary} ${colors.buttonText}
-                                   transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-2 focus:ring-offset-2 ${isDestructive ? 'focus:ring-red-500' : 'focus:ring-purple-500'}`}
+                        className={`flex-1 py-2.5 lg:py-3 px-6 rounded-full font-bold text-sm lg:text-base ${colors.buttonPrimary} ${colors.buttonText}
+                                   transition-all duration-300 hover:scale-105 active:scale-95 shadow-md disabled:opacity-70 disabled:hover:scale-100 flex justify-center items-center`}
                         disabled={isLoading}
                     >
                         {isLoading ? (
-                            <span className="flex items-center">
-                                <Loader size={20} className="animate-spin mr-2" /> {confirmText || 'Confirming...'}
+                            <span className="flex items-center gap-2">
+                                <Loader className="w-4 h-4 lg:w-5 lg:h-5 animate-spin" /> {confirmText === 'Confirm' ? 'Processing...' : (confirmText || 'Processing...')}
                             </span>
                         ) : (
                             confirmText || 'Confirm'
@@ -69,21 +72,14 @@ function ConfirmationModal({ isOpen, onClose, onConfirm, title, message, confirm
                 </div>
             </div>
 
-            {/* Inline CSS for modal animation */}
             <style>
                 {`
                 @keyframes scale-in {
-                    from {
-                        opacity: 0;
-                        transform: scale(0.9);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: scale(1);
-                    }
+                    from { opacity: 0; transform: scale(0.95); }
+                    to { opacity: 1; transform: scale(1); }
                 }
                 .animate-scale-in {
-                    animation: scale-in 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+                    animation: scale-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
                 }
                 `}
             </style>

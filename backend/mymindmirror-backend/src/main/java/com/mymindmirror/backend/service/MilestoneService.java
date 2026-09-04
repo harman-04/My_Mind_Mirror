@@ -4,14 +4,18 @@ package com.mymindmirror.backend.service;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mymindmirror.backend.enums.AITask;
 import com.mymindmirror.backend.enums.Status;
 import com.mymindmirror.backend.model.Milestone;
 import com.mymindmirror.backend.model.Task;
 import com.mymindmirror.backend.model.User;
+import com.mymindmirror.backend.payload.response.GrowthTipParseResponse;
+import com.mymindmirror.backend.payload.response.GrowthTipTask;
 import com.mymindmirror.backend.payload.response.MilestoneResponse;
 import com.mymindmirror.backend.payload.response.TaskResponse;
 import com.mymindmirror.backend.repository.MilestoneRepository;
 import com.mymindmirror.backend.repository.TaskRepository;
+import com.mymindmirror.backend.service.ai.DynamicAiClientService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.hibernate.Hibernate;
@@ -40,8 +44,8 @@ public class MilestoneService {
     private final TaskRepository taskRepository;
     private final WebClient webClient;
     private final ObjectMapper objectMapper;
-
-
+    private final DynamicAiClientService aiClientService;
+    private final GamificationService gamificationService;
 
 
 
@@ -58,6 +62,7 @@ public class MilestoneService {
         log.info("Creating new milestone for user {}: {}", user.getUsername(), title);
         Milestone milestone = new Milestone(user, title, description, dueDate);
         milestone.setStatus(Status.PENDING); // New milestones start as PENDING
+        gamificationService.recordActivity(user, "MILESTONE_CREATE");
         return milestoneRepository.save(milestone);
     }
 
@@ -191,48 +196,42 @@ public class MilestoneService {
     }
 
     @Transactional
-    public List<Task> importGrowthTipAsTask(User user, String tipText, String apiKey) {
-        // 1. Call Flask to parse tip
-        Map<String, Object> request = Map.of("tipText", tipText);
-        Map<String, Object> response = webClient.post()
-                .uri("/ml/milestone/parse-growth-tip")
-                .header("X-Gemini-Key", apiKey != null ? apiKey : "")
-                .bodyValue(request)
-                .retrieve()
-                .bodyToMono(Map.class)
-                .block();
+    public List<Task> importGrowthTipAsTask(User user, String tipText) {
+        // 1. Call AI to parse tip (using the dynamic client, not Flask)
+        String prompt = buildParseGrowthTipPrompt(tipText);
+        GrowthTipParseResponse response;
+        try {
+            // Added AITask.PARSE_GROWTH_TIP here!
+            response = aiClientService.generateStructured(prompt, GrowthTipParseResponse.class, user.getId(), AITask.PARSE_GROWTH_TIP);
+        } catch (Exception e) {
+            log.error("Failed to parse growth tip via AI", e);
+            throw new RuntimeException("Failed to parse growth tip: " + e.getMessage(), e);
+        }
 
-        // 2. Extract tasks list (each task may have title, description, subtasks)
-        List<Map<String, Object>> tasksList = (List<Map<String, Object>>) response.get("tasks");
-        if (tasksList == null || tasksList.isEmpty()) {
+        if (response == null || response.tasks() == null || response.tasks().isEmpty()) {
             throw new RuntimeException("No tasks extracted from growth tip");
         }
 
-        // 3. Get or create "AI Growth Tips" milestone
+        // 2. Get or create "AI Growth Tips" milestone
         Milestone milestone = getOrCreateMilestoneByTitle(user, "AI Growth Tips");
 
         List<Task> createdTasks = new ArrayList<>();
 
-        // 4. Create a separate task for each action item
-        for (Map<String, Object> taskData : tasksList) {
-            String title = (String) taskData.getOrDefault("title", "Actionable Step");
-            String description = (String) taskData.getOrDefault("description", "Review the original growth tip and take the first step.");
-            Object subtasksObj = taskData.get("subtasks"); // can be List<String> or null
-
+        // 3. Create a task for each extracted action item
+        for (GrowthTipTask taskData : response.tasks()) {
             Task task = new Task();
             task.setMilestone(milestone);
-            task.setDescription(title);
-            task.setDetails(description);
+            task.setDescription(taskData.title());
+            task.setDetails(taskData.description());
             task.setStatus(Status.PENDING);
             task.setCreationTimestamp(LocalDateTime.now());
 
-            // Store subtasks as JSON if present
-            if (subtasksObj instanceof List) {
+            if (taskData.subtasks() != null && !taskData.subtasks().isEmpty()) {
                 try {
-                    String subtasksJson = objectMapper.writeValueAsString(subtasksObj);
+                    String subtasksJson = objectMapper.writeValueAsString(taskData.subtasks());
                     task.setSubtasksJson(subtasksJson);
                 } catch (JsonProcessingException e) {
-                    log.warn("Failed to serialize subtasks for task {}", title, e);
+                    log.warn("Failed to serialize subtasks for task {}", taskData.title(), e);
                     task.setSubtasksJson("[]");
                 }
             } else {
@@ -242,10 +241,40 @@ public class MilestoneService {
             createdTasks.add(taskRepository.save(task));
         }
 
-        // 5. Update milestone status after adding tasks
         updateMilestoneStatusBasedOnTasks(milestone.getId());
 
         return createdTasks;
+    }
+
+    private String buildParseGrowthTipPrompt(String tipText) {
+        return String.format("""
+    The following text is a self‑help / growth tip. It may be written in any language or mix of languages (e.g., Hinglish, English, Hindi, etc.).
+    **Language & Style Instruction:**
+    - Detect the language(s) and style (casual, formal, motivational) of the tip text.
+    - Generate the output tasks in the **same language(s) and style** as the tip text. Preserve any code‑switching (e.g., Hinglish).
+
+    Extract from the tip text:
+    - A list of **concrete, actionable tasks** (3-5 items).
+    Each task should have:
+      - A short title (max 8 words) in the same language/style
+      - A detailed description (2-3 sentences explaining the purpose, in the same language/style)
+      - A list of 2-4 micro‑subtasks (the actual steps to complete the task, in the same language/style)
+
+    Return ONLY valid JSON with structure:
+    {
+        "tasks": [
+            {
+                "title": "task title",
+                "description": "detailed explanation",
+                "subtasks": ["step 1", "step 2", ...]
+            },
+            ...
+        ]
+    }
+
+    Tip text:
+    %s
+    """, tipText);
     }
 
     @Transactional(readOnly = true)

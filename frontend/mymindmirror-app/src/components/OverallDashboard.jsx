@@ -1,13 +1,11 @@
 // src/components/OverallDashboard.jsx
-
 import React, { useState } from 'react';
-import { FileText, Calendar, Activity, BarChart3, PieChart, Target, Radar, TrendingUp, X } from 'lucide-react';
+import { FileText, X } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import MoodChart from './MoodChart';
 import AverageEmotionChart from './AverageEmotionChart';
 import MoodCalendarHeatmap from './MoodCalendarHeatmap';
 import ConcernFrequencyChart from './ConcernFrequencyChart';
-import JournalClusters from './JournalClusters';
 import JournalHistory from './JournalHistory';
 import KeyPhraseCloud from './KeyPhraseCloud';
 import MoodWordCountChart from './MoodWordCountChart';
@@ -31,12 +29,11 @@ function OverallDashboard({
     const { theme } = useTheme();
     const isDarkMode = theme === 'dark';
 
-    const cardBg = isDarkMode ? 'bg-gray-800/60 backdrop-blur-md' : 'bg-white/70 backdrop-blur-md';
-    const cardBorder = isDarkMode ? 'border-gray-700/50' : 'border-gray-200/50';
-    const textSecondary = isDarkMode ? 'text-gray-300' : 'text-gray-600';
+    // Premium Glassmorphism for the Journal History wrapper
+    const cardBg = isDarkMode ? 'bg-[#1A162F]/60 backdrop-blur-xl' : 'bg-white/70 backdrop-blur-xl';
+    const cardBorder = isDarkMode ? 'border-white/10' : 'border-white/50';
 
     const handlePhraseClick = (phrase) => setFilterPhrase(phrase);
-    const handleFilterCluster = (clusterId) => setFilterClusterId(clusterId);
     const clearFilter = () => {
         setFilterPhrase(null);
         setFilterClusterId(null);
@@ -44,197 +41,119 @@ function OverallDashboard({
 
     if (isLoading) {
         return (
-            <div className="space-y-6 sm:space-y-8 w-full">
-                {/* Mood Trends */}
-                <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6`}>
-                    <div className="flex items-center justify-center gap-2 mb-4">
-                        <Activity size={20} className={textSecondary} />
-                        <h3 className="text-xl font-poppins font-semibold text-center">Overall Mood & Emotion Trends</h3>
-                    </div>
-                    <SkeletonChart />
-                </div>
-
-                {/* Mood Calendar Heatmap (skeleton) */}
-                <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6`}>
-                    <div className="flex items-center justify-center gap-2 mb-4">
-                        <Calendar size={20} className={textSecondary} />
-                        <h3 className="text-xl font-poppins font-semibold text-center">Mood Calendar Heatmap</h3>
-                    </div>
-                    <div className="h-80 w-full bg-gray-200/50 dark:bg-gray-800/50 rounded-xl animate-pulse flex items-center justify-center">
-                        <div className={`text-sm ${textSecondary}`}>Loading calendar...</div>
-                    </div>
-                </div>
-
-                {/* Average Emotion Intensity */}
-                <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6`}>
-                    <div className="flex items-center justify-center gap-2 mb-4">
-                        <BarChart3 size={20} className={textSecondary} />
-                        <h3 className="text-xl font-poppins font-semibold text-center">Overall Average Emotion Intensity</h3>
-                    </div>
-                    <SkeletonChart />
-                </div>
-
-                {/* Radar Chart */}
-                <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6`}>
-                    <div className="flex items-center justify-center gap-2 mb-4">
-                        <Radar size={20} className={textSecondary} />
-                        <h3 className="text-xl font-poppins font-semibold text-center">Your Emotional Profile (Radar)</h3>
-                    </div>
-                    <SkeletonChart />
-                </div>
-
-                {/* Most Frequent Concerns */}
-                <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6`}>
-                    <div className="flex items-center justify-center gap-2 mb-4">
-                        <PieChart size={20} className={textSecondary} />
-                        <h3 className="text-xl font-poppins font-semibold text-center">Overall Most Frequent Journal Concerns</h3>
-                    </div>
-                    <SkeletonChart />
-                </div>
-
-                {/* Mood vs Word Count */}
-                <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6`}>
-                    <div className="flex items-center justify-center gap-2 mb-4">
-                        <TrendingUp size={20} className={textSecondary} />
-                        <h3 className="text-xl font-poppins font-semibold text-center">Mood vs. Word Count Correlation</h3>
-                    </div>
-                    <SkeletonChart />
-                </div>
-
-                {/* Journal Themes & Key Phrase Cloud */}
-                <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6`}>
-                    <div className="flex items-center justify-center gap-2 mb-4">
-                        <Target size={20} className={textSecondary} />
-                        <h3 className="text-xl font-poppins font-semibold text-center">Journal Themes & Key Phrases</h3>
-                    </div>
-                    <SkeletonCard count={2} />
-                </div>
-
-                {/* All Entries */}
-                <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6`}>
-                    <div className="flex items-center justify-center gap-2 mb-4">
-                        <FileText size={20} className={textSecondary} />
-                        <h3 className="text-xl font-poppins font-semibold text-center">All Journal Entries</h3>
-                    </div>
-                    <SkeletonCard count={3} />
-                </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 w-full">
+                <div className="col-span-1 lg:col-span-2"><SkeletonChart /></div>
+                <div><SkeletonChart /></div>
+                <div><SkeletonChart /></div>
+                <div className="col-span-1 lg:col-span-2"><SkeletonCard count={3} /></div>
             </div>
         );
     }
 
     return (
-        <div className="space-y-6 sm:space-y-8 w-full">
-            {/* 1. Mood & Emotion Trends */}
-            <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl`}>
-                <div className="flex items-center justify-center gap-2 mb-4">
-                    <Activity size={20} className="text-purple-400" />
-                    <h3 className="text-xl font-poppins font-semibold text-center">Overall Mood & Emotion Trends</h3>
-                </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 sm:gap-8 w-full items-stretch">
+
+            {/* 1. Mood & Emotion Trends (Full Width) */}
+            {/* 💡 Note: Removed redundant card wrappers since the charts now supply their own! */}
+            <div className="col-span-1 lg:col-span-2 w-full block">
                 <MoodChart entries={journalEntries} isLoading={isLoading} />
             </div>
 
-            {/* 2. Mood Calendar Heatmap (FIXED: uses journalEntries, not weeklyEntries) */}
-            <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl`}>
-                <div className="flex items-center justify-center gap-2 mb-4">
-                    <Calendar size={20} className="text-teal-400" />
-                    <h3 className="text-xl font-poppins font-semibold text-center">Mood Calendar Heatmap</h3>
-                </div>
-                <MoodCalendarHeatmap journalEntries={journalEntries} displayMonth={new Date()} />
+            {/* 2. Mood Calendar Heatmap (Full Width) */}
+            <div className="col-span-1 lg:col-span-2 w-full block">
+                <MoodCalendarHeatmap journalEntries={journalEntries} displayYear={new Date()} />
             </div>
 
-            {/* 3. Average Emotion Intensity */}
-            <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl`}>
-                <div className="flex items-center justify-center gap-2 mb-4">
-                    <BarChart3 size={20} className="text-teal-400" />
-                    <h3 className="text-xl font-poppins font-semibold text-center">Overall Average Emotion Intensity</h3>
-                </div>
-                <AverageEmotionChart entries={journalEntries} isLoading={isLoading} />
-            </div>
-
-            {/* 4. Emotional Profile Radar */}
-            <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl`}>
-                <div className="flex items-center justify-center gap-2 mb-4">
-                    <Radar size={20} className="text-indigo-400" />
-                    <h3 className="text-xl font-poppins font-semibold text-center">Your Emotional Profile (Radar)</h3>
-                </div>
+            {/* 3. Emotional Profile Radar (Full Width) */}
+            <div className="col-span-1 lg:col-span-2 w-full block">
                 <EmotionRadarChart entries={journalEntries} isLoading={isLoading} />
             </div>
 
-            {/* 5. Most Frequent Concerns */}
-            <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl`}>
-                <div className="flex items-center justify-center gap-2 mb-4">
-                    <PieChart size={20} className="text-rose-400" />
-                    <h3 className="text-xl font-poppins font-semibold text-center">Overall Most Frequent Journal Concerns</h3>
-                </div>
+            {/* 4. Average Emotion Intensity (Half Width on Desktop) */}
+            <div className="col-span-1 w-full block">
+                <AverageEmotionChart entries={journalEntries} isLoading={isLoading} />
+            </div>
+
+            {/* 5. Most Frequent Concerns (Half Width on Desktop) */}
+            <div className="col-span-1 w-full block">
                 <ConcernFrequencyChart entries={journalEntries} isLoading={isLoading} />
             </div>
 
-            {/* 6. Mood vs Word Count Correlation */}
-            <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl`}>
-                <div className="flex items-center justify-center gap-2 mb-4">
-                    <TrendingUp size={20} className="text-amber-400" />
-                    <h3 className="text-xl font-poppins font-semibold text-center">Mood vs. Word Count Correlation</h3>
-                </div>
+            {/* 6. Mood vs Word Count Correlation (Full Width) */}
+            <div className="col-span-1 lg:col-span-2 w-full block">
                 <MoodWordCountChart entries={journalEntries} isLoading={isLoading} />
             </div>
 
-            {/* 7. Journal Clustering */}
-            <JournalClusters
-                userId={userId}
-                onClusteringComplete={onClusteringComplete}
-                journalEntries={journalEntries}
-                currentClusterResults={currentClusterResults}
-                onFilterCluster={handleFilterCluster}
-                isLoading={isLoading}
-            />
-
-            {/* 8. Key Phrase Cloud */}
-            <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl`}>
-                <div className="flex items-center justify-center gap-2 mb-4">
-                    <Target size={20} className="text-cyan-400" />
-                    <h3 className="text-xl font-poppins font-semibold text-center">Key Phrase Cloud</h3>
-                </div>
+            {/* 7. Key Phrase Cloud (Full Width) */}
+            <div className="col-span-1 lg:col-span-2 w-full block">
                 <KeyPhraseCloud onWordClick={handlePhraseClick} />
+
+                {/* Smoothly animated Filter Button */}
                 {filterPhrase && (
-                    <div className="mt-4 flex justify-center">
+                    <div className="mt-4 lg:mt-6 flex justify-center animate-fade-in px-4">
                         <button
-                            onClick={() => setFilterPhrase(null)}
-                            className="inline-flex items-center gap-1 px-4 py-2 rounded-full text-sm bg-purple-100 dark:bg-purple-900/50 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/70 transition"
+                            onClick={clearFilter}
+                            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full text-sm lg:text-base font-bold bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-500/30 transition-all shadow-sm hover:shadow-md active:scale-95 border border-purple-200 dark:border-purple-500/30"
                         >
-                            <X size={14} /> Clear Filter: "{filterPhrase}"
+                            <X className="w-4 h-4 lg:w-5 lg:h-5" />
+                            <span>Clear Filter: <span className="italic">"{filterPhrase}"</span></span>
                         </button>
                     </div>
                 )}
             </div>
 
-            {/* 9. All Journal Entries */}
-            <div className={`rounded-2xl ${cardBg} border ${cardBorder} shadow-lg p-4 sm:p-6 transition-all duration-300 hover:shadow-xl`}>
-                <div className="flex flex-wrap justify-between items-center gap-3 mb-5">
-                    <div className="flex items-center gap-2">
-                        <FileText size={20} className="text-emerald-400" />
-                        <h3 className="text-xl font-poppins font-semibold">All Journal Entries</h3>
+            {/* 8. All Journal Entries (Full Width Layout) */}
+            {/* 💡 Note: JournalHistory gets a wrapper because it is a list, not a canvas chart */}
+            <div className={`col-span-1 lg:col-span-2 rounded-2xl lg:rounded-3xl border ${cardBorder} shadow-lg ring-1 ring-black/5 dark:ring-white/5 ${cardBg} p-3 sm:p-6 lg:p-8 mt-2 transition-all duration-300`}>
+                <div className={`flex flex-wrap justify-between items-center gap-4 mb-6 lg:mb-8 border-b border-gray-200/50 dark:border-gray-700/50 pb-4 lg:pb-6`}>
+                    <div className="flex items-center gap-3 lg:gap-4">
+                        <div className="p-2 lg:p-3 rounded-xl lg:rounded-2xl bg-gradient-to-br from-purple-100 to-purple-50 dark:from-teal-900/40 dark:to-teal-800/20 text-purple-600 dark:text-teal-400 shrink-0 shadow-sm border border-purple-200/50 dark:border-teal-700/30 ">
+                            <FileText className="w-5 h-5 lg:w-6 lg:h-6" />
+                        </div>
+                        <h3 className="text-xl lg:text-2xl font-poppins font-extrabold text-gray-800 dark:text-gray-100 tracking-tight">
+                            Journal History
+                        </h3>
                     </div>
+
                     {totalEntries > 0 && (
-                        <span className="text-sm bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-200 px-3 py-1 rounded-full inline-flex items-center gap-1.5 shadow-sm">
-                            <FileText size={14} /> {journalEntries.length} of {totalEntries} entries
-                        </span>
+                        <div className="flex items-center gap-2 px-4 py-2 bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 rounded-full shadow-sm text-emerald-700 dark:text-emerald-300">
+                            <span className="text-xs lg:text-sm font-bold uppercase tracking-wider">
+                                {journalEntries.length} of {totalEntries} Entries
+                            </span>
+                        </div>
                     )}
                 </div>
-                <JournalHistory
-                    entries={journalEntries}
-                    clusterThemes={currentClusterResults?.clusterThemes}
-                    filterClusterId={filterClusterId}
-                    filterPhrase={filterPhrase}
-                    isLoading={isLoading}
-                />
-                <InfiniteScrollTrigger
-                    onIntersect={loadMore}
-                    isLoading={isFetchingNextPage}
-                    hasNextPage={hasNextPage}
-                />
+
+                <div className="w-full">
+                    <JournalHistory
+                        entries={journalEntries}
+                        clusterThemes={currentClusterResults?.clusterThemes}
+                        filterClusterId={filterClusterId}
+                        filterPhrase={filterPhrase}
+                        isLoading={isLoading}
+                    />
+                </div>
+
+                <div className="mt-8 lg:mt-10">
+                    <InfiniteScrollTrigger
+                        onIntersect={loadMore}
+                        isLoading={isFetchingNextPage}
+                        hasNextPage={hasNextPage}
+                    />
+                </div>
             </div>
+
+            <style>{`
+                @keyframes fadeIn {
+                    from { opacity: 0; transform: translateY(-10px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                .animate-fade-in {
+                    animation: fadeIn 0.3s ease-out forwards;
+                }
+            `}</style>
         </div>
     );
 }
 
-export default OverallDashboard;
+export default React.memo(OverallDashboard);

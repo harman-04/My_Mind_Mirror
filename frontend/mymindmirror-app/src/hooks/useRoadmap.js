@@ -52,6 +52,7 @@ export const useGenerateRoadmap = () => {
     mutationFn: generateRoadmap,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roadmaps'] });
+      queryClient.invalidateQueries({ queryKey: ['gamificationStats'] });
     },
   });
 };
@@ -136,6 +137,7 @@ export const useToggleTaskCompletion = () => {
     onSettled: () => {
       // Refetch in background to sync with server
       queryClient.invalidateQueries({ queryKey: ['roadmaps'] });
+      queryClient.invalidateQueries({ queryKey: ['gamificationStats'] });
     },
   });
 };
@@ -178,6 +180,7 @@ export const useElaborateTask = () => {
     mutationFn: elaborateTask,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['roadmaps'] });
+      queryClient.invalidateQueries({ queryKey: ['gamificationStats'] });
     },
   });
 };

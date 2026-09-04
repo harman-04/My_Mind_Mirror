@@ -59,72 +59,18 @@ const generateTodaysReflection = async (todayEntries, forceRefresh = false) => {
   const todayStr = format(new Date(), 'yyyy-MM-dd');
   const cacheKey = `reflection_${todayStr}`;
 
-  // Check localStorage unless forced refresh
   if (!forceRefresh) {
     const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      return cached;
-    }
+    if (cached) return cached;
   }
 
-  // Combine all raw texts from today's entries
-  const combinedRawText = todayEntries.map(e => e.rawText).join('\n\n---\n\n');
-
-  // Aggregate emotions (average)
-  const aggregatedEmotions = {};
-  let aggregatedConcerns = new Set();
-  let totalEntries = todayEntries.length;
-
-  todayEntries.forEach(entry => {
-    let parsedEmotions = {};
-    try {
-      parsedEmotions = typeof entry.emotions === 'string' ? JSON.parse(entry.emotions) : entry.emotions;
-      if (typeof parsedEmotions !== 'object' || parsedEmotions === null) parsedEmotions = {};
-    } catch (e) { parsedEmotions = {}; }
-
-    Object.entries(parsedEmotions).forEach(([emotion, score]) => {
-      aggregatedEmotions[emotion] = (aggregatedEmotions[emotion] || 0) + score;
-    });
-
-    let concerns = [];
-    try {
-      concerns = typeof entry.coreConcerns === 'string' ? JSON.parse(entry.coreConcerns) : entry.coreConcerns;
-      if (!Array.isArray(concerns)) concerns = [];
-    } catch (e) { concerns = []; }
-    concerns.forEach(c => aggregatedConcerns.add(c));
-  });
-
-  Object.keys(aggregatedEmotions).forEach(emotion => {
-    aggregatedEmotions[emotion] = aggregatedEmotions[emotion] / totalEntries;
-  });
-
-  const emotions_str = Object.entries(aggregatedEmotions)
-    .filter(([, score]) => score > 0.01)
-    .map(([label, score]) => `${label} (${(score * 100).toFixed(1)}%)`)
-    .join(', ') || 'No specific emotions detected.';
-
-  const concerns_str = Array.from(aggregatedConcerns).join(', ') || 'No specific concerns identified.';
-
-  const prompt = `Based on the following journal entries from today, their detected emotions, and core concerns,
-   generate a concise (1-3 sentences), empathetic, and insightful "Today's Reflection" or a short, encouraging thought.
-
-  **Language & Style Instruction:**
-  - Detect the language(s) and style (casual, formal, emotional) of the journal entries.
-  - Generate the reflection in the **same language(s) and style** as the entries. If the entries mix languages (e.g., Hinglish), respond in that same mix.
-  - Focus on summarizing the overall emotional state and offering a gentle, positive perspective.
-
-  Journal Entries (combined): "${combinedRawText}"
-  Detected Emotions (averaged): ${emotions_str}
-  Core Concerns: ${concerns_str}
-
-  Today's Reflection:`;
-
   try {
-    const springBootResponse = await axios.post(`${API_BASE_URL}/reflection/generate`, { prompt_text: prompt }, {
+    // Look how clean this is! We just ask the backend to do it securely.
+    const springBootResponse = await axios.post(`${API_BASE_URL}/reflection/generate`, {}, {
       headers: { Authorization: `Bearer ${token}` }
     });
+
     const reflection = springBootResponse.data?.reflection || "Couldn't generate a reflection today. Keep journaling!";
-    // Save to localStorage
     localStorage.setItem(cacheKey, reflection);
     return reflection;
   } catch (err) {
@@ -181,6 +127,7 @@ export const useAddJournalEntry = () => {
 
       clearTodayReflectionCache();
       queryClient.invalidateQueries({ queryKey: ['todaysReflection'] });
+      queryClient.invalidateQueries({ queryKey: ['gamificationStats'] });
 
       // 3. Toast Promise (remains the same)
       toast.promise(
@@ -286,6 +233,64 @@ export const useDeleteJournalEntry = () => {
 
 // --- Search Queries (New) ---
 
+//export const useSearchJournalEntries = (searchParams) => {
+//  return useQuery({
+//    queryKey: ['journalSearchResults', searchParams],
+//    queryFn: async () => {
+//      const token = getToken();
+//      if (!token) throw new Error('Not authenticated.');
+//
+//      let url = `${API_BASE_URL}/journal/history`; // Default for date search
+//
+//      const params = {};
+//      if (searchParams.searchType === 'keyword') {
+//        if (!searchParams.keyword.trim()) throw new Error('Please enter a keyword to search.');
+//        url = `${API_BASE_URL}/journal/search/keyword`;
+//        params.keyword = searchParams.keyword.trim();
+//      } else if (searchParams.searchType === 'mood') {
+//        const parsedMinMood = searchParams.minMood === '' ? null : parseFloat(searchParams.minMood);
+//        const parsedMaxMood = searchParams.maxMood === '' ? null : parseFloat(searchParams.maxMood);
+//
+//        if (isNaN(parsedMinMood) && isNaN(parsedMaxMood)) {
+//          throw new Error('Please enter at least a minimum or maximum mood score.');
+//        }
+//        if (parsedMinMood !== null && parsedMaxMood !== null && parsedMinMood > parsedMaxMood) {
+//          throw new Error('Minimum mood score cannot be greater than maximum mood score.');
+//        }
+//        url = `${API_BASE_URL}/journal/search/mood`;
+//        if (parsedMinMood !== null) params.minMood = parsedMinMood;
+//        if (parsedMaxMood !== null) params.maxMood = parsedMaxMood;
+//      } else if (searchParams.searchType === 'date') {
+//        if (!searchParams.startDate && !searchParams.endDate) {
+//          throw new Error('Please select at least a start date or an end date.');
+//        }
+//        if (searchParams.startDate && searchParams.endDate && new Date(searchParams.startDate) > new Date(searchParams.endDate)) {
+//          throw new Error('Start date cannot be after end date.');
+//        }
+//        if (searchParams.startDate) params.startDate = searchParams.startDate;
+//        if (searchParams.endDate) params.endDate = searchParams.endDate;
+//      } else {
+//        throw new Error('Invalid search type.');
+//      }
+//
+//      const response = await axios.get(url, {
+//        params: params,
+//        headers: { Authorization: `Bearer ${token}` },
+//      });
+//      return response.data;
+//    },
+//    // Only enable the query if searchParams indicate a valid search is intended
+//    enabled: !!searchParams && (
+//      (searchParams.searchType === 'keyword' && !!searchParams.keyword.trim()) ||
+//      (searchParams.searchType === 'mood' && (searchParams.minMood !== '' || searchParams.maxMood !== '')) ||
+//      (searchParams.searchType === 'date' && (searchParams.startDate !== '' || searchParams.endDate !== ''))
+//    ),
+//    staleTime: 5 * 60 * 1000, // Cache search results for 5 minutes
+//    cacheTime: 10 * 60 * 1000,
+//  });
+//};
+
+
 export const useSearchJournalEntries = (searchParams) => {
   return useQuery({
     queryKey: ['journalSearchResults', searchParams],
@@ -294,12 +299,19 @@ export const useSearchJournalEntries = (searchParams) => {
       if (!token) throw new Error('Not authenticated.');
 
       let url = `${API_BASE_URL}/journal/history`; // Default for date search
-
       const params = {};
+
       if (searchParams.searchType === 'keyword') {
         if (!searchParams.keyword.trim()) throw new Error('Please enter a keyword to search.');
         url = `${API_BASE_URL}/journal/search/keyword`;
         params.keyword = searchParams.keyword.trim();
+
+      } else if (searchParams.searchType === 'semantic') {
+        // NEW: Semantic Concept Search routing
+        if (!searchParams.concept.trim()) throw new Error('Please enter a concept to search for.');
+        url = `${API_BASE_URL}/journal/search/semantic`;
+        params.concept = searchParams.concept.trim();
+
       } else if (searchParams.searchType === 'mood') {
         const parsedMinMood = searchParams.minMood === '' ? null : parseFloat(searchParams.minMood);
         const parsedMaxMood = searchParams.maxMood === '' ? null : parseFloat(searchParams.maxMood);
@@ -313,6 +325,7 @@ export const useSearchJournalEntries = (searchParams) => {
         url = `${API_BASE_URL}/journal/search/mood`;
         if (parsedMinMood !== null) params.minMood = parsedMinMood;
         if (parsedMaxMood !== null) params.maxMood = parsedMaxMood;
+
       } else if (searchParams.searchType === 'date') {
         if (!searchParams.startDate && !searchParams.endDate) {
           throw new Error('Please select at least a start date or an end date.');
@@ -335,6 +348,7 @@ export const useSearchJournalEntries = (searchParams) => {
     // Only enable the query if searchParams indicate a valid search is intended
     enabled: !!searchParams && (
       (searchParams.searchType === 'keyword' && !!searchParams.keyword.trim()) ||
+      (searchParams.searchType === 'semantic' && !!searchParams.concept.trim()) ||
       (searchParams.searchType === 'mood' && (searchParams.minMood !== '' || searchParams.maxMood !== '')) ||
       (searchParams.searchType === 'date' && (searchParams.startDate !== '' || searchParams.endDate !== ''))
     ),
@@ -512,3 +526,40 @@ export const useJournalEntryById = (entryId, enabled = true) => {
     cacheTime: 5 * 60 * 1000,
   });
 };
+
+// --- FIND THIS AT THE BOTTOM OF useJournalData.js AND ADD THESE BELOW IT ---
+
+//export const useReflectionChat = () => {
+//const queryClient = useQueryClient();
+//  return useMutation({
+//    mutationFn: async ({ query, sessionId, rememberChat }) => {
+//      const token = getToken();
+//      if (!token) throw new Error('Not authenticated.');
+//
+//      const response = await axios.post(
+//        `${API_BASE_URL}/chat/reflect`,
+//        { query, sessionId, rememberChat },
+//        { headers: { Authorization: `Bearer ${token}` } }
+//      );
+//      return response.data.answer;
+//    },
+//         onSuccess: () => {
+//           queryClient.invalidateQueries({ queryKey: ['gamificationStats'] }); // 💡 ADD THIS
+//         }
+//  });
+//};
+//
+//export const useClearChatMemory = () => {
+//  return useMutation({
+//    mutationFn: async (sessionId) => {
+//      const token = getToken();
+//      if (!token) throw new Error('Not authenticated.');
+//      if (!sessionId) return;
+//
+//      return axios.delete(`${API_BASE_URL}/chat/clear-memory`, {
+//        params: { sessionId },
+//        headers: { Authorization: `Bearer ${token}` }
+//      });
+//    }
+//  });
+//};

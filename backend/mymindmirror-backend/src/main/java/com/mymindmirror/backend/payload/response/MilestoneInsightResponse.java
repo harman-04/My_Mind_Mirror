@@ -1,37 +1,28 @@
-// src/main/java/com/mymindmirror.backend/payload/response/MilestoneInsightResponse.java
 package com.mymindmirror.backend.payload.response;
 
 import com.mymindmirror.backend.enums.InsightStatus;
-import lombok.AllArgsConstructor;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-
 import java.util.List;
 
 /**
- * DTO for receiving AI-generated milestone insights from the Flask ML service.
- * Mirrors the structure returned by the /milestone_insights endpoint in app.py.
+ * DTO for receiving AI-generated milestone insights natively from Spring AI.
  */
-@Data
-@NoArgsConstructor
-@AllArgsConstructor
-public class MilestoneInsightResponse {
-    private String remainingWork;
-    private String performanceAssessment;
-    private List<String> tips;
-    private String encouragement;
-    private List<String> suggestedNewTasks;
-    private InsightStatus status; // To indicate if the insight generation was successful or an error
-
-
-
-    // Constructor for error cases or simplified responses
-    public MilestoneInsightResponse(String performanceAssessment, InsightStatus status, List<String> tips, String encouragement, List<String> suggestedNewTasks) {
-        this.remainingWork = "N/A"; // Default for error cases
-        this.performanceAssessment = performanceAssessment;
-        this.tips = tips;
-        this.encouragement = encouragement;
-        this.suggestedNewTasks = suggestedNewTasks;
-        this.status = status;
+public record MilestoneInsightResponse(
+        String remainingWork,
+        String performanceAssessment,
+        List<String> tips,
+        String encouragement,
+        List<String> suggestedNewTasks,
+        InsightStatus status // Native Jackson mapping will convert the string "SUCCESS" to this Enum
+) {
+    // Static factory method for fallback errors
+    public static MilestoneInsightResponse createFallback() {
+        return new MilestoneInsightResponse(
+                "Unable to determine remaining work.",
+                "AI analysis unavailable.",
+                List.of("Check your Gemini API key and quota.", "Ensure your network is stable."),
+                "Manual review is recommended. You can still track your progress manually.",
+                List.of("Review incomplete tasks", "Set a new deadline if needed"),
+                InsightStatus.ERROR
+        );
     }
 }

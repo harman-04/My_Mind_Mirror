@@ -16,10 +16,28 @@ import java.util.UUID;
 public interface ScheduledTaskRepository extends JpaRepository<ScheduledTask, UUID> {
     List<ScheduledTask> findByUserAndScheduledDateBetween(User user, LocalDate start, LocalDate end);
     List<ScheduledTask> findByUserAndCompletedFalseAndScheduledDateLessThanEqual(User user, LocalDate date);
+
+    // The old Brute Force method (keep it, as we use it when the user deletes their whole account)
     void deleteByUser(User user);
+
     List<ScheduledTask> findByCustomTaskId(UUID customTaskId);
 
     @Modifying
     @Query("DELETE FROM ScheduledTask st WHERE st.user = :user AND st.customTaskId IS NOT NULL")
     void deleteByUserAndCustomTaskIdNotNull(@Param("user") User user);
+
+    // --- 💡 NEW: The "Surgical Strike" Deletes ---
+
+    @Modifying
+    @Query("DELETE FROM ScheduledTask st WHERE st.user = :user AND st.completed = false")
+    void deleteIncompleteByUser(@Param("user") User user);
+
+    @Modifying
+    @Query("DELETE FROM ScheduledTask st WHERE st.user = :user AND st.completed = false AND (st.customTaskId IS NOT NULL OR st.blockType != 'WORK_TASK')")
+    void deleteIncompleteCustomAndRoutinesByUser(@Param("user") User user);
+
+    // --- 💡 NEW: Re-optimise Today Delete ---
+    @Modifying
+    @Query("DELETE FROM ScheduledTask st WHERE st.user = :user AND st.completed = false AND st.scheduledDate = :today")
+    void deleteIncompleteTodayByUser(@Param("user") User user, @Param("today") LocalDate today);
 }

@@ -32,6 +32,7 @@ public class TaskService {
     private final MilestoneService milestoneService;
     private final RoadmapTaskRepository roadmapTaskRepository;
     private final ObjectMapper objectMapper;
+    private final GamificationService gamificationService;
 
     // ---------- Public DTO methods (to be used by controllers) ----------
 
@@ -54,6 +55,8 @@ public class TaskService {
         }
         Task saved = taskRepository.save(task);
         milestoneService.updateMilestoneStatusBasedOnTasks(milestone.getId());
+        // 💡 THE FINAL TRIGGER: Reward the user for breaking their milestone down into tasks!
+        gamificationService.recordActivity(user, "TASK_CREATE");
         return toDto(saved);
     }
 
@@ -104,6 +107,9 @@ public class TaskService {
             Status oldStatus = existingTask.getStatus();
             existingTask.setStatus(newStatus);
             if (oldStatus != Status.COMPLETED && newStatus == Status.COMPLETED) {
+                // 💡 NEW: Reward Milestone Task completion!
+                gamificationService.recordActivity(user, "TASK");
+
                 if (existingTask.getRoadmapTaskId() != null) {
                     syncRoadmapTaskCompletion(existingTask.getRoadmapTaskId(), true);
                 }

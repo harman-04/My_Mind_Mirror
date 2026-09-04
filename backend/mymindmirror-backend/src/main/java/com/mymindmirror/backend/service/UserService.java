@@ -322,8 +322,16 @@ public class UserService {
 
         UserPreferences prefs = userPreferencesRepository.findByUser(user)
                 .orElseGet(() -> createDefaultPreferences(user));
+
         response.setAvailableHoursJson(prefs.getAvailableHoursJson());
         response.setTimezone(prefs.getTimezone());
+
+        // --- NEW: Map lifestyle fields ---
+        response.setEnergyPeak(prefs.getEnergyPeak());
+        response.setWakeTime(prefs.getWakeTime() != null ? prefs.getWakeTime().toString() : null);
+        response.setSleepTime(prefs.getSleepTime() != null ? prefs.getSleepTime().toString() : null);
+        response.setLunchTime(prefs.getLunchTime() != null ? prefs.getLunchTime().toString() : null);
+        response.setDailyHabitsJson(prefs.getDailyHabitsJson());
 
         return response;
     }
@@ -342,17 +350,48 @@ public class UserService {
                 .orElseGet(() -> createDefaultPreferences(user));
     }
 
+//    @CacheEvict(value = "userFullProfile", key = "#user.id")
+//    @Transactional
+//    public UserPreferences updateUserPreferences(User user, String availableHoursJson, String timezone) {
+//        UserPreferences prefs = userPreferencesRepository.findByUser(user)
+//                .orElseGet(() -> createDefaultPreferences(user));
+//        if (availableHoursJson != null) {
+//            prefs.setAvailableHoursJson(availableHoursJson);
+//        }
+//        if (timezone != null) {
+//            prefs.setTimezone(timezone);
+//        }
+//        return userPreferencesRepository.save(prefs);
+//    }
+
     @CacheEvict(value = "userFullProfile", key = "#user.id")
     @Transactional
-    public UserPreferences updateUserPreferences(User user, String availableHoursJson, String timezone) {
+    public UserPreferences updateUserPreferences(User user, java.util.Map<String, Object> updates) {
         UserPreferences prefs = userPreferencesRepository.findByUser(user)
                 .orElseGet(() -> createDefaultPreferences(user));
-        if (availableHoursJson != null) {
-            prefs.setAvailableHoursJson(availableHoursJson);
+
+        if (updates.containsKey("availableHoursJson")) {
+            prefs.setAvailableHoursJson((String) updates.get("availableHoursJson"));
         }
-        if (timezone != null) {
-            prefs.setTimezone(timezone);
+        if (updates.containsKey("timezone")) {
+            prefs.setTimezone((String) updates.get("timezone"));
         }
+        if (updates.containsKey("energyPeak")) {
+            prefs.setEnergyPeak((String) updates.get("energyPeak"));
+        }
+        if (updates.containsKey("wakeTime")) {
+            prefs.setWakeTime(java.time.LocalTime.parse((String) updates.get("wakeTime")));
+        }
+        if (updates.containsKey("sleepTime")) {
+            prefs.setSleepTime(java.time.LocalTime.parse((String) updates.get("sleepTime")));
+        }
+        if (updates.containsKey("lunchTime")) {
+            prefs.setLunchTime(java.time.LocalTime.parse((String) updates.get("lunchTime")));
+        }
+        if (updates.containsKey("dailyHabitsJson")) {
+            prefs.setDailyHabitsJson((String) updates.get("dailyHabitsJson"));
+        }
+
         return userPreferencesRepository.save(prefs);
     }
 }

@@ -6,6 +6,7 @@ import com.mymindmirror.backend.model.User;
 import com.mymindmirror.backend.payload.response.ScheduledTaskResponse;
 import com.mymindmirror.backend.repository.CustomTaskRepository;
 import com.mymindmirror.backend.repository.ScheduledTaskRepository;
+import com.mymindmirror.backend.service.GamificationService;
 import com.mymindmirror.backend.service.ScheduleService;
 import com.mymindmirror.backend.service.UserService;
 import lombok.RequiredArgsConstructor;
@@ -33,18 +34,8 @@ public class ScheduleController {
 
     // NEW: Inject CustomTaskRepository to allow backwards syncing
     private final CustomTaskRepository customTaskRepository;
+    private final GamificationService gamificationService; // 💡 NEW INJECTION
 
-//    @PostMapping("/generate")
-//    public ResponseEntity<?> generateSchedule(@AuthenticationPrincipal UserDetails userDetails) {
-//        Optional<User> userOpt = userService.findByUsername(userDetails.getUsername());
-//        if (userOpt.isEmpty()) {
-//            return ResponseEntity.status(401).body("User not found");
-//        }
-//        scheduleService.generateSchedule(userOpt.get());
-//        return ResponseEntity.ok().body("Schedule generated");
-//    }
-
-    // In ScheduleController.java
     @PostMapping("/generate")
     public ResponseEntity<?> generateSchedule(@AuthenticationPrincipal UserDetails userDetails,
                                               @RequestParam(required = false, defaultValue = "all") String mode) {
@@ -76,7 +67,8 @@ public class ScheduleController {
                         t.getRoadmapTaskId(),
                         t.getMilestoneTaskId(),
                         t.getCustomTaskId(),
-                        t.getPriority()
+                        t.getPriority(),
+                        t.getBlockType()
                 ))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(response);
@@ -133,7 +125,11 @@ public class ScheduleController {
             }
         }
 
+        // 💡 NEW: Reward the user for completing a scheduled task!
+        gamificationService.recordActivity(userOpt.get(), "TASK");
+
         return ResponseEntity.ok().build();
+
     }
 
     @PostMapping("/task/custom")
@@ -158,5 +154,15 @@ public class ScheduleController {
 
         scheduledTaskRepository.save(scheduled);
         return ResponseEntity.ok().build();
+    }
+
+    @PostMapping("/reoptimize")
+    public ResponseEntity<?> reoptimizeToday(@AuthenticationPrincipal UserDetails userDetails) {
+        Optional<User> userOpt = userService.findByUsername(userDetails.getUsername());
+        if (userOpt.isEmpty()) {
+            return ResponseEntity.status(401).body("User not found");
+        }
+        scheduleService.reoptimizeToday(userOpt.get());
+        return ResponseEntity.ok().body("Today re-optimized");
     }
 }

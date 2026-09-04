@@ -9,7 +9,7 @@ import java.time.LocalDate;
 import java.util.UUID;
 
 @Entity
-@Table(name = "user_stats" ,
+@Table(name = "user_stats",
         indexes = @Index(name = "idx_user_stats_user", columnList = "user_id"))
 @Data
 @NoArgsConstructor
@@ -39,4 +39,30 @@ public class UserStats {
 
     @Column(name = "total_tasks_completed")
     private int totalTasksCompleted = 0;
+
+    // --- 💡 FIX: Used 'Integer' (Object) instead of 'int' (Primitive) to allow NULLs from old DB rows ---
+    @Column(name = "experience_points")
+    private Integer experiencePoints = 0;
+
+    @Column(name = "level")
+    private Integer level = 1;
+
+    @Column(name = "total_journal_entries")
+    private Integer totalJournalEntries = 0;
+
+    @Column(name = "total_chats")
+    private Integer totalChats = 0;
+
+    @Column(name = "schedules_generated")
+    private Integer schedulesGenerated = 0;
+
+    // --- 💡 FIX: Automatically upgrade old database rows when loaded! ---
+    @PostLoad
+    private void onPostLoad() {
+        if (this.experiencePoints == null) this.experiencePoints = 0;
+        if (this.level == null) this.level = 1;
+        if (this.totalJournalEntries == null) this.totalJournalEntries = 0;
+        if (this.totalChats == null) this.totalChats = 0;
+        if (this.schedulesGenerated == null) this.schedulesGenerated = 0;
+    }
 }

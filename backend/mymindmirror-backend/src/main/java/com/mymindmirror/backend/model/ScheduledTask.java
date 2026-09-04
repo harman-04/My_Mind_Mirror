@@ -11,10 +11,10 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "scheduled_tasks",
-indexes = {
-@Index(name = "idx_scheduled_user_date", columnList = "user_id, scheduled_date"),
-@Index(name = "idx_scheduled_reminder", columnList = "reminder_sent")
-       })
+        indexes = {
+                @Index(name = "idx_scheduled_user_date", columnList = "user_id, scheduled_date"),
+                @Index(name = "idx_scheduled_reminder", columnList = "reminder_sent")
+        })
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -59,4 +59,9 @@ public class ScheduledTask {
 
     @Column(name = "reminder_sent")
     private boolean reminderSent = false;
+
+    // --- 💡 NEW: Block Type for Smart Scheduling ---
+    // Options: WORK_TASK, ROUTINE, BREAK, MEAL, AI_SUGGESTION
+    @Column(name = "block_type", length = 30)
+    private String blockType = "WORK_TASK";
 }
